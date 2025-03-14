@@ -1,5 +1,5 @@
 const API_KEY = 'f0130cc9ffe640af9428d4a13339a294'; // Replace with your NewsAPI key
-const NEWS_URL = const NEWS_URL = `https://cors-anywhere.herokuapp.com/https://newsapi.org/v2/top-headlines?country=us&category=politics&pageSize=10&apiKey=${API_KEY}`;
+const NEWS_URL = `https://cors-anywhere.herokuapp.com/https://newsapi.org/v2/top-headlines?country=us&category=politics&pageSize=10&apiKey=${API_KEY}`;
 
 const newsContainer = document.getElementById('news-container');
 
