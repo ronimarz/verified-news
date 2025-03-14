@@ -30,8 +30,7 @@ function displayNews(articles) {
         `
         )
         .join('');
-}
-}
+} // Removed the extra closing brace here
 
 // Fetch news when the page loads
 fetchNews();
