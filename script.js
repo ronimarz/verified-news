@@ -15,6 +15,10 @@ async function fetchNews() {
 }
 
 function displayNews(articles) {
+    if (!articles || articles.length === 0) {
+        newsContainer.innerHTML = '<p>No news articles found.</p>';
+        return;
+    }
     newsContainer.innerHTML = articles
         .map(
             (article) => `
@@ -26,6 +30,7 @@ function displayNews(articles) {
         `
         )
         .join('');
+}
 }
 
 // Fetch news when the page loads
