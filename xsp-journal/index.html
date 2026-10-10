@@ -244,6 +244,23 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .quiz-opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .alert { border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 500; background: var(--warn-bg); }
 
+/* Command bar */
+.cmd { margin-top: 14px; display: grid; gap: 6px; }
+.cmd-row { display: flex; gap: 8px; align-items: center; }
+.cmd-row input { font-family: var(--mono); font-size: 14px; padding: 10px 12px; background: var(--panel); flex: 1; }
+.cmd-label { font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+@media (max-width: 600px) { .cmd-label { display: none; } }
+.cmd-sugg { display: flex; flex-wrap: wrap; gap: 6px; }
+.cmd-sugg button { border: 1px dashed var(--line); background: none; border-radius: 999px; padding: 3px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); cursor: pointer; }
+.cmd-sugg button:hover { border-color: var(--accent); color: var(--accent); }
+.cmd-out { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding: 10px 14px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); font-size: 13.5px; }
+.cmd-out.ok { border-color: var(--good); }
+.cmd-out.err { border-color: var(--bad); }
+.cmd-out.ask { border-color: var(--warn); background: var(--warn-bg); }
+.cmd-out .msg { flex: 1; min-width: 200px; white-space: pre-wrap; }
+.cmd-help { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 20px; font-size: 13px; width: 100%; }
+.cmd-help code { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
+
 /* Guide */
 .guide:empty { display: none; }
 .guide { margin-top: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 16px; align-items: center; padding: 12px 16px; border-radius: 8px; background: var(--info-bg); border: 1px solid var(--accent); }
@@ -298,6 +315,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
 <main class="wrap">
   <div class="banner" id="banner" hidden></div>
+  <div class="cmd">
+    <form class="cmd-row" id="cmd-form" autocomplete="off">
+      <label for="cmd" class="cmd-label">Command</label>
+      <input id="cmd" type="text" placeholder="Type a command, like: exit 1.25 · checkpoint 1.10 1.12 · watch today's high call · done · help" spellcheck="false">
+      <button class="btn primary" type="submit">Go</button>
+      <button class="btn" type="button" id="cmd-help">Help</button>
+    </form>
+    <div class="cmd-sugg" id="cmd-sugg"></div>
+    <div class="cmd-out" id="cmd-out" aria-live="polite" hidden></div>
+  </div>
   <div class="guide" id="guide" aria-live="polite"></div>
 
   <!-- DASHBOARD -->
@@ -697,6 +724,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (v === "practice" && !$("#rp-date").options.length) rpInitDates();
     if (v === "news") { gFlag("news", 1); gFlag("newsAt", +etParts().hm.replace(":", "")); }
     if (v !== "practice" && RP.playing) rpPause();
+    renderSugg();
     schedulePoll(0);
   }
   $$(".tab").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
@@ -706,7 +734,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const st = stats();
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
     renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
-    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest(); renderGuide(); renderRoutine();
+    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest(); renderGuide(); renderRoutine(); renderSugg();
     $("#open-dot").hidden = !st.open.length;
   }
 
@@ -933,18 +961,22 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (b.dataset.act === "open") return openForm("trades", t);
     const v = Object.fromEntries($$(".fields input", card).map((i) => [i.dataset.k, num(i.value)]));
     if (v.bid == null) return toast("Enter the Sell Bid first.");
-    if (v.xsp == null && uOf(t) === U() && LIVE.snap) v.xsp = num(LIVE.snap.price);
-    const now = etParts();
-    const cp = { t: now.hm, xsp: v.xsp, bid: v.bid, ask: v.ask };
-    const next = { ...stripId(t), checkpoints: [...(t.checkpoints || []), cp] };
-    const exiting = b.dataset.act === "exit";
-    if (exiting) Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null, exitUnderlying: v.xsp });
     $(".shot-out", card).innerHTML = "";
-    if (await save("trades", t.id, next)) {
-      if (exiting) { toast(`Closed at Bid ${px(v.bid)}.`); openReview({ id: t.id, ...next }); }
-      else { const a = planStatus(next, v.bid); toast(a.length ? "Checkpoint saved. Your plan says get out." : "Checkpoint saved."); }
-    }
+    const msg = await recordQuote(t, v, b.dataset.act === "exit");
+    if (msg) toast(msg);
   });
+  // Save a checkpoint, or close the position at the Bid. Returns a message, or null if saving failed.
+  async function recordQuote(t, v, exiting) {
+    if (v.xsp == null && uOf(t) === U() && LIVE.snap) v.xsp = num(LIVE.snap.price);
+    const now = etParts(), prev = stripId(t);
+    const cp = { t: now.hm, xsp: v.xsp ?? null, bid: v.bid, ask: v.ask ?? null };
+    const next = { ...prev, checkpoints: [...(t.checkpoints || []), cp] };
+    if (exiting) Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask ?? null, exitPrice: null, exitUnderlying: v.xsp ?? null });
+    if (!(await save("trades", t.id, next))) return null;
+    UNDO.push({ coll: "trades", id: t.id, prev, label: exiting ? "the exit" : "the checkpoint" });
+    if (exiting) { const pl = Math.round((v.bid - calc(t).entry) * 100 * (num(t.qty) || 1) * 100) / 100; openReview({ id: t.id, ...next }); return `Closed ${uOf(t)} ${contractName(t)} at Bid ${px(v.bid)} (${money(pl, true)}).`; }
+    const a = planStatus(next, v.bid); return a.length ? `Checkpoint saved. Your plan says get out: ${a[0]}` : `Checkpoint saved: Bid ${px(v.bid)}.`;
+  }
 
   // ---------- journal tables ----------
   const qualPill = (q) => q === "verified" ? '<span class="pill good">Verified</span>' : q === "pending" ? '<span class="pill warn">Pending</span>' : q === "not" ? '<span class="pill bad">Not qualified</span>' : '<span class="pill">–</span>';
@@ -1160,7 +1192,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
     renderPlanCalc(s); renderSpread(s);
-    renderTeach(s); renderGuide();
+    renderTeach(s); renderGuide(); if (document.activeElement?.id !== "cmd") renderSugg();
   }
 
   // A short "what to learn from this moment" note beside the decision.
@@ -1179,21 +1211,28 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
 
   document.addEventListener("click", async (e) => {
-    if (e.target.id === "lc-log") {
+    if (e.target.id === "lc-log") { const m = await logEntry(); if (m) toast(m); }
+    if (e.target.id === "lc-missed") logMissed();
+  });
+  async function logEntry() {
       const s = lcState(), now = etParts(), uPrice = LIVE.snap ? num(LIVE.snap.price) : null;
+      if (!(s.held && s.s3 && s.s4) || s.stop) return null;
       const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
         level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
         entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
         entryUnderlying: uPrice, exitUnderlying: null, checkpoints: [{ t: now.hm, xsp: uPrice, bid: s.bid, ask: s.ask }], iv: num(LC.iv),
         ...planOf(s.ask, now.min), ...spreadOf(s),
         notes: `Logged from Live check (${s.auto ? "auto-watched 1-minute candles from Webull" : "manual timer"}). Break ${s.breakET} ET, hold confirmed ${s.holdET} ET, ${s.resets} false break(s). Context: ${LC.opp === "unknown" ? "no known opposition, some data stale" : "nothing opposing"}.`, createdAt: Date.now() };
-      if (await save("trades", null, doc)) { toast("Paper entry logged. Your plan is on the open position card."); LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; fillPlanDefaults(); renderLive(); }
-    }
-    if (e.target.id === "lc-missed") {
+      const id = await save("trades", null, doc);
+      if (!id) return null;
+      UNDO.push({ coll: "trades", id, prev: null, label: "the entry" });
+      LC = { ...LC0, mode: LC.mode }; saveLC(); for (const k of Object.keys(lcInputs)) $("#" + k).value = ""; fillPlanDefaults(); renderLive();
+      return `Paper entry logged: ${U()} ${doc.strike}${doc.dir === "put" ? "P" : "C"} at Ask ${px(doc.entryAsk)}. Your plan is on the open position card.`;
+  }
+  function logMissed() {
       const s = lcState(), now = etParts();
       openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held ? " + 60s hold" : ""}`.trim(), signalTime: (s.breakET || "").slice(0, 5), contract: LC.strike ? `${U()} ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: S.cfg.currentVersion || "V2" });
-    }
-  });
+  }
 
   // ---------- lessons ----------
   const st0 = () => stats();
@@ -2089,6 +2128,252 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   $("#routine").addEventListener("click", (e) => { if (e.target.id === "r-off") { guideOn = false; ls.set("guide.on", false); renderGuide(); renderRoutine(); } });
 
+  // ---------- command bar ----------
+  const UNDO = [];
+  const openPos = () => stats().open[0] || null;
+  const N = "(\\d*\\.?\\d+)";
+  const TABS = { dashboard: "dash", dash: "dash", home: "dash", live: "live", "live check": "live", check: "live", practice: "practice", replay: "practice", journal: "journal", trades: "journal", news: "news", scout: "news", learn: "learn", lessons: "learn", coach: "learn" };
+  // Actions shared by typed commands and by Claude's interpretation.
+  const ACT = {
+    setDir(dir) { if (!["call", "put"].includes(dir)) return "Direction must be call or put."; if (view === "practice") { RP.dir = dir; $("#rp-strike").value = ""; if (RP.level != null) rpSetLevel(RP.level, RP.levelName); else rpRender(); return `Practice direction: ${dir}.`; } LC.dir = dir; rearm(); saveLC(); renderLive(); return `Direction set to ${dir === "call" ? "Call (break up)" : "Put (break down)"}.`; },
+    setLevel(level, name, dir) {
+      if (view === "practice") {
+        if (!RP.bars.length) return "Load a practice day first, e.g. replay yesterday.";
+        let L = level, nm = "Custom level";
+        if (L == null && name) { const hit = rpLevels().find(([n]) => n.toLowerCase().includes(name)); if (!hit) return `No "${name}" level yet. Options: ${rpLevels().map(([n]) => n).join(", ")}.`; [nm, L] = hit; }
+        if (dir) RP.dir = dir; rpSetLevel(L, nm); return `Practice: watching ${nm} ${L.toFixed(2)} for a ${RP.dir === "put" ? "break down" : "break up"}.`;
+      }
+      let L = level, why = "";
+      if (L == null && name) {
+        const sn = LIVE.snap; if (!sn) return "Live prices aren't loaded yet, so I can't look up that level. Type the number instead, e.g. watch 779.42 call.";
+        const map = { high: ["high", "Today's high"], low: ["low", "Today's low"], open: ["open", "Open"], close: ["pre_close", "Yesterday's close"] };
+        const k = map[name]; if (!k) return "Try: watch high, watch low, watch open, watch close, or a number.";
+        L = +(+sn[k[0]]).toFixed(2); why = k[1];
+      }
+      if (L == null) return "Which level? e.g. watch 779.42 call, or watch high call.";
+      LC.level = String(L); LC.why = why || LC.why || ""; if (dir) LC.dir = dir; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); if (view !== "live") showView("live"); renderLive();
+      return `Watching ${why ? why + " " : ""}${L.toFixed(2)}${LC.dir ? ` for a ${LC.dir === "put" ? "break down (put)" : "break up (call)"}` : ". Now choose call or put"}.`;
+    },
+    setContext(v) { LC.opp = v; saveLC(); renderLive(); return { no: "Context: nothing opposing.", unknown: "Context: no known opposition, some data stale.", yes: "Context: opposing signal. That blocks this entry." }[v]; },
+    fillChain(strike, bid, ask, delta) { const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-strike", "strike", strike); put("lc-bid", "bid", bid); put("lc-ask", "ask", ask); put("lc-delta", "delta", delta); saveLC(); renderLive(); return `Chain filled: strike ${strike ?? LC.strike}, Bid ${bid ?? LC.bid}, Ask ${ask ?? LC.ask}${delta != null ? `, delta ${delta}` : ""}.`; },
+    setPlan(t, st, m, why) {
+      if (view === "practice") { if (t != null) $("#rp-t").value = t; if (st != null) $("#rp-s").value = st; if (m != null) $("#rp-m").value = m; rpRender(); return `Practice plan: +${$("#rp-t").value}% / −${$("#rp-s").value}% / ${$("#rp-m").value} min.`; }
+      const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-pt", "pt", t); put("lc-ps", "ps", st); put("lc-pm", "pm", m); put("lc-pw", "pw", why); saveLC(); renderLive();
+      return `Plan: take profit +${LC.pt}%, stop −${LC.ps}%, out after ${LC.pm} min${LC.pw ? ` · ${LC.pw}` : ""}.`;
+    },
+    async checkpoint(bid, ask, u) { const t = openPos(); if (!t) return "You don't have an open position."; if (bid == null) return "Checkpoint needs the Bid, e.g. checkpoint 1.10 1.12."; return (await recordQuote(t, { bid, ask, xsp: u }, false)) || "Couldn't save. Try again."; },
+    async exit(bid, ask, u) {
+      if (view === "practice" && RP.pos) { await rpExit("manual"); rpPause(); return "Practice position sold at the model Bid."; }
+      const t = openPos(); if (!t) return "You don't have an open position to close.";
+      if (bid == null) return `To close ${uOf(t)} ${contractName(t)}, give the current Bid, e.g. exit 1.25 (or exit 1.25 1.28 with the Ask).`;
+      return (await recordQuote(t, { bid, ask, xsp: u }, true)) || "Couldn't save. Try again.";
+    },
+    async enter() {
+      if (view === "practice") { if (RP.pos) return "You already hold a practice position."; if (!RP.bars.length) return "Load a practice day first."; $("#rp-buy").click(); return RP.pos ? `Practice buy: SPY ${RP.pos.strike}${RP.pos.dir === "put" ? "P" : "C"} at ${px(RP.pos.entryAsk)}.` : "Couldn't buy."; }
+      if (openPos()) return "You already have an open position. Close it first (exit 1.25).";
+      const m = await logEntry(); if (m) return m;
+      const g = guideModel(); return `Not ready to enter yet. Next step: ${g.cur ? g.cur.title : "set up the check"}. ${g.cur ? g.cur.detail.replace(/<[^>]+>/g, "") : ""}`;
+    },
+    guide(action) {
+      const m = guideModel(), c = m.cur; if (!c) return "Nothing left on the guide right now.";
+      if (action === "show") { if (c.tab && c.tab !== view) showView(c.tab); setTimeout(() => spotlight(c.target), 60); return `Showing: ${c.title}.`; }
+      if (m.loop) return `The trade-loop steps tick off by themselves when you do them. Current step: ${c.title}.`;
+      gSet((g) => { (action === "skip" ? g.skip : g.done)[c.id] = 1; }); renderRoutine();
+      const n = guideModel().cur; return `${action === "skip" ? "Skipped" : "Done"}: ${c.title}.${n ? ` Next: ${n.title}.` : " All done for now."}`;
+    },
+    tab(t) { const v = TABS[t]; if (!v) return `No tab called "${t}".`; showView(v); return `Opened ${$(`[data-view="${v}"]`).textContent.trim()}.`; },
+    lesson(topic) {
+      const q = topic.toLowerCase().trim(); const id = Object.keys(LESSONS).find((k) => k === q || LESSONS[k].title.toLowerCase().includes(q) || q.includes(k));
+      if (id) { openLesson(id); return `Opened the lesson: ${LESSONS[id].title}.`; }
+      showView("learn"); askCoach(`Explain "${topic}" simply.`); return "No lesson by that name, so I asked the coach.";
+    },
+    async practice(action, arg) {
+      if (view !== "practice") showView("practice");
+      if (action === "load") {
+        if (!$("#rp-date").options.length || $("#rp-date").options[0].value === "Needs Webull") await rpInitDates();
+        const opts = [...$("#rp-date").options].map((o) => o.value), d = arg ? opts.find((v) => v === arg) : opts[0];
+        if (!d) return `That day isn't in the list. Pick one of the last ${opts.length} trading days.`;
+        $("#rp-date").value = d; $("#rp-load").click(); return `Loading ${dayName(d)}…`;
+      }
+      if (!RP.bars.length) return "Load a day first, e.g. replay yesterday.";
+      if (action === "play") { rpPlay(); return "Playing."; }
+      if (action === "pause") { rpPause(); return "Paused."; }
+      if (action === "step") { rpPause(); rpStep(arg || 1); return `Moved ${arg || 1} minute${(arg || 1) > 1 ? "s" : ""} ahead.`; }
+      if (action === "ff") { if (RP.level == null && !RP.pos) return "Set a level first, e.g. watch opening range high."; RP.ff = true; rpPlay(); return "Skipping ahead to the next signal…"; }
+      return "Unknown practice action.";
+    },
+    async undo() {
+      const u = UNDO.pop(); if (!u) return "Nothing to undo.";
+      const ok = u.prev ? await save(u.coll, u.id, u.prev) : await remove(u.coll, u.id);
+      return ok ? `Undid ${u.label}.` : "Undo failed. Try again.";
+    },
+    status() {
+      const m = guideModel(), t = openPos(), parts = [];
+      if (t) { const c = calc(t); parts.push(`Open: ${uOf(t)} ${contractName(t)} from ${px(c.entry)}${c.last ? `, last Bid ${px(num(c.last.bid))} (${money(c.mark, true)})` : ""}.`); }
+      if (LC.level) parts.push(`Watching ${LC.level}${LC.dir ? " " + LC.dir : ""}.`);
+      if (LIVE.snap) parts.push(`${U()} ${(+LIVE.snap.price).toFixed(2)}.`);
+      parts.push(m.cur ? `Next step: ${m.cur.title}.` : "Guide: all done for now.");
+      return parts.join(" ");
+    },
+  };
+
+  function parseDate(str) {
+    const s = str.trim().toLowerCase(), e = etParts();
+    const back = (n) => { const d = new Date(Date.parse(e.date + "T12:00:00Z")); let k = 0; while (k < n) { d.setUTCDate(d.getUTCDate() - 1); if (d.getUTCDay() % 6) k++; } return d.toISOString().slice(0, 10); };
+    if (!s || s === "yesterday" || s === "last day") return back(1);
+    if (s === "today") return e.date;
+    const wd = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"].findIndex((w) => w.startsWith(s.slice(0, 3)) && s.length >= 3);
+    if (wd >= 0) { const d = new Date(Date.parse(e.date + "T12:00:00Z")); do { d.setUTCDate(d.getUTCDate() - 1); } while (d.getUTCDay() !== wd); return d.toISOString().slice(0, 10); }
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s); if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+    m = /^(\d{1,2})\/(\d{1,2})$/.exec(s); if (m) return `${e.date.slice(0, 4)}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+    const mon = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+    m = /^([a-z]{3})[a-z]*\.?\s+(\d{1,2})$/.exec(s); if (m && mon.includes(m[1])) return `${e.date.slice(0, 4)}-${String(mon.indexOf(m[1]) + 1).padStart(2, "0")}-${m[2].padStart(2, "0")}`;
+    return null;
+  }
+  const nums = (s) => (s.match(/-?\d*\.?\d+/g) || []).map(Number);
+  const dirOf = (s) => /\b(call|calls|up|long)\b/.test(s) ? "call" : /\b(put|puts|down|short)\b/.test(s) ? "put" : null;
+
+  // Fast, offline commands. Returns a promise of a message, or null if not understood.
+  function parseCommand(raw) {
+    const s = raw.toLowerCase().replace(/\$/g, "").replace(/\s+/g, " ").trim();
+    if (!s) return null;
+    let m;
+    if (/^(help|\?|commands|what can i (type|say|do))$/.test(s)) return { help: true };
+    if (/^undo$/.test(s)) return () => ACT.undo();
+    if (/^(status|where am i|what now|what('s| is) next|next( step)?)$/.test(s)) return () => ACT.status();
+    if (/^(done|did it|finished|check( it)? off|mark (it |step )?(done|complete)|complete)$/.test(s)) return () => ACT.guide("done");
+    if (/^skip( (it|this|step))?$/.test(s)) return () => ACT.guide("skip");
+    if (/^show( me)?$/.test(s)) return () => ACT.guide("show");
+    if ((m = /^(?:go( to)?|open|show)?\s*(dashboard|dash|home|live check|live|check|practice|journal|trades|news|scout|learn|lessons)( tab)?$/.exec(s))) return () => ACT.tab(m[2]);
+    if (/^(undo|cancel)$/.test(s)) return () => ACT.undo();
+    // practice controls
+    if ((m = /^(?:replay|load)\s*(.*)$/.exec(s)) && !/^(rule|test)/.test(m[1])) { const d = parseDate(m[1]); if (!d) return () => `I couldn't read that date. Try: replay yesterday, replay oct 8, replay friday.`; return () => ACT.practice("load", d); }
+    if (/^(play|resume|go on)$/.test(s)) return () => ACT.practice("play");
+    if (/^(pause|stop|hold on|wait)$/.test(s)) return () => ACT.practice("pause");
+    if ((m = /^(?:step|next|forward|\+)\s*(\d+)?\s*(min|mins|minutes?)?$/.exec(s)) && (view === "practice")) return () => ACT.practice("step", +(m[1] || 1));
+    if (/^(skip to (next )?signal|fast forward|ff)$/.test(s)) return () => ACT.practice("ff");
+    if (/^(run (the )?(rule )?test|backtest|test (the )?rule)$/.test(s)) return () => { showView("practice"); $("#bt-run").click(); return "Running the rule test on past days…"; };
+    // exits and checkpoints
+    if ((m = /^(exit|close|sell|get out|cash out)\b(.*)$/.exec(s))) {
+      const n = nums(m[2]), extra = m[2].replace(/\b(my|the|it|position|trade|now|out|at|bid|ask|of|please|this)\b/g, "").replace(/[\d.\/\s,]/g, "");
+      if (!n.length && extra && S.sample) return null;  // e.g. "at a dollar twenty": let Claude read it
+      return () => ACT.exit(n[0] ?? null, n[1] ?? null, n[2] ?? null);
+    }
+    if ((m = /^(checkpoint|cp|update|quote|mark)\b(.*)$/.exec(s)) || (m = /^(bid)\b(.*)$/.exec(s))) {
+      const r = m[2]; const bid = /bid\s*(\d*\.?\d+)/.exec(s)?.[1], ask = /ask\s*(\d*\.?\d+)/.exec(s)?.[1], spy = /(spy|xsp|underlying)\s*(\d*\.?\d+)/.exec(s)?.[2]; const n = nums(r.replace(/(spy|xsp|underlying)\s*\d*\.?\d+/, ""));
+      return () => ACT.checkpoint(num(bid) ?? n[0] ?? null, num(ask) ?? (bid ? null : n[1] ?? null), num(spy));
+    }
+    // entry
+    if (/^(enter|buy|log( (the )?entry)?|take (it|the trade)|place( it)?|go long)$/.test(s)) return () => ACT.enter();
+    if (/^(missed|log missed|skip trade|log (as )?missed)$/.test(s)) return () => { logMissed(); return "Opened the missed-setup form."; };
+    if (/^(reset|start over|clear)$/.test(s)) return () => { if (view === "practice") { RP.level = null; RP.note = ""; rpRender(); return "Practice level cleared."; } $("#lc-reset").click(); return "Live check cleared. Pick a new level."; };
+    if (/^review( (it|the trade|last trade))?$/.test(s)) return () => { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed) || stats().closed.slice(-1)[0]?.t; if (!t) return "No closed trade to review."; openReview(t); return `Opened the review for ${uOf(t)} ${contractName(t)}.`; };
+    // context
+    if (/^(nothing opposing|no opposition|clear|context (ok|clear|fine)|all clear)$/.test(s)) return () => ACT.setContext("no");
+    if (/^((some )?(data )?stale|stale data|unknown)$/.test(s)) return () => ACT.setContext("unknown");
+    if (/^(opposing( signal)?|against|contradiction|blocked)$/.test(s)) return () => ACT.setContext("yes");
+    // level and direction
+    if ((m = /^(watch|level|set level|track)\b(.*)$/.exec(s))) {
+      const r = m[2], dir = dirOf(r), n = nums(r);
+      const name = /(opening range|or) high/.test(r) ? "opening range high" : /(opening range|or) low/.test(r) ? "opening range low" : /(yesterday|prev|prior)[a-z' ]*high/.test(r) ? (view === "practice" ? "yesterday's high" : null) : /(yesterday|prev|prior)[a-z' ]*low/.test(r) ? (view === "practice" ? "yesterday's low" : null) : /close/.test(r) ? (view === "practice" ? "yesterday's close" : "close") : /high/.test(r) ? (view === "practice" ? "high so far" : "high") : /low/.test(r) ? (view === "practice" ? "low so far" : "low") : /open/.test(r) ? "open" : null;
+      if (!n.length && !name) return () => "Which level? e.g. watch high call, watch 779.42 put, watch close.";
+      return () => ACT.setLevel(n.length ? n[0] : null, n.length ? null : name, dir);
+    }
+    if ((m = /^(call|calls|put|puts|up|down)$/.exec(s))) return () => ACT.setDir(dirOf(s));
+    // chain
+    if ((m = /^(chain|strike|option|contract)\b(.*)$/.exec(s)) || (m = /^(\d{3}(?:\.\d+)?)\s*([cp])\b(.*)$/.exec(s))) {
+      const strike = num(/strike\s*(\d+(\.\d+)?)/.exec(s)?.[1]), bid = num(/bid\s*(\d*\.?\d+)/.exec(s)?.[1]), ask = num(/ask\s*(\d*\.?\d+)/.exec(s)?.[1]), delta = num(/(delta|Δ)\s*(-?\d*\.?\d+)/.exec(s)?.[2]);
+      const n = nums(s.replace(/(delta|Δ)\s*-?\d*\.?\d+/, "")), cp = /^(\d{3}(?:\.\d+)?)\s*([cp])\b/.exec(s);
+      if (cp) ACT.setDir(cp[2] === "p" ? "put" : "call");
+      const k = strike ?? n[0], b = bid ?? (strike ? n[1] : n[1]), a = ask ?? n[2];
+      if (k == null) return () => "Try: chain 779 0.95 0.98 (strike, Bid, Ask), optionally delta 0.46.";
+      return () => ACT.fillChain(k, bid ?? b ?? null, ask ?? a ?? null, delta ?? n[3] ?? null);
+    }
+    // plan
+    if ((m = /^plan\b(.*)$/.exec(s))) { const n = nums(m[1]), why = /why\s+(.*)$/.exec(raw)?.[1]; return () => ACT.setPlan(n[0] ?? null, n[1] ?? null, n[2] ?? null, why ?? null); }
+    if ((m = /^(target|take profit|tp|profit)\s*\+?(\d+)\s*%?$/.exec(s))) return () => ACT.setPlan(+m[2], null, null);
+    if ((m = /^(stop|stop loss|sl)\s*-?(\d+)\s*%?$/.exec(s))) return () => ACT.setPlan(null, +m[2], null);
+    if ((m = /^(time|time stop)\s*(\d+)\s*(min|mins|minutes)?$/.exec(s))) return () => ACT.setPlan(null, null, +m[2]);
+    // learning
+    if (/^quiz( me)?$/.test(s)) return () => { showView("learn"); nextQuestion(); spotlight("#quiz"); return "Here's a quiz question."; };
+    if ((m = /^(lesson|explain|what is|what's|teach me)\s+(.+?)\??$/.exec(s))) return () => ACT.lesson(m[2]);
+    if ((m = /^(ask|coach)\s+(.+)$/.exec(s))) return () => { showView("learn"); askCoach(raw.replace(/^\s*(ask|coach)\s+/i, "")); return "Asked the coach. The answer is in the Learn tab."; };
+    return null;
+  }
+
+  // Anything else: ask Claude to turn it into app actions. Changes to trades wait for a Confirm click.
+  async function aiCommand(raw) {
+    if (!S.sample) return { msg: "I didn't understand that. Type help to see the commands.", cls: "err" };
+    const pending = [];
+    const write = (desc, fn) => { pending.push({ desc, fn }); return "Queued. The user must confirm it before it happens."; };
+    const tools = [
+      { name: "set_level", description: "Set the price level to watch. Use level for a number, or named for one of high, low, open, close (today's high/low, today's open, yesterday's close). direction is call or put.", inputSchema: { type: "object", properties: { level: { type: "number" }, named: { type: "string", enum: ["high", "low", "open", "close"] }, direction: { type: "string", enum: ["call", "put"] } } }, execute: (i) => ACT.setLevel(num(i.level), i.named || null, i.direction || null) },
+      { name: "set_direction", description: "Choose call (watching for a break up) or put (break down).", inputSchema: { type: "object", properties: { direction: { type: "string", enum: ["call", "put"] } }, required: ["direction"] }, execute: (i) => ACT.setDir(i.direction) },
+      { name: "set_context", description: "Record the news context check: no = nothing opposing, unknown = some data stale, yes = a known opposing signal.", inputSchema: { type: "object", properties: { value: { type: "string", enum: ["no", "unknown", "yes"] } }, required: ["value"] }, execute: (i) => ACT.setContext(i.value) },
+      { name: "fill_chain", description: "Fill the option chain fields with numbers the user gave: strike, bid, ask, delta. Never invent prices.", inputSchema: { type: "object", properties: { strike: { type: "number" }, bid: { type: "number" }, ask: { type: "number" }, delta: { type: "number" } } }, execute: (i) => ACT.fillChain(num(i.strike), num(i.bid), num(i.ask), num(i.delta)) },
+      { name: "set_plan", description: "Set the trade plan: take-profit percent, stop-loss percent, time stop in minutes, and a one-line reason.", inputSchema: { type: "object", properties: { take_profit_pct: { type: "number" }, stop_pct: { type: "number" }, time_stop_min: { type: "number" }, why: { type: "string" } } }, execute: (i) => ACT.setPlan(num(i.take_profit_pct), num(i.stop_pct), num(i.time_stop_min), i.why || null) },
+      { name: "save_checkpoint", description: "Record the open position's current option Bid (and optional Ask, underlying price) the user stated.", inputSchema: { type: "object", properties: { bid: { type: "number" }, ask: { type: "number" }, underlying: { type: "number" } }, required: ["bid"] }, execute: (i) => write(`Save checkpoint: Bid ${i.bid}${i.ask != null ? `, Ask ${i.ask}` : ""}`, () => ACT.checkpoint(num(i.bid), num(i.ask), num(i.underlying))) },
+      { name: "exit_position", description: "Close the open paper position at the Bid the user stated. In practice mode bid can be omitted.", inputSchema: { type: "object", properties: { bid: { type: "number" }, ask: { type: "number" }, underlying: { type: "number" } } }, execute: (i) => write(view === "practice" && RP.pos ? "Sell the practice position" : `Close the open position at Bid ${i.bid ?? "?"}`, () => ACT.exit(num(i.bid), num(i.ask), num(i.underlying))) },
+      { name: "log_entry", description: "Log the paper entry from the Live check (or buy in practice). Only works if the V2 checklist is complete.", execute: () => write(view === "practice" ? "Buy in practice" : "Log the paper entry", () => ACT.enter()) },
+      { name: "guide_step", description: "Act on the step-by-step guide: done marks the current step complete, skip skips it, show takes the user to it.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["done", "skip", "show"] } }, required: ["action"] }, execute: (i) => ACT.guide(i.action) },
+      { name: "open_tab", description: "Open a tab: dashboard, live, practice, journal, news, learn.", inputSchema: { type: "object", properties: { tab: { type: "string" } }, required: ["tab"] }, execute: (i) => ACT.tab(String(i.tab).toLowerCase()) },
+      { name: "open_lesson", description: "Open a lesson about a concept (delta, theta, spread, levels, false breaks, IV, exit plan, vertical spreads, stats...).", inputSchema: { type: "object", properties: { topic: { type: "string" } }, required: ["topic"] }, execute: (i) => ACT.lesson(String(i.topic)) },
+      { name: "practice", description: "Control practice replay: load (date YYYY-MM-DD), play, pause, step (minutes), ff (skip to next signal).", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["load", "play", "pause", "step", "ff"] }, date: { type: "string" }, minutes: { type: "number" } }, required: ["action"] }, execute: (i) => ACT.practice(i.action, i.action === "load" ? (i.date ? parseDate(i.date) || i.date : null) : num(i.minutes)) },
+      { name: "status", description: "Get the current state: open position, watched level, next guide step.", execute: () => ACT.status() },
+    ];
+    const ctx = `Now ${etParts().date} ${etParts().hm} ET. Tab: ${view}. ${ACT.status()} Live check: level ${LC.level || "-"}, direction ${LC.dir || "-"}, strike ${LC.strike || "-"}, bid ${LC.bid || "-"}, ask ${LC.ask || "-"}. Practice: ${RP.date ? `day ${RP.date} loaded${RP.pos ? ", holding a position" : ""}` : "no day loaded"}.`;
+    try {
+      const r = await S.sample(`You control a paper-trading journal app by calling its tools. Turn the user's command into the right tool calls. Use only numbers the user gave; never invent prices. If the command is a question rather than an action, answer it in one or two plain sentences without tools. After acting, reply with one short sentence saying what you did or what needs confirming.\n\nApp state: ${ctx}\n\nUser command: ${raw}`, { tools, modelTier: "quick" });
+      return { msg: r.text.trim(), pending, cls: pending.length ? "ask" : "ok" };
+    } catch (e) {
+      return { msg: { not_granted: "Allow the page to use Claude to understand free-form commands, or type help for the built-in ones.", tools_unavailable: "Free-form commands aren't available in this view. Type help for the built-in ones.", rate_limited: "Too many requests. Wait a moment." }[e?.code] || "I couldn't work that out. Type help for the built-in commands.", cls: "err" };
+    }
+  }
+
+  const HELP = [
+    ["Trade", ["watch high call", "watch 779.42 put", "call · put", "nothing opposing · stale · opposing", "chain 779 0.95 0.98 delta 0.46", "plan 50 40 30", "enter", "checkpoint 1.10 1.12", "exit 1.25", "missed · reset · review", "undo"]],
+    ["Guide and tabs", ["status", "done · skip · show me", "open practice · journal · news · learn"]],
+    ["Practice", ["replay yesterday · replay oct 8", "watch opening range high", "play · pause · step 5", "skip to signal", "buy · sell", "run rule test"]],
+    ["Learning", ["quiz", "explain theta", "ask why did my put lose?"]],
+  ];
+  function cmdOut(msg, cls, extra = "") { const o = $("#cmd-out"); o.hidden = false; o.className = "cmd-out " + (cls || ""); o.innerHTML = `<span class="msg">${esc(msg)}</span>${extra}`; }
+  let PENDING = [];
+  async function runCommand(raw) {
+    const p = parseCommand(raw);
+    if (p?.help) { cmdOut("Commands you can type (anything else goes to Claude):", "", `<div class="cmd-help">${HELP.map(([h, list]) => `<div><div class="label" style="margin:4px 0">${h}</div>${list.map((c) => `<div><code>${esc(c)}</code></div>`).join("")}</div>`).join("")}</div>`); return; }
+    if (p) { const before = UNDO.length; const msg = await p(); cmdOut(msg || "Done.", /^(couldn't|you don't|no |not ready|which|that day|i couldn't)/i.test(msg || "") ? "err" : "ok", UNDO.length > before ? `<button class="btn sm" type="button" id="cmd-undo">Undo</button>` : ""); return; }
+    cmdOut("Thinking…", "");
+    const r = await aiCommand(raw); PENDING = r.pending || [];
+    cmdOut(r.msg || "Done.", r.cls, PENDING.length ? `<span class="small">${PENDING.map((x) => esc(x.desc)).join(" · ")}</span><button class="btn primary sm" type="button" id="cmd-confirm">Confirm</button><button class="btn sm" type="button" id="cmd-cancel">Cancel</button>` : "");
+  }
+  $("#cmd-form").addEventListener("submit", async (e) => { e.preventDefault(); const v = $("#cmd").value; if (!v.trim()) return; $("#cmd").value = ""; HIST_CMD.unshift(v); HIST_CMD.length = Math.min(HIST_CMD.length, 30); histI = -1; await runCommand(v); renderSugg(); });
+  $("#cmd-help").addEventListener("click", () => runCommand("help"));
+  $("#cmd-out").addEventListener("click", async (e) => {
+    if (e.target.id === "cmd-undo") cmdOut(await ACT.undo(), "ok");
+    if (e.target.id === "cmd-cancel") { PENDING = []; cmdOut("Cancelled. Nothing changed.", ""); }
+    if (e.target.id === "cmd-confirm") { const list = PENDING; PENDING = []; const out = []; for (const x of list) out.push(await x.fn()); const before = UNDO.length; cmdOut(out.join(" "), "ok", UNDO.length ? `<button class="btn sm" type="button" id="cmd-undo">Undo</button>` : ""); }
+  });
+  const HIST_CMD = []; let histI = -1;
+  $("#cmd").addEventListener("keydown", (e) => {
+    if (e.key === "ArrowUp" && HIST_CMD.length) { histI = Math.min(histI + 1, HIST_CMD.length - 1); $("#cmd").value = HIST_CMD[histI]; e.preventDefault(); }
+    if (e.key === "ArrowDown") { histI = Math.max(histI - 1, -1); $("#cmd").value = histI >= 0 ? HIST_CMD[histI] : ""; e.preventDefault(); }
+    if (e.key === "Escape") { $("#cmd").blur(); $("#cmd-out").hidden = true; }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "/" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "") && !dlg.open) { e.preventDefault(); $("#cmd").focus(); } });
+  // Suggestions that fit the current step.
+  function renderSugg() {
+    const el = $("#cmd-sugg"); if (!el) return;
+    let list;
+    if (view === "practice") list = RP.pos ? ["sell", "step 5", "play"] : RP.bars.length ? (RP.level == null ? ["watch opening range high", "watch yesterday's low put", "play"] : ["skip to signal", "buy", "step 5"]) : ["replay yesterday", "run rule test"];
+    else {
+      const m = guideModel(), id = m.cur?.id;
+      const t = openPos(), b = t && calc(t).last ? num(calc(t).last.bid) : null;
+      list = { level: ["watch high call", "watch low put", "watch close"], break: ["status"], hold: ["status"], context: ["nothing opposing", "stale", "opposing"], chain: ["chain 779 0.95 0.98"], plan: ["plan 50 40 30"], enter: ["enter"], manage: [`checkpoint ${b != null ? b.toFixed(2) : "1.10"} ${b != null ? (b + 0.02).toFixed(2) : "1.12"}`, "status"], exit: [`exit ${b != null ? b.toFixed(2) : "1.25"}`], review: ["review"] }[id] || (m.cur ? ["done", "skip", "show me"] : ["status", "quiz"]);
+    }
+    el.innerHTML = `<span class="small muted">Try:</span>` + [...list, "help"].map((c) => `<button type="button" data-cmd="${esc(c)}">${esc(c)}</button>`).join("");
+  }
+  $("#cmd-sugg").addEventListener("click", (e) => { const b = e.target.closest("[data-cmd]"); if (!b) return; const c = b.dataset.cmd; if (/\d/.test(c) && !/^(step|replay)/.test(c)) { $("#cmd").value = c; $("#cmd").focus(); } else runCommand(c).then(renderSugg); });
+
   // ---------- storage ----------
   const stripId = (o) => { const { id, ...rest } = o; return rest; };
   async function save(coll, id, data) {
@@ -2096,7 +2381,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     try {
       const ref = id ? S.db.collection(coll).doc(id) : S.db.collection(coll).doc();
       await ref.set(JSON.parse(JSON.stringify(stripId(data))));
-      return true;
+      return ref.id || id || true;
     } catch (err) {
       if (err?.code === "invalid_argument") { S.canWrite = false; toast("You can view this journal but not change it."); }
       else if (err?.code === "quota_exceeded") toast("The journal is full. Delete old entries to add more.");
