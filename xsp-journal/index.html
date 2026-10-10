@@ -231,6 +231,25 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .breakdown div:last-child { border-bottom: 0; font-weight: 600; }
 
 /* Practice */
+.rp-steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0 0 14px; counter-reset: s; }
+.rp-steps li { counter-increment: s; font-size: 12.5px; padding: 4px 10px 4px 6px; border-radius: 999px; background: var(--panel-2); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+.rp-steps li::before { content: counter(s); width: 18px; height: 18px; border-radius: 50%; background: var(--line); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+.rp-steps li.done { color: var(--ink); }
+.rp-steps li.done::before { content: "✓"; background: var(--good); color: #fff; }
+.rp-steps li.cur { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.rp-steps li.cur::before { background: rgba(255,255,255,.3); }
+.rp-price { font-family: var(--mono); font-size: 22px; font-variant-numeric: tabular-nums; }
+.rp-card { border-radius: 8px; padding: 16px; background: var(--panel-2); display: grid; gap: 10px; }
+.rp-card h3 { font-family: var(--display); font-size: 24px; text-transform: uppercase; letter-spacing: .03em; }
+.rp-card.signal { background: var(--good-bg); border: 1px solid var(--good); }
+.rp-card.signal h3 { color: var(--good); }
+.rp-card.breaking { background: var(--info-bg); border: 1px solid var(--accent); }
+.rp-card.trade { background: var(--panel); border: 1px solid var(--accent); }
+.rp-card.result-win { background: var(--good-bg); }
+.rp-card.result-loss { background: var(--bad-bg); }
+.rp-card .count { font-family: var(--display); font-size: 46px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.rp-card .pl { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; }
+.rp-card .small { line-height: 1.5; }
 .rp-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 20px; }
 @media (max-width: 860px) { .rp-grid { grid-template-columns: 1fr; } }
 .rp-side { display: grid; gap: 14px; align-content: start; min-width: 0; }
@@ -491,47 +510,37 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   <!-- PRACTICE -->
   <section class="view" id="view-practice" role="tabpanel" aria-labelledby="tab-practice" hidden>
-    <div class="panel">
+    <div class="panel" id="rp-panel">
       <div class="panel-head">
-        <div><h2>Replay a past day</h2><p class="small muted" style="margin-top:4px">Real SPY candles from Webull, revealed one minute at a time. Option prices come from the simulator's model, so practice trades never touch your official balance.</p></div>
-        <div class="row"><label class="small muted" for="rp-date">Day</label><select id="rp-date" style="width:auto"></select><button class="btn primary" type="button" id="rp-load">Load day</button></div>
+        <div><h2>Practice a past day</h2><p class="small muted" style="margin-top:4px">A real SPY trading day plays back minute by minute. The app watches the key price lines for you. When a signal appears, you decide: buy or skip. Practice trades never touch your official balance.</p></div>
+        <div class="row"><label class="small muted" for="rp-date">Day</label><select id="rp-date" style="width:auto"></select><button class="btn primary" type="button" id="rp-load">Start this day</button></div>
       </div>
+      <ol class="rp-steps" id="rp-steps"><li data-st="watch">Watch</li><li data-st="break">Break</li><li data-st="hold">Hold 60 sec</li><li data-st="decide">Decide</li><li data-st="trade">In the trade</li><li data-st="result">Result</li></ol>
       <div class="rp-grid">
         <div style="min-width:0">
-          <div class="row" style="justify-content:space-between; margin-bottom:6px"><div class="rp-clock" id="rp-clock">–</div><div class="seg" role="group" aria-label="Chart zoom"><button type="button" data-zoom="90" aria-pressed="true">Last 90 min</button><button type="button" data-zoom="390" aria-pressed="false">Whole day</button></div></div>
-          <div class="chart" id="rp-chart"><div class="empty">Pick a day and load it to start practicing.</div></div>
+          <div class="row" style="justify-content:space-between; align-items:baseline"><div class="rp-clock" id="rp-clock">–</div><div class="rp-price" id="rp-price"></div></div>
+          <div class="chart" id="rp-chart"><div class="empty">Pick a day and press Start this day.</div></div>
           <div class="row" style="margin-top:10px">
             <button class="btn primary" type="button" id="rp-play">Play</button>
-            <button class="btn" type="button" id="rp-step">+1 min</button>
-            <button class="btn" type="button" id="rp-step5">+5 min</button>
             <button class="btn" type="button" id="rp-ff">Skip to next signal</button>
             <label class="small muted" for="rp-speed">Speed</label>
-            <select id="rp-speed" style="width:auto"><option value="2000">Slow · 2s per min</option><option value="1000" selected>Normal · 1s per min</option><option value="400">Fast · 0.4s</option><option value="120">Very fast</option></select>
-            <label class="small row" style="gap:6px"><input type="checkbox" id="rp-pause" checked style="width:auto"> Pause at signals</label>
+            <select id="rp-speed" style="width:auto"><option value="60000" selected>Real time (1 min = 1 min)</option><option value="20000">3× (1 min = 20 sec)</option><option value="6000">10× (1 min = 6 sec)</option><option value="2000">30× (1 min = 2 sec)</option></select>
           </div>
         </div>
         <div class="rp-side">
-          <div>
-            <div class="label" style="margin-bottom:6px">1 · Level and direction</div>
-            <div class="seg" role="group" aria-label="Practice direction"><button type="button" data-rpdir="call" aria-pressed="true">Call · up</button><button type="button" data-rpdir="put" aria-pressed="false">Put · down</button></div>
-            <div class="row" id="rp-levels" style="margin-top:8px"></div>
-            <div class="row" style="margin-top:8px; flex-wrap:nowrap"><input id="rp-level" type="number" step="0.01" placeholder="Custom level"><button class="btn sm" type="button" id="rp-setlevel">Set</button></div>
-          </div>
-          <div class="why" id="rp-status">Load a day to begin.</div>
-          <div>
-            <div class="label" style="margin-bottom:6px">2 · Contract and plan</div>
-            <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px">
-              <div class="field"><label for="rp-strike">Strike</label><input id="rp-strike" type="number" step="1"></div>
-              <div class="field"><label for="rp-iv">IV %</label><input id="rp-iv" type="number" step="0.5" value="15"></div>
-              <div class="field"><label for="rp-auto">At plan</label><select id="rp-auto"><option value="auto">Auto-exit</option><option value="pause">Pause, I decide</option></select></div>
+          <div class="rp-card" id="rp-card"></div>
+          <details id="rp-settings">
+            <summary>Settings</summary>
+            <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-top:8px">
               <div class="field"><label for="rp-t">Take profit %</label><input id="rp-t" type="number" step="5" value="50"></div>
               <div class="field"><label for="rp-s">Stop loss %</label><input id="rp-s" type="number" step="5" value="40"></div>
               <div class="field"><label for="rp-m">Time stop (min)</label><input id="rp-m" type="number" step="5" value="30"></div>
+              <div class="field"><label for="rp-iv">Volatility (IV %)</label><input id="rp-iv" type="number" step="0.5" value="15"></div>
+              <div class="field"><label for="rp-strike">Strike (blank = auto)</label><input id="rp-strike" type="number" step="1"></div>
             </div>
-            <div class="calc" id="rp-quote" style="margin-top:8px"></div>
-          </div>
-          <div class="row"><button class="btn primary big" type="button" id="rp-buy" disabled>Buy at Ask</button><button class="btn big" type="button" id="rp-sell" disabled>Sell at Bid</button></div>
-          <div id="rp-pos"></div>
+            <label class="small row" style="gap:6px; margin-top:8px"><input type="checkbox" id="rp-anytime" style="width:auto"> Let me buy without a signal</label>
+            <p class="small muted" style="margin-top:6px">The app always exits for you at your take-profit, stop or time limit, like a disciplined trader would.</p>
+          </details>
         </div>
       </div>
     </div>
@@ -544,8 +553,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="panel"><div class="panel-head"><h2>Practice results</h2><span class="small muted">Separate from your official balance</span></div><div id="rp-stats"></div></div>
       <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
     </div>
-    <div class="panel">
-      <div class="panel-head"><div><h2>Test the rule on history <button class="q" type="button" data-learn="breakhold" aria-label="Explain">?</button></h2><p class="small muted" style="margin-top:4px">Scans past SPY days for breaks of yesterday's high, low and close and the 15-minute opening range. Compares entering right away, after a 60-second hold, and after a 3-minute hold.</p></div>
+    <details class="panel" id="bt-box">
+      <summary style="cursor:pointer"><b>More tools:</b> test the rule on months of history</summary>
+      <div class="panel-head" style="margin-top:12px"><div><h2>Test the rule on history <button class="q" type="button" data-learn="breakhold" aria-label="Explain">?</button></h2><p class="small muted" style="margin-top:4px">Scans past SPY days for breaks of yesterday's high, low and close and the 15-minute opening range. Compares entering right away, after a 60-second hold, and after a 3-minute hold.</p></div>
         <div class="row">
           <label class="small muted" for="bt-days">Days</label><select id="bt-days" style="width:auto"><option>10</option><option selected>20</option><option>40</option><option>60</option></select>
           <label class="small muted" for="bt-target">Win at +$</label><input id="bt-target" type="number" step="0.05" value="0.75" style="width:80px">
@@ -554,7 +564,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         </div>
       </div>
       <div id="bt-out"><div class="empty">Run the test to see how your entry rule did on past days.</div></div>
-    </div>
+    </details>
   </section>
 
   <!-- JOURNAL -->
@@ -1639,165 +1649,254 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   const liveErr = (e) => ({ server_not_connected: "Connect Webull in claude.ai Settings → Connectors.", needs_reauth: "Reconnect Webull in claude.ai Settings → Connectors.", not_in_manifest: "Webull is turned off for this page. Allow it from the page's permissions." }[e?.code] || "Webull didn't answer. Try again in a moment.");
 
-  // ---------- practice replay ----------
-  const RP = { date: null, bars: [], idx: -1, playing: false, timer: null, dir: "call", level: null, levelName: "", armedT: null, pos: null, zoom: 90, ff: false, lastState: "watch", note: "" };
-  const rpNow = () => RP.bars[RP.idx];
-  const rpMinsLeft = () => (rpNow() ? 960 - (barMin(rpNow()) + 1) : 390);
-  function rpQuote(type, K) {
-    const b = rpNow(); if (!b || K == null) return null;
-    const mid = bs0(type, b.c, K, num($("#rp-iv").value) || 15, Math.max(rpMinsLeft(), 0.01));
-    return { mid, bid: Math.max(mid - 0.01, 0), ask: mid + 0.01, S: b.c };
+  // ---------- practice replay: real-time pace, the app watches the lines ----------
+  // idx = last finished candle; sub = how far (0–1) the next candle has formed.
+  const RP = { date: null, bars: [], idx: -1, sub: 0, playing: false, timer: null, ff: false, since: {}, pos: null, phase: "idle", signal: null, result: null, skipped: null, cardHtml: "", dir: "call", level: null, levelName: "" };
+  const rpForming = () => RP.bars[RP.idx + 1] || null;
+  const rpNow = () => RP.bars[RP.idx] || RP.bars[0];
+  function pathAt(b, f) {
+    const pts = b.c >= b.o ? [b.o, b.l, b.h, b.c] : [b.o, b.h, b.l, b.c], at = [0, 0.3, 0.7, 1];
+    for (let i = 1; i < 4; i++) if (f <= at[i]) return pts[i - 1] + (pts[i] - pts[i - 1]) * ((f - at[i - 1]) / (at[i] - at[i - 1]));
+    return b.c;
   }
-  function rpBestStrike() {
-    const b = rpNow(); if (!b) return null; const type = RP.dir; let best = null;
-    for (let k = Math.floor(b.c) - 4; k <= Math.ceil(b.c) + 4; k++) { const q = rpQuote(type, k); if (q && (!best || Math.abs(q.ask - 1) < Math.abs(best.q.ask - 1))) best = { k, q }; }
-    return best?.k ?? Math.round(b.c);
+  function formingSoFar() { // the partial candle drawn so far
+    const b = rpForming(); if (!b) return null;
+    const n = 12, ps = Array.from({ length: n + 1 }, (_, i) => pathAt(b, (i / n) * RP.sub));
+    return { t: b.t, o: b.o, c: ps[n], h: Math.max(...ps), l: Math.min(...ps) };
   }
+  const rpPrice = () => { const f = formingSoFar(); return f ? f.c : RP.bars.length ? RP.bars[RP.bars.length - 1].c : null; };
+  const rpMinute = () => { const f = rpForming(); return f ? barMin(f) + RP.sub : 960; };
+  const rpMinsLeft = () => Math.max(960 - rpMinute(), 0.01);
+  const rpClock = () => { const m = rpMinute(), h = Math.floor(m / 60), mm = Math.floor(m % 60), ss = Math.floor((m % 1) * 60); return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`; };
+  function rpQuote(type, K, S) {
+    S = S ?? rpPrice(); if (S == null || K == null) return null;
+    const mid = bs0(type, S, K, num($("#rp-iv").value) || 15, rpMinsLeft());
+    return { mid, bid: Math.max(mid - 0.01, 0), ask: mid + 0.01, S };
+  }
+  function rpBestStrike(type) {
+    const S = rpPrice(); if (S == null) return null; let best = null;
+    for (let k = Math.floor(S) - 4; k <= Math.ceil(S) + 4; k++) { const q = rpQuote(type, k); if (q && (!best || Math.abs(q.ask - 1) < Math.abs(best.q.ask - 1))) best = { k, q }; }
+    return best?.k ?? Math.round(S);
+  }
+  // The lines the app watches, in plain words.
+  function rpLevels() {
+    const p = prevDay(RP.date), out = [];
+    if (p) out.push({ key: "ph", name: "yesterday's high", L: p.h, dir: "call", from: 570 }, { key: "pl", name: "yesterday's low", L: p.l, dir: "put", from: 570 });
+    if (RP.idx >= 14) { const or = RP.bars.slice(0, 15); out.push({ key: "orh", name: "the first-15-minute high", L: Math.max(...or.map((b) => b.h)), dir: "call", from: 585 }, { key: "orl", name: "the first-15-minute low", L: Math.min(...or.map((b) => b.l)), dir: "put", from: 585 }); }
+    return out;
+  }
+  // Break and hold on finished candles, counting only a fresh cross after `since`.
+  function crossState(lv) {
+    const beyond = (b) => lv.dir === "call" ? b.c > lv.L : b.c < lv.L, clean = (b) => lv.dir === "call" ? b.l > lv.L : b.h < lv.L;
+    let armed = false, st = "watch", bi = -1, hi = -1, resets = 0;
+    for (let i = 0; i <= RP.idx; i++) {
+      const b = RP.bars[i];
+      if (barMin(b) < lv.from || b.t < (RP.since[lv.key] || 0)) continue;
+      if (st === "watch") { if (!armed) { if (!beyond(b)) armed = true; continue; } if (beyond(b)) { st = "broke"; bi = i; } }
+      else if (st === "broke") { if (clean(b)) { st = "held"; hi = i; break; } resets++; if (beyond(b)) bi = i; else st = "watch"; }
+    }
+    return { ...lv, st, bi, hi, resets };
+  }
+  const rpStates = () => rpLevels().map(crossState);
+
   async function rpInitDates() {
     const sel = $("#rp-date");
-    if (!S.mcp) { sel.innerHTML = `<option>Needs Webull</option>`; $("#rp-status").textContent = LIVE.status === "off" ? "Practice needs live data, which isn't available in this view." : "Connecting to Webull…"; return; }
+    if (!S.mcp) { sel.innerHTML = `<option>Needs Webull</option>`; RP.phase = "idle"; rpRender(); return; }
     try {
       await loadDaily(90);
       const ds = pastDates().slice(-60).reverse();
-      sel.innerHTML = ds.map((d) => `<option value="${d}">${esc(dayName(d))}${S.trades.some((t) => t.date === d) ? " · you traded" : ""}</option>`).join("");
-      $("#rp-status").textContent = "Pick a day and press Load day.";
-    } catch (e) { $("#rp-status").textContent = liveErr(e); }
+      sel.innerHTML = ds.map((d) => `<option value="${d}">${esc(dayName(d))}${S.trades.some((t) => t.date === d) ? " · you traded" : ""}${S.practice.some((p) => p.replayDate === d) ? " · practiced" : ""}</option>`).join("");
+    } catch (e) { sel.innerHTML = `<option>${esc(liveErr(e))}</option>`; }
+    rpRender();
   }
   $("#rp-load").addEventListener("click", async () => {
-    const d = $("#rp-date").value; if (!d || !S.mcp) return;
-    rpPause(); $("#rp-status").textContent = `Loading ${dayName(d)}…`;
+    const d = $("#rp-date").value; if (!d || !S.mcp || !/^\d{4}-/.test(d)) return;
+    rpPause(); RP.cardHtml = ""; $("#rp-card").innerHTML = `<p class="small">Loading ${esc(dayName(d))}…</p>`;
     try {
       const bars = await dayBars(d);
-      if (bars.length < 30) { $("#rp-status").textContent = "Webull returned too few candles for that day. Try another."; return; }
-      Object.assign(RP, { date: d, bars, idx: 0, pos: null, level: null, levelName: "", armedT: null, lastState: "watch", note: "" });
-      $("#rp-strike").value = ""; rpRender();
-      $("#rp-status").textContent = `${dayName(d)} loaded at the 9:30 open. Pick a level, then press Play.`;
-    } catch (e) { $("#rp-status").textContent = liveErr(e); }
+      if (bars.length < 30) { $("#rp-card").innerHTML = `<p class="small">Webull returned too few candles for that day. Try another.</p>`; return; }
+      Object.assign(RP, { date: d, bars, idx: -1, sub: 0, pos: null, since: {}, phase: "watch", signal: null, result: null, skipped: null, cardHtml: "" });
+      rpRender(); rpPlay();
+    } catch (e) { $("#rp-card").innerHTML = `<p class="small">${esc(liveErr(e))}</p>`; }
   });
-  function rpLevels() {
-    const p = prevDay(RP.date), out = [];
-    if (p) out.push(["Yesterday's high", p.h], ["Yesterday's low", p.l], ["Yesterday's close", p.c]);
-    const seen = RP.bars.slice(0, RP.idx + 1);
-    if (RP.idx >= 14) { const or = RP.bars.slice(0, 15); out.push(["Opening range high", Math.max(...or.map((b) => b.h))], ["Opening range low", Math.min(...or.map((b) => b.l))]); }
-    if (seen.length > 20) out.push(["High so far", Math.max(...seen.slice(0, -5).map((b) => b.h))], ["Low so far", Math.min(...seen.slice(0, -5).map((b) => b.l))]);
-    return out;
-  }
-  function rpSetLevel(L, name) { RP.level = L; RP.levelName = name; RP.armedT = rpNow() ? rpNow().t + 60000 : null; RP.lastState = "watch"; rpRender(); }
-  $("#rp-levels").addEventListener("click", (e) => { const b = e.target.closest("[data-rplvl]"); if (b) rpSetLevel(+b.dataset.rplvl, b.dataset.name); });
-  $("#rp-setlevel").addEventListener("click", () => { const v = num($("#rp-level").value); if (v != null) rpSetLevel(v, "Custom level"); });
-  $$("[data-rpdir]").forEach((b) => b.addEventListener("click", () => { RP.dir = b.dataset.rpdir; $("#rp-strike").value = ""; if (RP.level != null) rpSetLevel(RP.level, RP.levelName); else rpRender(); }));
-  $$("[data-zoom]").forEach((b) => b.addEventListener("click", () => { RP.zoom = +b.dataset.zoom; rpRender(); }));
-  ["rp-strike", "rp-iv", "rp-t", "rp-s", "rp-m"].forEach((id) => $("#" + id).addEventListener("input", () => rpRender()));
-  const rpDetect = () => RP.level != null && RP.idx >= 0 ? detect(RP.bars.slice(0, RP.idx + 1), RP.level, RP.dir, RP.armedT, rpNow().t + 60000) : null;
 
-  function rpStep(n = 1) {
-    for (let i = 0; i < n; i++) {
-      if (RP.pos?.alerted && RP.pos.alertAt != null && RP.idx > RP.pos.alertAt + 1) RP.pos.ignored = true;
-      if (RP.idx >= RP.bars.length - 1) { rpPause(); if (RP.pos) rpExit("close"); RP.note = "That's the 4:00 pm close. Load another day to keep practicing."; break; }
-      RP.idx++;
-      const det = rpDetect();
-      if (det && det.state !== RP.lastState) {
-        const was = RP.lastState; RP.lastState = det.state;
-        if (det.state === "broke" && was === "watch") RP.note = `Break at ${det.breakET}. Now wait for one full candle that stays ${RP.dir === "put" ? "below" : "above"} the level.`;
-        if (det.state === "held") { RP.note = `Hold confirmed at ${det.holdET}. This is a V2 signal. Decide: buy, or skip and watch what happens.`; if ($("#rp-pause").checked || RP.ff) { rpPause(); RP.ff = false; break; } }
-        if (det.state === "watch" && was === "broke") RP.note = `False break: price came back across. ${det.resets} so far.`;
-      }
-      if (RP.pos && rpCheckPlan()) break;
+  function rpPlay() {
+    if (!RP.bars.length || RP.phase === "signal" || RP.phase === "dayend") return;
+    RP.playing = true; clearInterval(RP.timer);
+    const spd = RP.ff ? 160 : +$("#rp-speed").value, dt = RP.ff ? 40 : Math.min(250, spd / 8);
+    RP.timer = setInterval(() => rpTick(dt / spd), dt);
+    rpRender();
+  }
+  function rpPause() { RP.playing = false; RP.ff = false; clearInterval(RP.timer); rpRender(); }
+  $("#rp-play").addEventListener("click", () => (RP.playing ? rpPause() : RP.phase === "result" ? (rpContinue(), rpPlay()) : rpPlay()));
+  $("#rp-speed").addEventListener("change", () => { if (RP.playing && !RP.ff) rpPlay(); });
+  $("#rp-ff").addEventListener("click", () => { if (!RP.bars.length) return toast("Start a day first."); if (RP.pos) return toast("You're in a trade. Let it play out, or sell."); if (RP.phase === "result") rpContinue(); RP.ff = true; rpPlay(); });
+  ["rp-t", "rp-s", "rp-m", "rp-iv", "rp-strike", "rp-anytime"].forEach((id) => $("#" + id).addEventListener("input", () => { RP.cardHtml = ""; rpRender(); }));
+
+  function rpTick(df) {
+    RP.sub += df;
+    if (RP.pos) rpCheckPlan(false);
+    if (RP.sub >= 1) { RP.sub = 0; rpFinishCandle(); }
+    rpRender();
+  }
+  function rpStep(n = 1) { for (let i = 0; i < n && RP.phase !== "signal" && RP.phase !== "dayend"; i++) { RP.sub = 0; rpFinishCandle(); } rpRender(); }
+  function rpFinishCandle() {
+    RP.idx++;
+    if (RP.idx >= RP.bars.length - 1) { RP.idx = RP.bars.length - 1; if (RP.pos) rpExit("close"); RP.phase = RP.phase === "result" ? "result" : "dayend"; rpPause(); return; }
+    if (RP.pos) { rpCheckPlan(true); return; }
+    if (RP.phase === "result") return;
+    if (RP.skipped && RP.idx >= RP.skipped.idx + 15) {
+      const k = RP.skipped, q = rpQuote(k.dir, k.strike, RP.bars[RP.idx].c), d = (q.bid - k.ask) * 100;
+      RP.skipped.note = `The ${fmtHM(k.min)} signal you skipped: 15 minutes later that option was worth ${px(q.bid)} (${money(Math.round(d), true)} if you had bought).`; RP.skipped.idx = Infinity;
     }
-    rpRender();
+    const sts = rpStates(), held = sts.find((x) => x.st === "held" && x.hi === RP.idx), broke = sts.find((x) => x.st === "broke" && x.bi === RP.idx);
+    if (broke && RP.ff) { RP.ff = false; rpPlay(); }  // slow back to real pace for the hold
+    if (broke && AL.on) beep("break");
+    if (held) {
+      const K = num($("#rp-strike").value) ?? rpBestStrike(held.dir);
+      RP.signal = { ...held, strike: K, min: barMin(RP.bars[held.hi]) + 1, breakMin: barMin(RP.bars[held.bi]) + 1 };
+      RP.phase = "signal"; if (AL.on) beep("hold"); rpPause();
+    }
   }
-  function rpCheckPlan() {
-    const q = rpQuote(RP.pos.dir, RP.pos.strike); if (!q) return false;
-    const chg = (q.bid - RP.pos.entryAsk) / RP.pos.entryAsk, held = barMin(rpNow()) + 1 - RP.pos.entryMin;
-    let why = null;
-    if (RP.pos.plan.t != null && chg * 100 >= RP.pos.plan.t) why = "target"; else if (RP.pos.plan.s != null && -chg * 100 >= RP.pos.plan.s) why = "stop"; else if (RP.pos.plan.m != null && held >= RP.pos.plan.m) why = "time";
-    if (!why || RP.pos.alerted === why) return false;
-    if ($("#rp-auto").value === "auto") { rpExit(why); RP.note = `Auto-exit: your ${why === "target" ? "take-profit" : why === "stop" ? "stop loss" : "time stop"} was hit.`; rpPause(); return true; }
-    RP.pos.alerted = why; RP.pos.alertAt = RP.idx; RP.note = `Your plan says exit now (${why === "target" ? "take-profit hit" : why === "stop" ? "stop hit" : "time is up"}). Sell, or note why you're staying in.`; rpPause(); return true;
+  function rpPlanNow() { return { t: num($("#rp-t").value), s: num($("#rp-s").value), m: num($("#rp-m").value) }; }
+  function rpBuy(dir, K, followed, lv) {
+    if (RP.pos || !RP.bars.length) return null;
+    K = K ?? num($("#rp-strike").value) ?? rpBestStrike(dir);
+    const q = rpQuote(dir, K); if (!q) return null;
+    const m = rpMinute();
+    RP.pos = { dir, strike: K, entryAsk: +q.ask.toFixed(2), entryU: q.S, entryMin: Math.floor(m), entryExact: m, entryT: (rpForming() || rpNow()).t, iv: num($("#rp-iv").value) || 15, plan: rpPlanNow(), followed, falseBreaks: lv?.resets || 0, level: lv?.L ?? null, levelName: lv?.name || "", key: lv?.key };
+    if (lv) RP.since[lv.key] = (rpForming() || rpNow()).t;
+    RP.signal = null; RP.phase = "trade"; RP.cardHtml = ""; rpPlay();
+    return RP.pos;
   }
-  function rpPlay() { if (!RP.bars.length) return; RP.playing = true; $("#rp-play").textContent = "Pause"; clearInterval(RP.timer); RP.timer = setInterval(() => rpStep(1), RP.ff ? 60 : +$("#rp-speed").value); }
-  function rpPause() { RP.playing = false; RP.ff = false; clearInterval(RP.timer); $("#rp-play").textContent = "Play"; }
-  $("#rp-play").addEventListener("click", () => (RP.playing ? rpPause() : rpPlay()));
-  $("#rp-speed").addEventListener("change", () => { if (RP.playing) rpPlay(); });
-  $("#rp-step").addEventListener("click", () => { rpPause(); rpStep(1); });
-  $("#rp-step5").addEventListener("click", () => { rpPause(); rpStep(5); });
-  $("#rp-ff").addEventListener("click", () => { if (RP.level == null && !RP.pos) return toast("Set a level first."); RP.ff = true; rpPlay(); });
-  $("#rp-buy").addEventListener("click", () => {
-    const K = num($("#rp-strike").value) ?? rpBestStrike(), q = rpQuote(RP.dir, K); if (!q) return;
-    const det = rpDetect();
-    RP.pos = { dir: RP.dir, strike: K, entryAsk: +q.ask.toFixed(2), entryU: q.S, entryMin: barMin(rpNow()) + 1, entryT: rpNow().t, iv: num($("#rp-iv").value) || 15,
-      plan: { t: num($("#rp-t").value), s: num($("#rp-s").value), m: num($("#rp-m").value) }, followed: det?.state === "held", falseBreaks: det?.resets || 0, level: RP.level, levelName: RP.levelName };
-    RP.note = RP.pos.followed ? "Bought on a confirmed V2 signal. Let the plan do the work." : "Bought without a confirmed V2 signal. That's fine for practice, but it's marked as not following the rule.";
-    rpRender();
-  });
-  $("#rp-sell").addEventListener("click", () => { if (RP.pos) { rpExit(RP.pos.alerted ? "plan" : "manual"); rpPause(); } });
+  function rpSkip() {
+    const sg = RP.signal; if (!sg) return;
+    const q = rpQuote(sg.dir, sg.strike);
+    RP.skipped = { idx: RP.idx, dir: sg.dir, strike: sg.strike, ask: q.ask, min: sg.min };
+    RP.since[sg.key] = (rpForming() || rpNow()).t; RP.signal = null; RP.phase = "watch"; RP.cardHtml = ""; rpPlay();
+  }
+  function rpCheckPlan(atClose) {
+    const p = RP.pos, q = rpQuote(p.dir, p.strike); if (!q) return;
+    const chg = (q.bid - p.entryAsk) / p.entryAsk * 100, held = rpMinute() - p.entryExact;
+    if (p.plan.t != null && chg >= p.plan.t) return rpExit("target");
+    if (p.plan.s != null && -chg >= p.plan.s) return rpExit("stop");
+    if (atClose && p.plan.m != null && held >= p.plan.m) return rpExit("time");
+  }
+  function rpContinue() { RP.result = null; RP.phase = RP.idx >= RP.bars.length - 1 ? "dayend" : "watch"; RP.cardHtml = ""; }
   async function rpExit(reason) {
     const p = RP.pos; if (!p) return; RP.pos = null;
-    const q = rpQuote(p.dir, p.strike), exitMin = barMin(rpNow()) + 1;
+    const q = rpQuote(p.dir, p.strike), exitMin = Math.floor(rpMinute());
     const pnl = +((q.bid - p.entryAsk) * 100).toFixed(2);
-    // what the same option was worth 30 minutes later
     const later = exitMin + 30 <= 960 ? RP.bars.find((b) => barMin(b) + 1 >= exitMin + 30) : null;
     const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, p.iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
+    if (p.key) RP.since[p.key] = (rpForming() || rpNow()).t;
     const doc = { replayDate: RP.date, at: Date.now(), dir: p.dir, strike: p.strike, level: p.level, levelName: p.levelName, followed: p.followed, falseBreaks: p.falseBreaks,
-      entryTime: fmtHM(p.entryMin), exitTime: fmtHM(exitMin), entryU: +p.entryU.toFixed(2), exitU: +q.S.toFixed(2), entryAsk: p.entryAsk, exitBid: +q.bid.toFixed(2), iv: p.iv,
-      pnl, pct: +(pnl / (p.entryAsk * 100)).toFixed(4), minsHeld: exitMin - p.entryMin, plan: p.plan, exitReason: reason, after30,
-      mistakes: [!p.followed && "early", p.ignored && "ignored", p.entryMin >= 900 && "late", p.plan.t == null && p.plan.s == null && "noplan"].filter(Boolean) };
-    RP.note = `Closed at ${px(q.bid)}: ${money(pnl, true)}.${after30 != null ? ` Thirty minutes later it would have been worth ${px(after30)}.` : ""}`;
-    rpRender();
+      entryTime: fmtHM(p.entryMin), exitTime: fmtHM(Math.min(exitMin, 960)), entryU: +p.entryU.toFixed(2), exitU: +q.S.toFixed(2), entryAsk: p.entryAsk, exitBid: +q.bid.toFixed(2), iv: p.iv,
+      pnl, pct: +(pnl / (p.entryAsk * 100)).toFixed(4), minsHeld: Math.round(rpMinute() - p.entryExact), plan: p.plan, exitReason: reason, after30,
+      mistakes: [!p.followed && "early", p.entryMin >= 900 && "late"].filter(Boolean) };
+    RP.result = doc; RP.phase = "result"; RP.cardHtml = "";
+    rpPause();
     if (S.db) await save("practice", null, doc);
   }
 
+  // ---------- practice rendering ----------
   function rpRender() {
-    $$("[data-rpdir]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rpdir === RP.dir)));
-    $$("[data-zoom]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.zoom === RP.zoom)));
-    const b = rpNow();
-    $("#rp-clock").textContent = b ? `${dayName(RP.date)} · ${fmtClock(barMin(b) + 1)} · SPY ${b.c.toFixed(2)}` : "–";
-    $("#rp-levels").innerHTML = b ? rpLevels().map(([n, v]) => `<button class="btn sm" type="button" data-rplvl="${v.toFixed(2)}" data-name="${esc(n)}"${RP.level != null && Math.abs(RP.level - v) < 0.005 ? ' style="border-color:var(--accent);color:var(--accent)"' : ""}>${esc(n)} ${v.toFixed(2)}</button>`).join("") : "";
-    const det = rpDetect();
-    const lvlTxt = RP.level != null ? `Watching ${RP.levelName} ${RP.level.toFixed(2)} for a ${RP.dir === "put" ? "break down" : "break up"}. ` : b ? "Pick a level to watch. " : "";
-    $("#rp-status").textContent = b ? (RP.note || lvlTxt + (det ? { watch: "No break yet.", broke: `Broke at ${det.breakET}, waiting for the hold.`, held: `Hold confirmed at ${det.holdET}.` }[det.state] : "")) : $("#rp-status").textContent;
-    // contract quote
-    if (b && !$("#rp-strike").value) $("#rp-strike").value = rpBestStrike();
-    const K = num($("#rp-strike").value), q = b ? rpQuote(RP.dir, K) : null;
-    $("#rp-quote").innerHTML = q ? `<span>SPY ${K}${RP.dir === "put" ? "P" : "C"} · Bid <b>${px(q.bid)}</b> Ask <b>${px(q.ask)}</b></span><span>Cost <b>${money(q.ask * 100)}</b></span><span class="muted">${rpMinsLeft()} min to expiry · model price</span>` : `<span class="muted">Load a day to see model prices.</span>`;
-    $("#rp-buy").disabled = !q || !!RP.pos; $("#rp-sell").disabled = !RP.pos;
-    // position
-    if (RP.pos) {
-      const pq = rpQuote(RP.pos.dir, RP.pos.strike), pl = (pq.bid - RP.pos.entryAsk) * 100, held = barMin(b) + 1 - RP.pos.entryMin;
-      $("#rp-pos").innerHTML = `<div class="pos"><div class="pos-head"><div><div class="label">Practice position${RP.pos.followed ? " · V2 signal" : " · no signal"}</div><h3>SPY ${RP.pos.strike}${RP.pos.dir === "put" ? "P" : "C"} at ${px(RP.pos.entryAsk)}</h3></div><div style="text-align:right"><div class="big ${cls(pl)}">${money(pl, true)}</div><div class="small muted">Bid ${px(pq.bid)} · ${held} min held</div></div></div>
-        <div class="small">Plan: +${RP.pos.plan.t ?? "–"}% at ${px(RP.pos.entryAsk * (1 + (RP.pos.plan.t || 0) / 100))} · −${RP.pos.plan.s ?? "–"}% at ${px(RP.pos.entryAsk * (1 - (RP.pos.plan.s || 0) / 100))} · ${RP.pos.plan.m ?? "–"} min</div></div>`;
-    } else $("#rp-pos").innerHTML = "";
-    rpChart(det);
+    const has = RP.bars.length > 0, price = has ? rpPrice() : null;
+    $("#rp-clock").textContent = has ? `${dayName(RP.date)} · ${rpClock()}` : "–";
+    $("#rp-price").innerHTML = price != null ? `SPY <b>${price.toFixed(2)}</b>` : "";
+    $("#rp-play").textContent = RP.playing ? "Pause" : RP.phase === "result" ? "Keep watching" : "Play";
+    $("#rp-play").disabled = !has || RP.phase === "signal" || RP.phase === "dayend";
+    $("#rp-ff").disabled = !has || !!RP.pos || RP.phase === "signal" || RP.phase === "dayend";
+    const sts = has ? rpStates() : [];
+    const breaking = sts.find((x) => x.st === "broke");
+    const stepCur = !has ? null : RP.phase === "signal" ? "decide" : RP.phase === "trade" ? "trade" : RP.phase === "result" || RP.phase === "dayend" ? "result" : breaking ? "hold" : "watch";
+    const order = ["watch", "break", "hold", "decide", "trade", "result"], ci = order.indexOf(stepCur === "hold" ? "hold" : stepCur);
+    $$("#rp-steps li").forEach((li, i) => { li.className = i === ci ? "cur" : i < ci ? "done" : ""; });
+    rpChart(sts);
+    const html = rpCardHtml(sts, breaking);
+    if (html !== RP.cardHtml) { RP.cardHtml = html; $("#rp-card").innerHTML = html; }
+    const cls = !has ? "" : RP.phase === "signal" ? "signal" : RP.phase === "trade" ? "trade" : RP.phase === "result" ? (RP.result?.pnl > 0 ? "result-win" : "result-loss") : breaking ? "breaking" : "";
+    $("#rp-card").className = "rp-card " + cls;
+    // live numbers update without rebuilding the card
+    const cd = $("#rp-count"); if (cd) cd.textContent = `0:${String(Math.max(0, Math.ceil(60 * (1 - RP.sub)))).padStart(2, "0")}`;
+    if (RP.pos) { const q = rpQuote(RP.pos.dir, RP.pos.strike), pl = (q.bid - RP.pos.entryAsk) * 100, el = $("#rp-pl"); if (el) { el.textContent = money(pl, true); el.className = "pl " + cls_(pl); } const bd = $("#rp-bid"); if (bd) bd.textContent = px(q.bid); const tl = $("#rp-left"); if (tl && RP.pos.plan.m != null) tl.textContent = `${Math.max(0, Math.ceil(RP.pos.plan.m - (rpMinute() - RP.pos.entryExact)))} min`; }
+    if (breaking && RP.phase === "watch") { const f = formingSoFar(), touched = f && (breaking.dir === "call" ? f.l <= breaking.L : f.h >= breaking.L), el = $("#rp-touch"); if (el) el.textContent = touched ? "Price touched the line again. This hold is failing." : `Still ${breaking.dir === "call" ? "above" : "below"} the line.`; if (el) el.style.color = touched ? "var(--bad)" : "var(--good)"; }
   }
-  const shown_len = (R) => Math.min(R.idx + 1, R.zoom);
-  function rpChart(det) {
+  const cls_ = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
+  function rpCardHtml(sts, breaking) {
+    if (!RP.bars.length) return `<h3>How it works</h3><ol class="small" style="margin:0; padding-left:18px; display:grid; gap:6px"><li>Pick a day and press <b>Start this day</b>. The market opens at 9:30 and plays at real speed.</li><li>The dashed lines are prices traders watch. <b>Green lines are ceilings</b>: a break above is a CALL signal. <b>Red lines are floors</b>: a break below is a PUT signal.</li><li>The app watches every line. When a minute closes past a line and the next full minute stays past it, the replay stops and asks: <b>buy or skip?</b></li><li>If you buy, the app sells for you at your take-profit, stop or time limit.</li></ol><p class="small muted">Tip: press <b>Skip to next signal</b> to jump through quiet stretches. It slows back to real time when a break starts.</p>`;
+    if (RP.phase === "dayend") { const today = S.practice.filter((p) => p.replayDate === RP.date), net = today.reduce((s, p) => s + p.pnl, 0); return `<h3>4:00 pm · market closed</h3><p class="small">${today.length ? `You took ${today.length} practice trade${today.length > 1 ? "s" : ""} on ${esc(dayName(RP.date))}: ${money(net, true)}.` : "No trades today. Skipping signals that don't feel right is a skill too."}</p><button class="btn primary" type="button" data-rp="another">Practice another day</button>`; }
+    if (RP.phase === "signal" && RP.signal) {
+      const sg = RP.signal, q0 = rpQuote(sg.dir, sg.strike), q = { ...q0, ask: +q0.ask.toFixed(2) }, pl = rpPlanNow(), word = sg.dir === "call" ? "CALL" : "PUT", side = sg.dir === "call" ? "above" : "below";
+      return `<h3>Signal: buy a ${word}?</h3>
+        <p class="small">SPY closed ${side} <b>${esc(sg.name)}</b> (${sg.L.toFixed(2)}) at ${esc(fmtClock(sg.breakMin))}, then stayed ${side} it for a full minute. That's your V2 signal.${sg.resets ? ` It took ${sg.resets} tr${sg.resets > 1 ? "ies" : "y"}: earlier breaks failed.` : ""}</p>
+        <div class="calc"><span>SPY ${sg.strike} ${word === "CALL" ? "Call" : "Put"}, expires today</span><span>Ask <b>${px(q.ask)}</b> → costs <b>${money(Math.round(q.ask * 100))}</b></span></div>
+        <p class="small">If you buy, the app sells at <b>${px(q.ask * (1 + (pl.t || 0) / 100))}</b> (+${pl.t}%), or <b>${px(q.ask * (1 - (pl.s || 0) / 100))}</b> (−${pl.s}%), or after <b>${pl.m} min</b>, whichever comes first.</p>
+        <div class="row"><button class="btn primary big" type="button" data-rp="buy">Buy ${word}</button><button class="btn big" type="button" data-rp="skip">Skip</button><button class="learn-link" type="button" data-learn="breakhold">Should I?</button></div>`;
+    }
+    if (RP.phase === "trade" && RP.pos) {
+      const p = RP.pos, word = p.dir === "call" ? "Call" : "Put";
+      return `<div class="label">In the trade · SPY ${p.strike} ${word} bought at ${px(p.entryAsk)}</div>
+        <div id="rp-pl" class="pl">–</div>
+        <p class="small">Now worth <b id="rp-bid">–</b>. The app sells at <b>${px(p.entryAsk * (1 + (p.plan.t || 0) / 100))}</b> (take profit) or <b>${px(p.entryAsk * (1 - (p.plan.s || 0) / 100))}</b> (stop), or when time runs out: <b id="rp-left">–</b> left.</p>
+        <p class="small muted">Watch how the option moves faster than SPY. That's delta and gamma at work. Time decay chips away every minute.</p>
+        <button class="btn" type="button" data-rp="sell">Sell now</button>`;
+    }
+    if (RP.phase === "result" && RP.result) {
+      const r = RP.result, how = { target: "Take-profit hit", stop: "Stop hit", time: "Time ran out", manual: "You sold", close: "Market closed" }[r.exitReason] || "Closed";
+      const later = r.after30 != null ? `30 minutes after you sold, it was worth ${px(r.after30)} (${money(Math.round((r.after30 - r.exitBid) * 100), true)} vs selling).` : "";
+      return `<div class="label">${esc(how)} · ${esc(r.entryTime)} → ${esc(r.exitTime)} (${r.minsHeld} min)</div><div class="pl ${cls_(r.pnl)}">${money(r.pnl, true)}</div><p class="small">Bought at ${px(r.entryAsk)}, sold at ${px(r.exitBid)}. ${later}</p><p class="small muted">${r.after30 != null && r.after30 > r.exitBid * 1.1 ? "This time it kept going after you sold. That happens. The plan protects you on the many days it doesn't, and the rule test shows which happens more often." : r.exitReason === "stop" ? "Stops feel bad, but they keep one loss from becoming a big one. That's the job." : r.exitReason === "target" ? "Taking profit at the plan is discipline." : r.exitReason === "time" ? "On same-day options, waiting longer usually means more time decay, so time stops matter." : ""}</p><button class="btn primary" type="button" data-rp="continue">Keep watching</button>`;
+    }
+    // watching
+    const lines = sts.map((x) => { const P = rpPrice(), dist = x.dir === "call" ? x.L - P : P - x.L; return `<div class="row" style="justify-content:space-between; gap:6px"><span><span style="color:${x.dir === "call" ? "var(--good)" : "var(--bad)"}">●</span> ${x.dir === "call" ? "Ceiling" : "Floor"}: ${esc(x.name)} <span class="mono">${x.L.toFixed(2)}</span></span><span class="small muted">${x.st === "broke" ? "breaking now" : dist > 0 ? `$${dist.toFixed(2)} away` : `SPY is already ${x.dir === "call" ? "above" : "below"} it. Counts only if SPY crosses back and breaks again.`}</span></div>`; }).join("");
+    const head = breaking
+      ? `<h3>Break! Wait…</h3><p class="small">SPY closed ${breaking.dir === "call" ? "above" : "below"} ${esc(breaking.name)} (${breaking.L.toFixed(2)}). If the next minute stays ${breaking.dir === "call" ? "above" : "below"} it, that's a signal.</p><div class="count" id="rp-count">0:60</div><div class="small" id="rp-touch"></div>`
+      : `<h3>Watching</h3><p class="small">Nothing to do yet. Most minutes, nothing happens. ${RP.idx < 14 ? "Two more lines appear at 9:45 from the first 15 minutes' high and low." : ""}</p>`;
+    const anytime = $("#rp-anytime").checked ? `<div class="row"><button class="btn sm" type="button" data-rp="buycall">Buy a call now</button><button class="btn sm" type="button" data-rp="buyput">Buy a put now</button></div>` : "";
+    return head + `<div class="small" style="display:grid; gap:4px">${lines}</div>${RP.skipped?.note ? `<div class="why">${esc(RP.skipped.note)}</div>` : ""}${anytime}${!RP.playing ? `<p class="small muted">Paused. Press Play to continue.</p>` : ""}`;
+  }
+  $("#rp-card").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-rp]"); if (!b) return;
+    const a = b.dataset.rp;
+    if (a === "buy" && RP.signal) rpBuy(RP.signal.dir, RP.signal.strike, true, RP.signal);
+    if (a === "skip") rpSkip();
+    if (a === "sell") await rpExit("manual");
+    if (a === "continue") { rpContinue(); rpPlay(); }
+    if (a === "buycall" || a === "buyput") rpBuy(a === "buycall" ? "call" : "put", null, false, null);
+    if (a === "another") { const sel = $("#rp-date"), i = sel.selectedIndex; if (i < sel.options.length - 1) sel.selectedIndex = i + 1; $("#rp-load").click(); }
+    RP.cardHtml = ""; rpRender();
+  });
+  function rpChart(sts) {
     const host = $("#rp-chart");
     if (!RP.bars.length) return;
-    const shown = RP.bars.slice(Math.max(0, RP.idx + 1 - RP.zoom), RP.idx + 1), slots = RP.zoom === 390 ? 390 : Math.min(RP.zoom, Math.max(shown_len(RP), 30));
-    const W = 720, H = 300, L = 8, R = 120, T = 10, B = 24;
+    const done = RP.bars.slice(0, RP.idx + 1), f = formingSoFar(), all = f ? [...done, f] : done;
+    const slots = 60, shown = all.slice(-slots);
+    const W = 720, H = 300, L = 8, R = 150, T = 12, B = 22, cw = (W - L - R) / slots;
     let lo = Math.min(...shown.map((x) => x.l)), hi = Math.max(...shown.map((x) => x.h));
-    const refs = rpLevels().filter(([n]) => !/so far/.test(n)).concat(RP.level != null && !rpLevels().some(([, v]) => Math.abs(v - RP.level) < 0.005) ? [[RP.levelName || "Level", RP.level]] : []);
-    if (RP.level != null) { lo = Math.min(lo, RP.level); hi = Math.max(hi, RP.level); }
-    const pad = Math.max((hi - lo) * 0.08, 0.15); lo -= pad; hi += pad;
-    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B), cw = (W - L - R) / slots, x = (i) => L + i * cw;
-    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Replay candles">`;
-    const near = (v) => refs.some(([, r]) => Math.abs(r - v) < (hi - lo) * 0.05) || (shown.length && Math.abs(shown[shown.length - 1].c - v) < (hi - lo) * 0.05);
-    niceTicks(lo, hi, 5).filter((t) => t > lo && t < hi && !near(t)).forEach((t) => { s += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${W - R + 6}" y="${y(t) + 4}">${t.toFixed(2)}</text>`; });
-    for (const [n, v] of refs) {
-      const sel = RP.level != null && Math.abs(v - RP.level) < 0.005, inside = v > lo && v < hi;
-      if (!inside && !sel) continue;
-      s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${sel ? "var(--warn)" : "var(--faint)"}" stroke-dasharray="${sel ? "5 3" : "2 4"}" stroke-width="${sel ? 1.5 : 1}"/><text x="${W - R + 6}" y="${y(v) - 3}" style="fill:${sel ? "var(--warn)" : "var(--muted)"}">${esc(n.replace("Yesterday's", "Prev").replace("Opening range", "OR"))}</text>`;
+    const span = Math.max(hi - lo, 0.6);
+    const near = sts.filter((x) => x.L > lo - span && x.L < hi + span);
+    for (const x of near) { lo = Math.min(lo, x.L); hi = Math.max(hi, x.L); }
+    const pad = Math.max((hi - lo) * 0.08, 0.1); lo -= pad; hi += pad;
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B), X = (i) => L + i * cw;
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Replay candles with the watched lines">`;
+    let up = 0, dn = 0;
+    for (const x of sts) {
+      const col = x.dir === "call" ? "var(--good)" : "var(--bad)", label = `${x.dir === "call" ? "Ceiling" : "Floor"} ${x.L.toFixed(2)}`;
+      if (x.L > lo && x.L < hi) s += `<line x1="${L}" x2="${W - R}" y1="${y(x.L)}" y2="${y(x.L)}" stroke="${col}" stroke-dasharray="6 4" stroke-width="${x.st === "broke" ? 2.5 : 1.5}"/><text x="${W - R + 6}" y="${y(x.L) + 4}" style="fill:${col}">${label}</text>`;
+      else if (x.L >= hi) s += `<text x="${W - R + 6}" y="${T + 10 + 13 * up++}" style="fill:${col}">↑ ${label}</text>`;
+      else s += `<text x="${W - R + 6}" y="${H - B - 2 - 13 * dn++}" style="fill:${col}">↓ ${label}</text>`;
     }
-    const bk = det?.breakET, hd = det?.holdET;
+    const firstIdx = all.length - shown.length;
     shown.forEach((b, i) => {
-      const end = fmtHM(barMin(b) + 1), up = b.c >= b.o;
-      const col = end === hd ? "var(--good)" : end === bk ? "var(--accent)" : up ? "var(--muted)" : "var(--faint)";
-      const cx = x(i) + cw / 2, bw = Math.max(cw * 0.65, 1);
-      s += `<line x1="${cx}" x2="${cx}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}"/><rect x="${cx - bw / 2}" y="${Math.min(y(b.o), y(b.c))}" width="${bw}" height="${Math.max(Math.abs(y(b.o) - y(b.c)), 1)}" fill="${up ? "var(--panel)" : col}" stroke="${col}"/>`;
+      const gi = firstIdx + i, up = b.c >= b.o, forming = f && i === shown.length - 1;
+      const isBreak = sts.some((x) => (x.st === "broke" || x.st === "held") && x.bi === gi), isHold = sts.some((x) => x.st === "held" && x.hi === gi);
+      const col = isHold ? "var(--good)" : isBreak ? "var(--accent)" : forming ? "var(--ink)" : up ? "var(--muted)" : "var(--faint)";
+      const cx = X(i) + cw / 2, bw = Math.max(cw * 0.62, 1.5);
+      s += `<line x1="${cx}" x2="${cx}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}"/><rect x="${cx - bw / 2}" y="${Math.min(y(b.o), y(b.c))}" width="${bw}" height="${Math.max(Math.abs(y(b.o) - y(b.c)), 1)}" fill="${up && !isBreak && !isHold ? "var(--panel)" : col}" stroke="${col}"${forming ? ' stroke-dasharray="2 1"' : ""}/>`;
     });
-    if (RP.pos) { const pe = shown.findIndex((b) => b.t === RP.pos.entryT); if (pe >= 0) s += `<circle cx="${x(pe) + cw / 2}" cy="${y(RP.pos.entryU)}" r="5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/>`; }
+    if (RP.pos) { const ei = shown.findIndex((b) => b.t === RP.pos.entryT); if (ei >= 0) s += `<circle cx="${X(ei) + cw / 2}" cy="${y(RP.pos.entryU)}" r="5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/><text x="${X(ei) + cw / 2 + 8}" y="${y(RP.pos.entryU) - 8}" style="fill:var(--accent)">bought</text>`; }
     const last = shown[shown.length - 1];
-    s += `<text x="${L}" y="${H - 6}">${fmtClock(barMin(shown[0]))}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtClock(barMin(last) + 1)}</text>`;
+    s += `<text x="${L}" y="${H - 6}">${fmtClock(barMin(shown[0]))}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${esc(rpClock().replace(/:\d\d (am|pm)/, " $1"))}</text>`;
     s += `<rect x="${W - R + 2}" y="${y(last.c) - 9}" width="58" height="18" rx="3" fill="var(--ink)"/><text x="${W - R + 6}" y="${y(last.c) + 4}" style="fill:var(--bg)">${last.c.toFixed(2)}</text>`;
     host.innerHTML = s + "</svg>";
   }
@@ -2184,14 +2283,9 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   const TABS = { dashboard: "dash", dash: "dash", home: "dash", live: "live", "live check": "live", check: "live", practice: "practice", replay: "practice", journal: "journal", trades: "journal", news: "news", scout: "news", learn: "learn", lessons: "learn", coach: "learn" };
   // Actions shared by typed commands and by Claude's interpretation.
   const ACT = {
-    setDir(dir) { if (!["call", "put"].includes(dir)) return "Direction must be call or put."; if (view === "practice") { RP.dir = dir; $("#rp-strike").value = ""; if (RP.level != null) rpSetLevel(RP.level, RP.levelName); else rpRender(); return `Practice direction: ${dir}.`; } LC.dir = dir; rearm(); saveLC(); renderLive(); return `Direction set to ${dir === "call" ? "Call (break up)" : "Put (break down)"}.`; },
+    setDir(dir) { if (!["call", "put"].includes(dir)) return "Direction must be call or put."; if (view === "practice") return "In practice you don't pick a direction: the app watches ceilings (call) and floors (put) for you. Press Play or type skip to signal."; LC.dir = dir; rearm(); saveLC(); renderLive(); return `Direction set to ${dir === "call" ? "Call (break up)" : "Put (break down)"}.`; },
     setLevel(level, name, dir) {
-      if (view === "practice") {
-        if (!RP.bars.length) return "Load a practice day first, e.g. replay yesterday.";
-        let L = level, nm = "Custom level";
-        if (L == null && name) { const hit = rpLevels().find(([n]) => n.toLowerCase().includes(name)); if (!hit) return `No "${name}" level yet. Options: ${rpLevels().map(([n]) => n).join(", ")}.`; [nm, L] = hit; }
-        if (dir) RP.dir = dir; rpSetLevel(L, nm); return `Practice: watching ${nm} ${L.toFixed(2)} for a ${RP.dir === "put" ? "break down" : "break up"}.`;
-      }
+      if (view === "practice") return "In practice the app watches the key lines for you (yesterday's high and low, and the first 15 minutes' high and low). Just press Play, or type skip to signal.";
       let L = level, why = "";
       if (L == null && name) {
         const sn = LIVE.snap; if (!sn) return "Live prices aren't loaded yet, so I can't look up that level. Type the number instead, e.g. watch 779.42 call.";
@@ -2212,13 +2306,18 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     },
     async checkpoint(bid, ask, u) { const t = openPos(); if (!t) return "You don't have an open position."; if (bid == null) return "Checkpoint needs the Bid, e.g. checkpoint 1.10 1.12."; return (await recordQuote(t, { bid, ask, xsp: u }, false)) || "Couldn't save. Try again."; },
     async exit(bid, ask, u) {
-      if (view === "practice" && RP.pos) { await rpExit("manual"); rpPause(); return "Practice position sold at the model Bid."; }
+      if (view === "practice" && RP.pos) { await rpExit("manual"); return "Practice position sold at the model Bid."; }
       const t = openPos(); if (!t) return "You don't have an open position to close.";
       if (bid == null) return `To close ${uOf(t)} ${contractName(t)}, give the current Bid, e.g. exit 1.25 (or exit 1.25 1.28 with the Ask).`;
       return (await recordQuote(t, { bid, ask, xsp: u }, true)) || "Couldn't save. Try again.";
     },
     async enter() {
-      if (view === "practice") { if (RP.pos) return "You already hold a practice position."; if (!RP.bars.length) return "Load a practice day first."; $("#rp-buy").click(); return RP.pos ? `Practice buy: SPY ${RP.pos.strike}${RP.pos.dir === "put" ? "P" : "C"} at ${px(RP.pos.entryAsk)}.` : "Couldn't buy."; }
+      if (view === "practice") {
+        if (RP.pos) return "You already hold a practice position.";
+        if (!RP.bars.length) return "Start a practice day first, e.g. replay yesterday.";
+        if (RP.phase !== "signal" || !RP.signal) return $("#rp-anytime").checked ? "No signal right now. Use the Buy a call / Buy a put buttons on the card to buy without one." : "No signal right now. Wait for one (or type skip to signal).";
+        const p = rpBuy(RP.signal.dir, RP.signal.strike, true, RP.signal); return p ? `Practice buy: SPY ${p.strike}${p.dir === "put" ? "P" : "C"} at ${px(p.entryAsk)}. The app will sell at your plan.` : "Couldn't buy.";
+      }
       if (openPos()) return "You already have an open position. Close it first (exit 1.25).";
       const m = await logEntry(); if (m) return m;
       const g = guideModel(); return `Not ready to enter yet. Next step: ${g.cur ? g.cur.title : "set up the check"}. ${g.cur ? g.cur.detail.replace(/<[^>]+>/g, "") : ""}`;
@@ -2245,10 +2344,10 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
         $("#rp-date").value = d; $("#rp-load").click(); return `Loading ${dayName(d)}…`;
       }
       if (!RP.bars.length) return "Load a day first, e.g. replay yesterday.";
-      if (action === "play") { rpPlay(); return "Playing."; }
+      if (action === "play") { if (RP.phase === "result") rpContinue(); rpPlay(); return RP.phase === "signal" ? "There's a signal waiting: buy or skip first." : "Playing."; }
       if (action === "pause") { rpPause(); return "Paused."; }
-      if (action === "step") { rpPause(); rpStep(arg || 1); return `Moved ${arg || 1} minute${(arg || 1) > 1 ? "s" : ""} ahead.`; }
-      if (action === "ff") { if (RP.level == null && !RP.pos) return "Set a level first, e.g. watch opening range high."; RP.ff = true; rpPlay(); return "Skipping ahead to the next signal…"; }
+      if (action === "step") { rpPause(); rpStep(arg || 1); if (RP.phase !== "signal") rpRender(); return `Moved ${arg || 1} minute${(arg || 1) > 1 ? "s" : ""} ahead.`; }
+      if (action === "ff") { if (RP.pos) return "You're in a trade. Let it play out, or type sell."; if (RP.phase === "result") rpContinue(); RP.ff = true; rpPlay(); return "Skipping ahead to the next signal…"; }
       return "Unknown practice action.";
     },
     async undo() {
@@ -2291,7 +2390,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (/^undo$/.test(s)) return () => ACT.undo();
     if (/^(status|where am i|what now|what('s| is) next|next( step)?)$/.test(s)) return () => ACT.status();
     if (/^(done|did it|finished|check( it)? off|mark (it |step )?(done|complete)|complete)$/.test(s)) return () => ACT.guide("done");
-    if (/^skip( (it|this|step))?$/.test(s)) return () => ACT.guide("skip");
+    if (/^skip( (it|this|step|signal|this one))?$/.test(s)) return () => { if (view === "practice" && RP.phase === "signal") { rpSkip(); rpRender(); return "Skipped. The app will tell you in 15 minutes how that signal turned out."; } return ACT.guide("skip"); };
     if (/^show( me)?$/.test(s)) return () => ACT.guide("show");
     if ((m = /^(?:go( to)?|open|show)?\s*(dashboard|dash|home|live check|live|check|practice|journal|trades|news|scout|learn|lessons)( tab)?$/.exec(s))) return () => ACT.tab(m[2]);
     if (/^(undo|cancel)$/.test(s)) return () => ACT.undo();
@@ -2315,7 +2414,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // entry
     if (/^(enter|buy|log( (the )?entry)?|take (it|the trade)|place( it)?|go long)$/.test(s)) return () => ACT.enter();
     if (/^(missed|log missed|skip trade|log (as )?missed)$/.test(s)) return () => { logMissed(); return "Opened the missed-setup form."; };
-    if (/^(reset|start over|clear)$/.test(s)) return () => { if (view === "practice") { RP.level = null; RP.note = ""; rpRender(); return "Practice level cleared."; } $("#lc-reset").click(); return "Live check cleared. Pick a new level."; };
+    if (/^(reset|start over|clear)$/.test(s)) return () => { if (view === "practice") { $("#rp-load").click(); return "Restarting this practice day from 9:30."; } $("#lc-reset").click(); return "Live check cleared. Pick a new level."; };
     if (/^review( (it|the trade|last trade))?$/.test(s)) return () => { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed) || stats().closed.slice(-1)[0]?.t; if (!t) return "No closed trade to review."; openReview(t); return `Opened the review for ${uOf(t)} ${contractName(t)}.`; };
     // context
     if (/^(nothing opposing|no opposition|clear|context (ok|clear|fine)|all clear)$/.test(s)) return () => ACT.setContext("no");
@@ -2413,7 +2512,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   function renderSugg() {
     const el = $("#cmd-sugg"); if (!el) return;
     let list;
-    if (view === "practice") list = RP.pos ? ["sell", "step 5", "play"] : RP.bars.length ? (RP.level == null ? ["watch opening range high", "watch yesterday's low put", "play"] : ["skip to signal", "buy", "step 5"]) : ["replay yesterday", "run rule test"];
+    if (view === "practice") list = RP.pos ? ["sell"] : RP.phase === "signal" ? ["buy", "skip"] : RP.bars.length ? ["play", "pause", "skip to signal"] : ["replay yesterday", "replay friday"];
     else {
       const m = guideModel(), id = m.cur?.id;
       const t = openPos(), b = t && calc(t).last ? num(calc(t).last.bid) : null;
