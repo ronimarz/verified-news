@@ -244,6 +244,32 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .quiz-opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
 .alert { border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 500; background: var(--warn-bg); }
 
+/* Guide */
+.guide:empty { display: none; }
+.guide { margin-top: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 16px; align-items: center; padding: 12px 16px; border-radius: 8px; background: var(--info-bg); border: 1px solid var(--accent); }
+.guide .g-no { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 17px; }
+.guide .g-title { font-weight: 600; font-size: 15px; }
+.guide .g-detail { font-size: 13px; color: var(--ink); margin-top: 2px; }
+.guide .g-meta { font-size: 11.5px; color: var(--muted); font-family: var(--display); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.guide.warn { background: var(--warn-bg); border-color: var(--warn); }
+.guide.warn .g-no { background: var(--warn); }
+.guide.off { grid-template-columns: 1fr auto; background: var(--panel); border-color: var(--line); padding: 8px 14px; }
+@media (max-width: 700px) { .guide { grid-template-columns: auto 1fr; } .guide .row { grid-column: 1 / -1; } }
+.spot { outline: 3px solid var(--accent); outline-offset: 4px; border-radius: 8px; }
+@media (prefers-reduced-motion: no-preference) { .spot { animation: spot 1.2s ease-in-out 3; } @keyframes spot { 50% { outline-color: transparent; } } }
+.routine { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 860px) { .routine { grid-template-columns: 1fr; } }
+.routine ol { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: r; }
+.routine li { counter-increment: r; display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 13px; padding: 5px 6px; border-radius: 5px; align-items: start; }
+.routine li::before { content: counter(r); width: 20px; height: 20px; border-radius: 50%; background: var(--panel-2); color: var(--muted); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+.routine li.done { color: var(--muted); }
+.routine li.done::before { content: "✓"; background: var(--good); color: #fff; }
+.routine li.skip { color: var(--faint); text-decoration: line-through; }
+.routine li.cur { background: var(--info-bg); font-weight: 600; }
+.routine li.cur::before { background: var(--accent); color: var(--accent-ink); }
+.routine .phase { padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); }
+.routine .phase.now { border-color: var(--accent); }
+
 /* Dialog */
 dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: rgba(10, 16, 24, .45); }
@@ -272,9 +298,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
 <main class="wrap">
   <div class="banner" id="banner" hidden></div>
+  <div class="guide" id="guide" aria-live="polite"></div>
 
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
+    <div class="panel" id="routine"></div>
     <div class="kpis" id="kpis"></div>
     <div id="dash-open"></div>
     <div class="grid2">
@@ -395,7 +423,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       </div>
       <div style="display:grid; gap:18px;">
         <div class="decision wait" id="lc-decision"></div>
-        <div class="panel">
+        <div class="panel" id="lc-plan-panel">
           <h3 style="margin-bottom:4px">Your plan, before you enter <button class="learn-link" type="button" data-learn="exit">Why plan?</button></h3>
           <p class="small muted" style="margin-bottom:10px">Saved with the trade. The app tells you when your plan says to get out.</p>
           <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px">
@@ -667,6 +695,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
     if (v === "learn") { renderSim(); if (!QUIZ.cur) nextQuestion(); }
     if (v === "practice" && !$("#rp-date").options.length) rpInitDates();
+    if (v === "news") { gFlag("news", 1); gFlag("newsAt", +etParts().hm.replace(":", "")); }
     if (v !== "practice" && RP.playing) rpPause();
     schedulePoll(0);
   }
@@ -677,7 +706,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const st = stats();
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
     renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
-    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest();
+    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest(); renderGuide(); renderRoutine();
     $("#open-dot").hidden = !st.open.length;
   }
 
@@ -1131,7 +1160,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
     renderPlanCalc(s); renderSpread(s);
-    renderTeach(s);
+    renderTeach(s); renderGuide();
   }
 
   // A short "what to learn from this moment" note beside the decision.
@@ -1245,6 +1274,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   function openLesson(id) {
     const L = LESSONS[id]; if (!L) return;
+    if (!S.seen.has(id)) gFlag("lessons");
     S.seen.add(id); ls.set("learn.seen", [...S.seen]);
     let yours = ""; try { yours = L.yours?.() || ""; } catch {}
     formCtx = { coll: "lesson" };
@@ -1891,7 +1921,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const p = { answered: 0, correct: 0, right: {}, wrong: {}, ...(S.quiz || {}) };
     p.answered++; if (ok) { p.correct++; p.right = { ...p.right, [q.id]: 1 }; const w = { ...p.wrong }; delete w[q.id]; p.wrong = w; } else p.wrong = { ...p.wrong, [q.id]: 1 };
     p.byLesson = { ...(p.byLesson || {}), [q.lesson]: { right: (p.byLesson?.[q.lesson]?.right || 0) + (ok ? 1 : 0), wrong: (p.byLesson?.[q.lesson]?.wrong || 0) + (ok ? 0 : 1) } };
-    S.quiz = p; renderQuizScore();
+    S.quiz = p; renderQuizScore(); gFlag("quiz");
     if (S.db) S.db.doc("quiz/progress").set(p).catch(() => {});
   });
   $("#quiz-next").addEventListener("click", nextQuestion);
@@ -1916,6 +1946,149 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       : `<div class="empty">Your first weekly review arrives Friday after the close.</div>`;
   }
 
+  // ---------- guided mode: what to do next, in order ----------
+  const dayKey = () => { const e = etParts(); if (e.wd === "Sun") { const d = new Date(Date.parse(e.date + "T12:00:00Z") - 86400000); return d.toISOString().slice(0, 10); } return e.date; };
+  function G() { let g = ls.get("guide.day", null); if (!g || g.key !== dayKey()) { g = { key: dayKey(), done: {}, skip: {}, flags: {} }; ls.set("guide.day", g); } return g; }
+  const gSet = (fn) => { const g = G(); fn(g); ls.set("guide.day", g); renderGuide(); };
+  const gFlag = (k, v) => gSet((g) => { g.flags[k] = v ?? ((g.flags[k] || 0) + 1); });
+  let guideOn = ls.get("guide.on", true);
+  function phaseNow() { const e = etParts(); if (["Sat", "Sun"].includes(e.wd)) return "weekend"; if (e.min < 570) return "pre"; if (e.min < 960) return "market"; return "after"; }
+  const todayTrades = () => S.trades.filter((t) => t.date === etParts().date && t.status === "official");
+  const latestScout = () => [...S.scout].filter((r) => r.kind !== "obs").sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0];
+  const levelArmedToday = () => LC.level && LC.dir && LC.armedAt && etParts(new Date(LC.armedAt)).date === etParts().date;
+
+  function preSteps() {
+    const g = G(), sc = latestScout();
+    return [
+      { id: "read", title: "Read this morning's scout report", detail: sc ? `Latest: ${sc.scout} at ${sc.time} · ${sc.headline || ""}` : "Reports arrive at 8:47 and 9:47 am ET.", tab: "news", target: "#news .ev", lesson: "catalysts", auto: !!g.flags.news },
+      { id: "events", title: "Note today's scheduled events and their times", detail: "Big reports (like CPI or jobs) can whip prices around right after they come out. Know when they are so you aren't surprised mid-trade.", tab: "news", target: "#news .ev", lesson: "catalysts", manual: true },
+      { id: "levels", title: "Pick one level to watch and a direction", detail: "In Live check, tap a suggested level (yesterday's high, low or close) and choose Call for a break up or Put for a break down. One or two levels is plenty.", tab: "live", target: "#st1", lesson: "levels", auto: levelArmedToday() },
+      { id: "plandef", title: "Decide your exits before the open", detail: "Check the take-profit %, stop % and time stop in Your plan. Deciding now, while calm, is the point.", tab: "live", target: "#lc-plan-panel", lesson: "exit", manual: true },
+      { id: "warmup", title: "Warm up: 3 quiz questions or one replay", detail: "Optional, five minutes. It gets your head into the rules before real prices move.", tab: "learn", target: "#quiz", lesson: "breakhold", auto: (g.flags.quiz || 0) >= 3 || S.practice.some((p) => etParts(new Date(p.at)).date === etParts().date), manual: true },
+    ];
+  }
+  function afterSteps() {
+    const g = G(), tt = todayTrades().filter((t) => !calc(t).open), spy = tt.filter((t) => uOf(t) === "SPY");
+    return [
+      { id: "review", title: tt.length ? "Review today's trades" : "No trades today. That's a fine result", detail: tt.length ? "Answer the four review questions for each trade while it's fresh." : "Not forcing a trade is part of the rules. Nothing to review.", tab: "journal", target: "#trades-tbl", lesson: "exit", auto: tt.every((t) => t.reviewFollowed), action: tt.find((t) => !t.reviewFollowed) ? () => openReview(tt.find((t) => !t.reviewFollowed)) : null },
+      { id: "study", title: "See what happened after you exited", detail: "Open each trade and read \"If you had held longer\". Did your exit leave money on the table, or save you?", tab: "journal", target: "#trades-tbl", lesson: "exit", auto: spy.every((t) => t.exitStudy || num(t.m15) != null), action: spy.find((t) => !t.exitStudy) ? () => openForm("trades", spy.find((t) => !t.exitStudy)) : null },
+      { id: "replay", title: "Replay today in Practice", detail: "Load today's date once the day's candles are in. Watch for setups you missed or took too early.", tab: "practice", target: "#rp-load", lesson: "breakhold", auto: S.practice.some((p) => p.replayDate === etParts().date), manual: true },
+      { id: "quiz", title: "Answer 3 quiz questions", detail: "Quick check of what stuck today.", tab: "learn", target: "#quiz", lesson: "sample", auto: (g.flags.quiz || 0) >= 3, manual: true },
+      { id: "overnight", title: "Read the overnight report (after 8:12 pm)", detail: "It compares what the scouts expected with what happened, and lists tomorrow's events.", tab: "news", target: "#news .ev", lesson: "regime", auto: (g.flags.newsAt || 0) >= 1212, manual: true },
+    ];
+  }
+  function weekendSteps() {
+    const g = G(), weekend = (p) => { const d = etParts(new Date(p.at)).date; return d >= dayKey(); };
+    return [
+      { id: "weekly", title: "Read Friday's weekly coach review", detail: "Learn tab → Weekly coach reviews. Note the one thing to focus on.", tab: "learn", target: "#reviews", lesson: "sample", manual: true },
+      { id: "replays", title: "Do 3 practice replays", detail: `Pick days from the last few weeks. Follow the same steps as a live trade. ${S.practice.filter(weekend).length} done this weekend.`, tab: "practice", target: "#rp-load", lesson: "breakhold", auto: S.practice.filter(weekend).length >= 3 },
+      { id: "bt", title: "Run the rule test", detail: "Does waiting 60 seconds really beat entering right away? Check with 20–40 days of history.", tab: "practice", target: "#bt-run", lesson: "breakhold", auto: S.bt && etParts(new Date(S.bt.ranAt)).date >= dayKey() },
+      { id: "lessons", title: "Read two lessons you haven't seen", detail: "Learn tab → tap any idea without a ✓.", tab: "learn", target: "#flow", lesson: null, auto: (g.flags.lessons || 0) >= 2 },
+      { id: "quizw", title: "Answer 5 quiz questions", detail: "Wrong answers come back until you get them right.", tab: "learn", target: "#quiz", lesson: null, auto: (g.flags.quiz || 0) >= 5 },
+    ];
+  }
+  // The live trade loop: one current step worked out from where you are right now.
+  function marketLoop() {
+    const s = lcState(), open = stats().open, e = etParts();
+    const unreviewed = todayTrades().find((t) => !calc(t).open && !t.reviewFollowed && !G().skip["rev-" + t.id]);
+    const L = esc(LC.level || "your level"), side = LC.dir === "put" ? "below" : "above";
+    const steps = [
+      { id: "level", title: "Pick a level and direction", detail: "Tap a suggested level (today's high or low, yesterday's close, the open). Choose Call for a break up, Put for a break down.", target: "#st1", lesson: "levels" },
+      { id: "break", title: "Wait for the break", detail: `Auto-watch is on. It marks the break when a 1-minute candle closes ${side} ${L}. Don't enter early. Most of the time nothing happens, and that's fine.`, target: "#st2", lesson: "breakhold" },
+      { id: "hold", title: "Break! Now wait for the hold", detail: `Broke at ${esc(s.breakET || "–")}. Wait for one full candle that stays ${side} ${L}. If price comes back across, the count resets.`, target: "#st2", lesson: "breakhold" },
+      { id: "context", title: s.stop ? "Opposing signal: no trade" : "Check the news context", detail: s.stop ? "Skip this one. Optionally log it as a missed setup, then press Start over and watch again." : `Read the scout card. Is anything clearly against a ${LC.dir === "put" ? "put" : "call"}? Choose Nothing opposing, Some data stale, or Opposing signal.`, target: "#st3", lesson: "regime" },
+      { id: "chain", title: "Get real option prices", detail: "Open your broker's SPY 0DTE chain. Find a strike with an Ask near $1.00. Paste a screenshot here (Ctrl/Cmd+V) or type Strike, Bid and Ask.", target: "#st4", lesson: "delta" },
+      { id: "plan", title: "Set your plan", detail: "Take-profit %, stop % and time stop. The app turns them into exact prices and warns you when to get out.", target: "#lc-plan-panel", lesson: "exit" },
+      { id: "enter", title: "Log the paper entry", detail: "Everything checks out. Press Log paper entry now. Prices move, so don't wait long.", target: "#lc-decision", lesson: "spread" },
+      { id: "manage", title: "Manage the trade", detail: "Every few minutes, enter the current Bid and Ask (or paste a screenshot) and press Save checkpoint. Don't move your stop.", target: "#live-open", lesson: "exit" },
+      { id: "exit", title: "Exit now", detail: "Type the current Bid and press Exit at Bid now.", target: "#live-open", lesson: "exit" },
+      { id: "review", title: "Review the trade (30 seconds)", detail: "Answer four quick questions while it's fresh. This is where most of the learning happens.", lesson: "exit", action: unreviewed ? () => openReview(unreviewed) : null },
+    ];
+    let cur, warn = false;
+    if (open.length) {
+      const t = open[0], last = calc(t).last, alerts = planStatus(t, last ? num(last.bid) : null);
+      cur = alerts.length ? "exit" : "manage"; warn = !!alerts.length;
+      if (alerts.length) steps[8].detail = alerts.join(" ") + " Type the current Bid and press Exit at Bid now.";
+    } else if (unreviewed) cur = "review";
+    else if (!s.s1 || !levelArmedToday()) cur = "level";
+    else if (!s.broke) cur = "break";
+    else if (!s.held) cur = "hold";
+    else if (!s.s3) { cur = "context"; warn = s.stop; }
+    else if (!s.s4) cur = "chain";
+    else if (num(LC.pt) == null || num(LC.ps) == null || num(LC.pm) == null) cur = "plan";
+    else cur = "enter";
+    if (!open.length && e.min >= 930 && ["level", "break"].includes(cur)) { warn = true; steps[cur === "level" ? 0 : 1].detail += " It's after 3:30 pm: new 0DTE entries now fight very fast time decay. Stopping for the day is a good choice."; }
+    const ci = steps.findIndex((x) => x.id === cur);
+    steps.forEach((x, i) => { x.tab = "live"; x.status = i < ci && i < 7 && cur !== "review" ? "done" : i === ci ? "cur" : "todo"; });
+    if (["manage", "exit", "review"].includes(cur)) steps.slice(0, 7).forEach((x) => (x.status = "done"));
+    if (cur === "exit") steps[7].status = "done";
+    return { steps, cur: steps[ci], warn, idx: ci };
+  }
+  function listStatus(list) {
+    const g = G(); let curSet = false;
+    for (const x of list) { x.status = g.skip[x.id] ? "skip" : x.auto || g.done[x.id] ? "done" : !curSet ? ((curSet = true), "cur") : "todo"; }
+    return list;
+  }
+  function guideModel() {
+    const ph = phaseNow();
+    if (ph === "market") { const m = marketLoop(); return { ph, label: "Market open · trade loop", list: m.steps, cur: m.cur, idx: m.idx, warn: m.warn, loop: true }; }
+    const list = listStatus(ph === "pre" ? preSteps() : ph === "after" ? afterSteps() : weekendSteps());
+    const idx = list.findIndex((x) => x.status === "cur");
+    return { ph, label: { pre: "Before the open", after: "After the close", weekend: "Weekend practice" }[ph], list, cur: list[idx] || null, idx };
+  }
+  function renderGuide() {
+    const el = $("#guide"); if (!el) return;
+    if (!guideOn) { el.className = "guide off"; el.innerHTML = `<span class="small muted">Guided mode is off.</span><button class="btn sm" type="button" id="g-on">Turn on step-by-step guide</button>`; return; }
+    const m = guideModel(), c = m.cur;
+    el.className = "guide" + (m.warn ? " warn" : "");
+    if (!c) { el.innerHTML = `<div class="g-no">✓</div><div><div class="g-meta">${esc(m.label)}</div><div class="g-title">All done for now.</div><div class="g-detail">${m.ph === "pre" ? "Next: the market opens at 9:30 am ET. The guide switches to the trade loop then." : m.ph === "after" ? "Nice work. Tomorrow starts with the morning scout report." : "Enjoy the rest of the weekend."}</div></div><div class="row"><button class="btn sm" type="button" data-gview="dash">See the whole day</button><button class="btn sm" type="button" id="g-off">Hide guide</button></div>`; return; }
+    const total = m.loop ? 10 : m.list.length;
+    el.innerHTML = `<div class="g-no">${m.idx + 1}</div>
+      <div style="min-width:0"><div class="g-meta">${esc(m.label)} · step ${m.idx + 1} of ${total}</div><div class="g-title">${esc(c.title)}</div><div class="g-detail">${c.detail}</div></div>
+      <div class="row">${c.action ? `<button class="btn primary sm" type="button" id="g-act">Do it</button>` : `<button class="btn primary sm" type="button" id="g-show">Show me</button>`}${c.lesson ? `<button class="btn sm" type="button" data-learn="${c.lesson}">Why?</button>` : ""}${!m.loop && c.manual ? `<button class="btn sm" type="button" id="g-done">Done</button>` : ""}${!m.loop ? `<button class="btn sm" type="button" id="g-skip">Skip</button>` : c.id === "review" ? `<button class="btn sm" type="button" id="g-skiprev">Skip review</button>` : ""}<button class="btn sm" type="button" data-gview="dash">Whole day</button><button class="btn sm" type="button" id="g-off" title="Hide guide">Hide</button></div>`;
+    el._cur = c;
+  }
+  function spotlight(sel) {
+    const t = sel && $(sel); if (!t) return;
+    $$(".spot").forEach((x) => x.classList.remove("spot"));
+    t.classList.add("spot"); t.scrollIntoView({ block: "center", behavior: "smooth" });
+    setTimeout(() => t.classList.remove("spot"), 4000);
+  }
+  $("#guide").addEventListener("click", (e) => {
+    const c = $("#guide")._cur, id = e.target.id;
+    if (id === "g-on") { guideOn = true; ls.set("guide.on", true); renderGuide(); renderRoutine(); }
+    else if (id === "g-off") { guideOn = false; ls.set("guide.on", false); renderGuide(); }
+    else if (id === "g-show" && c) { if (c.tab && c.tab !== view) showView(c.tab); setTimeout(() => spotlight(c.target), 60); }
+    else if (id === "g-act" && c?.action) c.action();
+    else if (id === "g-done" && c) gSet((g) => { g.done[c.id] = 1; });
+    else if (id === "g-skip" && c) gSet((g) => { g.skip[c.id] = 1; });
+    else if (id === "g-skiprev") { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed); if (t) gSet((g) => { g.skip["rev-" + t.id] = 1; }); }
+    else if (e.target.dataset.gview) { showView(e.target.dataset.gview); spotlight("#routine"); }
+    renderRoutine();
+  });
+
+  // The whole day's routine, on the Dashboard.
+  function renderRoutine() {
+    const el = $("#routine"); if (!el) return;
+    if (!guideOn) { el.hidden = true; return; } el.hidden = false;
+    const ph = phaseNow(), li = (x) => `<li class="${x.status === "cur" ? "cur" : x.status === "done" ? "done" : x.status === "skip" ? "skip" : ""}"><span>${esc(x.title)}</span></li>`;
+    const head = `<div class="panel-head"><div><h2>Your routine today</h2><p class="small muted" style="margin-top:4px">Follow the steps in order. The blue bar at the top always shows the next one.</p></div><button class="btn sm" type="button" id="r-off">Hide guide</button></div>`;
+    if (ph === "weekend") {
+      el.innerHTML = head + `<div class="routine" style="grid-template-columns:1fr"><div class="phase now"><div class="label">Weekend practice</div><ol>${listStatus(weekendSteps()).map(li).join("")}</ol></div></div>
+        <p class="small muted" style="margin-top:10px">On weekdays the routine has three parts: before the open (read the news, pick levels, set your plan), the trade loop while the market is open, and a short review after the close.</p>`;
+      return;
+    }
+    const pre = listStatus(preSteps()), loop = marketLoop().steps, after = listStatus(afterSteps());
+    if (ph !== "pre") pre.forEach((x) => { if (x.status !== "done") x.status = "skip"; });
+    if (ph === "pre") loop.forEach((x) => (x.status = "todo")); if (ph === "after") loop.forEach((x) => (x.status = "todo"));
+    if (ph !== "after") after.forEach((x) => (x.status = "todo"));
+    el.innerHTML = head + `<div class="routine">
+      <div class="phase${ph === "pre" ? " now" : ""}"><div class="label">1 · Before 9:30 am</div><ol>${pre.map(li).join("")}</ol></div>
+      <div class="phase${ph === "market" ? " now" : ""}"><div class="label">2 · 9:30 am – 4:00 pm · repeat per setup</div><ol>${loop.map(li).join("")}</ol></div>
+      <div class="phase${ph === "after" ? " now" : ""}"><div class="label">3 · After the close</div><ol>${after.map(li).join("")}</ol></div></div>`;
+  }
+  $("#routine").addEventListener("click", (e) => { if (e.target.id === "r-off") { guideOn = false; ls.set("guide.on", false); renderGuide(); renderRoutine(); } });
+
   // ---------- storage ----------
   const stripId = (o) => { const { id, ...rest } = o; return rest; };
   async function save(coll, id, data) {
@@ -1938,6 +2111,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // ---------- boot ----------
   showView(["dash", "live", "practice", "journal", "news", "learn"].includes(view) ? view : "dash");
   fillPlanDefaults();
+  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") renderRoutine(); } }, 15000);
   setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
