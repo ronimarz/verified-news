@@ -176,6 +176,20 @@ textarea { min-height: 90px; resize: vertical; }
 .card-line { display: grid; grid-template-columns: 120px 1fr; gap: 4px 10px; font-size: 13px; }
 .card-line dt { font-family: var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; font-size: 12px; padding-top: 1px; }
 .card-line dd { margin: 0; min-width: 0; }
+.bt-how { margin: 10px 0 14px 20px; display: grid; gap: 4px; font-size: 14px; }
+.bt-go { width: 100%; justify-content: center; max-width: 420px; }
+.bt-opts { margin-top: 10px; }
+.bt-set { display: grid; gap: 6px; margin-top: 8px; max-width: 420px; }
+.bt-set label { font-size: 13px; margin-top: 4px; }
+.bt-answer { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--panel-2); font-size: 15px; }
+.bt-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 12px; }
+.bt-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-width: 0; }
+.bt-card.best { border-color: var(--good); box-shadow: inset 0 0 0 1px var(--good); }
+.bt-card h3 { font-size: 15px; margin: 0 0 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bt-split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--panel-2); margin: 8px 0; }
+.bt-split span { display: block; height: 100%; }
+.bt-card dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; margin: 0; font-size: 13px; }
+.bt-card dt { color: var(--muted); } .bt-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -600,16 +614,27 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
     </div>
     <details class="panel" id="bt-box">
-      <summary style="cursor:pointer"><b>More tools:</b> test the rule on months of history</summary>
-      <div class="panel-head" style="margin-top:12px"><div><h2>Test the rule on history <button class="q" type="button" data-learn="breakhold" aria-label="Explain">?</button></h2><p class="small muted" style="margin-top:4px">Scans past SPY days for breaks of yesterday's high, low and close and the 15-minute opening range. Compares entering right away, after a 60-second hold, and after a 3-minute hold.</p></div>
-        <div class="row">
-          <label class="small muted" for="bt-days">Days</label><select id="bt-days" style="width:auto"><option>10</option><option selected>20</option><option>40</option><option>60</option></select>
-          <label class="small muted" for="bt-target">Win at +$</label><input id="bt-target" type="number" step="0.05" value="0.75" style="width:80px">
-          <label class="small muted" for="bt-stop">Loss at −$</label><input id="bt-stop" type="number" step="0.05" value="0.50" style="width:80px">
-          <button class="btn primary" type="button" id="bt-run">Run test</button>
-        </div>
+      <summary style="cursor:pointer"><b>Rule test:</b> does waiting 60 seconds really help? <span class="small muted">(tap to open)</span></summary>
+      <div style="margin-top:12px">
+        <h2>Test the rule on past days <button class="q" type="button" data-learn="breakhold" aria-label="Explain">?</button></h2>
+        <p style="margin-top:6px">This looks back at real SPY days and asks one question: <b>when SPY broke a key level, was it better to buy right away, wait 60 seconds, or wait 3 minutes?</b></p>
+        <ol class="bt-how">
+          <li>Press <b>Run the test</b>. You don't need to change anything.</li>
+          <li>Wait about 20 seconds while it loads the past days.</li>
+          <li>Read the answer at the top. The rule with the green <b>Best</b> tag did best.</li>
+        </ol>
+        <button class="btn primary big bt-go" type="button" id="bt-run">Run the test</button>
+        <details class="bt-opts">
+          <summary class="small muted" style="cursor:pointer">Change settings (optional)</summary>
+          <div class="bt-set">
+            <label for="bt-days">How many past days to check</label><select id="bt-days"><option value="10">10 days (fast)</option><option value="20" selected>20 days (about a month)</option><option value="40">40 days</option><option value="60">60 days (slow, most reliable)</option></select>
+            <label for="bt-target">Counts as a <b>win</b> when SPY moves your way by $</label><input id="bt-target" type="number" step="0.05" min="0.05" value="0.75" inputmode="decimal">
+            <label for="bt-stop">Counts as a <b>loss</b> when SPY moves against you by $</label><input id="bt-stop" type="number" step="0.05" min="0.05" value="0.50" inputmode="decimal">
+            <p class="small muted">Defaults: 20 days, win at $0.75, loss at $0.50. If you change these, press Run the test again.</p>
+          </div>
+        </details>
       </div>
-      <div id="bt-out"><div class="empty">Run the test to see how your entry rule did on past days.</div></div>
+      <div id="bt-out" style="margin-top:14px"></div>
     </details>
   </section>
 
@@ -2190,12 +2215,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   $("#bt-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("The rule test needs Webull, which isn't available in this view.");
-    const nDays = +$("#bt-days").value, target = num($("#bt-target").value) || 0.75, stop = num($("#bt-stop").value) || 0.5, out = $("#bt-out"), btn = $("#bt-run");
-    btn.disabled = true; out.innerHTML = `<div class="empty">Loading ${nDays} days of 1-minute candles from Webull…</div>`;
+    const { days: nDays, target, stop } = btSettings(), out = $("#bt-out"), btn = $("#bt-run");
+    btn.disabled = true; btn.textContent = "Testing…"; out.innerHTML = `<div class="empty">Loading ${nDays} past days from Webull… this takes about 20 seconds.</div>`;
     try {
       await loadDaily(Math.max(90, nDays + 10));
       const dates = pastDates().slice(-nDays);
-      const days = await manyDays(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading candles… ${a} of ${b} days</div>`; });
+      const days = await manyDays(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading past days… ${a} of ${b}</div>`; });
       const holds = [[0, "Enter on the break"], [1, "Wait 60 seconds (V2)"], [3, "Wait 3 minutes (V1)"]];
       const res = holds.map(([h, name]) => ({ h, name, sig: [] }));
       for (const d of dates) {
@@ -2210,28 +2235,44 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         return { h: r.h, name: r.name, n, win: cnt("win"), loss: cnt("loss"), flat: cnt("flat"), avgMove: avg((x) => x.move), waitCost: avg((x) => x.waitCost), falseBreaks: r.sig.reduce((s, x) => s + x.falseBreaks, 0), tod };
       });
       const doc = { ranAt: Date.now(), days: dates.length, from: dates[0], to: dates[dates.length - 1], target, stop, summary };
-      S.bt = doc; renderBacktest();
+      btn.disabled = false; S.bt = doc; renderBacktest();
       if (S.db) await S.db.doc("backtest/latest").set(doc).catch(() => {});
     } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
-    finally { btn.disabled = false; }
+    finally { btn.disabled = false; btn.textContent = "Run the test"; }
   });
+  const btSettings = () => ({ days: +$("#bt-days").value, target: num($("#bt-target").value) || 0.75, stop: num($("#bt-stop").value) || 0.5 });
+  const btSame = (d) => { const c = btSettings(); return c.days === d.days && Math.abs(c.target - d.target) < 1e-9 && Math.abs(c.stop - d.stop) < 1e-9; };
+  ["#bt-days", "#bt-target", "#bt-stop"].forEach((q) => $(q).addEventListener("change", () => renderBacktest()));
   function renderBacktest() {
     const d = S.bt, out = $("#bt-out"); if (!d || $("#bt-run").disabled) return;
-    const rough = (m) => m == null ? null : m * 50 - 2;  // ~0.50 delta, $0.02 spread, ignores decay
-    const best = [...d.summary].sort((a, b) => (b.avgMove ?? -9) - (a.avgMove ?? -9))[0], v2 = d.summary.find((x) => x.h === 1), v1 = d.summary.find((x) => x.h === 3), now0 = d.summary.find((x) => x.h === 0);
-    const maxAbs = Math.max(...d.summary.map((x) => Math.abs(x.avgMove || 0)), 0.01);
-    out.innerHTML = `<p style="margin-bottom:12px">Over <b>${d.days} trading days</b> (${esc(dayName(d.from))} – ${esc(dayName(d.to))}), a "win" means SPY went <b>+$${d.target}</b> your way before going <b>−$${d.stop}</b> against you within 30 minutes. <b>${esc(best.name)}</b> did best on average.</p>
-      <div class="tbl-wrap"><table><thead><tr><th>Entry rule</th><th class="n">Signals</th><th class="n">Win</th><th class="n">Loss</th><th class="n">No follow-through</th><th class="n">Avg SPY result</th><th class="bar-cell" aria-label="Average result bar"></th><th class="n">Cost of waiting</th><th class="n">Rough option result</th></tr></thead><tbody>
-      ${d.summary.map((r) => `<tr${r.h === 1 ? ' style="font-weight:600"' : ""}><td>${esc(r.name)}</td><td class="n">${r.n}</td><td class="n">${r.n ? pct(r.win / r.n, false) : "–"}</td><td class="n">${r.n ? pct(r.loss / r.n, false) : "–"}</td><td class="n">${r.n ? pct(r.flat / r.n, false) : "–"}</td><td class="n ${cls(r.avgMove)}">${r.avgMove != null ? sgn(r.avgMove) : "–"}</td><td class="bar-cell">${r.avgMove != null ? hbar(r.avgMove, maxAbs) : ""}</td><td class="n">${r.h ? (r.waitCost != null ? sgn(-r.waitCost) : "–") : "–"}</td><td class="n ${cls(rough(r.avgMove))}">${money(rough(r.avgMove), true)}</td></tr>`).join("")}
-      </tbody></table></div>
-      <div class="grid2" style="margin-top:14px">
-        <div><div class="label" style="margin-bottom:6px">60-second rule by time of day</div><table><tbody>${v2.tod.map((t) => `<tr${t.n ? "" : ' class="faded"'}><td>${t.k}</td><td class="n">${t.n} signals</td><td class="n">${t.n ? pct(t.win / t.n, false) + " win" : "–"}</td><td class="n ${cls(t.avg)}">${t.avg != null ? sgn(t.avg) : "–"}</td></tr>`).join("")}</tbody></table></div>
-        <div class="why">
-          <b>Reading this:</b> waiting filters out ${v2.falseBreaks} false breaks for the 60-second rule and ${v1.falseBreaks} for the 3-minute rule, but each wait moves your entry. "Cost of waiting" is how much worse your average entry was than the break candle's close. "Rough option result" assumes delta 0.50 and a $0.02 spread, and ignores time decay. It shows direction, not exact profit.
-          ${now0.n && v2.n ? `<br><br>Here, ${v2.avgMove > now0.avgMove ? "waiting 60 seconds beat entering right away" : "entering right away beat waiting 60 seconds"}, and ${v2.avgMove > v1.avgMove ? "60 seconds beat 3 minutes" : "3 minutes beat 60 seconds"}. Re-run with more days before trusting it.` : ""}
-        </div>
-      </div>
-      <p class="small muted" style="margin-top:10px">Last run ${esc(new Date(d.ranAt).toLocaleString())}. One signal per level, per direction, per day, before 3:30 pm.</p>`;
+    const plain = { 0: "Buy right away", 1: "Wait 60 seconds", 3: "Wait 3 minutes" };
+    const tip = { 0: "Buy the moment SPY breaks the level.", 1: "Your V2 rule: buy only if the next 1-minute candle stays past the level.", 3: "The older V1 rule: wait for 3 candles to stay past the level." };
+    const rated = d.summary.filter((r) => r.n), best = [...rated].sort((a, b) => (b.avgMove ?? -9) - (a.avgMove ?? -9))[0];
+    const v2 = d.summary.find((x) => x.h === 1), now0 = d.summary.find((x) => x.h === 0);
+    const usd = (v) => (v < 0 ? "−$" : "+$") + Math.abs(v).toFixed(2);
+    let answer;
+    if (!best) answer = "No signals were found in these days. Try more days.";
+    else if (best.h === 1) answer = `<b>Yes — waiting 60 seconds did best.</b> Keep following your rule.`;
+    else if (best.h === 0) answer = `<b>Buying right away did best this time.</b> Waiting 60 seconds was ${v2.n && now0.n ? `${usd(v2.avgMove - now0.avgMove).replace("+", "")} per trade worse` : "worse"} on SPY. Don't change your rule from one test; try 40 or 60 days.`;
+    else answer = `<b>Waiting 3 minutes did best this time.</b> It skipped more fake breaks. Try 40 or 60 days before changing your rule.`;
+    if (best && best.avgMove < 0) answer += ` Note: all three lost money on average in these days, so the level breaks weren't great trades.`;
+    const card = (r) => {
+      const n = r.n, w = n ? r.win / n : 0, l = n ? r.loss / n : 0, f = n ? r.flat / n : 0;
+      return `<div class="bt-card${r === best ? " best" : ""}"><h3>${esc(plain[r.h])}${r === best ? '<span class="pill good plain">Best</span>' : ""}${r.h === 1 ? '<span class="pill info plain">Your rule</span>' : ""}</h3>
+        <div class="small muted">${esc(tip[r.h])}</div>
+        ${n ? `<p style="margin:8px 0 0">Out of <b>${n}</b> trades: <b style="color:var(--good)">${r.win} won</b>, <b style="color:var(--bad)">${r.loss} lost</b>, ${r.flat} went nowhere.</p>
+        <div class="bt-split" aria-hidden="true"><span style="width:${w * 100}%;background:var(--good)"></span><span style="width:${l * 100}%;background:var(--bad)"></span><span style="width:${f * 100}%;background:var(--faint)"></span></div>
+        <dl><dt>Win rate</dt><dd>${pct(w, false)}</dd><dt>Average SPY move per trade</dt><dd class="${cls(r.avgMove)}">${usd(r.avgMove)}</dd><dt>About that on 1 option</dt><dd class="${cls(r.avgMove * 50 - 2)}">${money(r.avgMove * 50 - 2, true)}</dd>${r.h ? `<dt>Fake breaks it skipped</dt><dd>${r.falseBreaks}</dd>` : ""}</dl>` : `<p class="small muted" style="margin-top:8px">No trades in these days.</p>`}
+      </div>`;
+    };
+    out.innerHTML = `<div class="bt-answer">${answer}</div>
+      ${btSame(d) ? "" : `<div class="why" style="margin-top:10px;border-color:var(--warn)">These results used different settings (${d.days} days, win $${d.target.toFixed(2)}, loss $${d.stop.toFixed(2)}). Press <b>Run the test</b> to update them.</div>`}
+      <div class="bt-cards">${[1, 0, 3].map((h) => d.summary.find((x) => x.h === h)).filter(Boolean).map(card).join("")}</div>
+      <p class="small muted" style="margin-top:10px">Checked ${d.days} days (${esc(dayName(d.from))} – ${esc(dayName(d.to))}). A trade <b>won</b> if SPY moved $${d.target.toFixed(2)} your way before moving $${d.stop.toFixed(2)} against you, within 30 minutes. Levels: yesterday's high, low and close, and the first 15 minutes' high and low.</p>
+      <details style="margin-top:8px"><summary class="small" style="cursor:pointer">More detail: your rule by time of day</summary>
+        <div class="tbl-wrap" style="margin-top:6px"><table><thead><tr><th>Time</th><th class="n">Trades</th><th class="n">Won</th><th class="n">Avg move</th></tr></thead><tbody>${v2.tod.map((t) => `<tr${t.n ? "" : ' class="faded"'}><td>${t.k}</td><td class="n">${t.n}</td><td class="n">${t.n ? pct(t.win / t.n, false) : "–"}</td><td class="n ${cls(t.avg)}">${t.avg != null ? usd(t.avg) : "–"}</td></tr>`).join("")}</tbody></table></div>
+        <p class="small muted" style="margin-top:6px">"About that on 1 option" assumes the option moves 50¢ per $1 SPY move, minus 2¢ spread, and ignores time decay. It shows direction, not exact profit. Last run ${esc(new Date(d.ranAt).toLocaleString())}.</p>
+      </details>`;
   }
 
   // ---------- screenshot reader ----------
