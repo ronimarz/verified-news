@@ -46,6 +46,7 @@
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
 .num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+div.num, td.n { white-space: nowrap; }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; text-wrap: balance; }
 h2 { font-size: 22px; }
 h3 { font-size: 17px; }
@@ -539,7 +540,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="chart" id="dr-chart"><div class="empty">Press Start drill. Each question takes about 10 seconds.</div></div>
       <div class="row" style="margin-top:10px"><button class="btn primary" type="button" id="dr-start">Start drill</button><button class="btn" type="button" data-dr="win" disabled>Follows through</button><button class="btn" type="button" data-dr="fail" disabled>Fails</button><span class="small" id="dr-msg"></span></div>
     </div>
-    <div class="grid2" style="align-items:start">
+    <div style="display:grid; gap:18px">
       <div class="panel"><div class="panel-head"><h2>Practice results</h2><span class="small muted">Separate from your official balance</span></div><div id="rp-stats"></div></div>
       <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
     </div>
@@ -1715,7 +1716,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     RP.pos.alerted = why; RP.pos.alertAt = RP.idx; RP.note = `Your plan says exit now (${why === "target" ? "take-profit hit" : why === "stop" ? "stop hit" : "time is up"}). Sell, or note why you're staying in.`; rpPause(); return true;
   }
   function rpPlay() { if (!RP.bars.length) return; RP.playing = true; $("#rp-play").textContent = "Pause"; clearInterval(RP.timer); RP.timer = setInterval(() => rpStep(1), RP.ff ? 60 : +$("#rp-speed").value); }
-  function rpPause() { RP.playing = false; clearInterval(RP.timer); $("#rp-play").textContent = "Play"; }
+  function rpPause() { RP.playing = false; RP.ff = false; clearInterval(RP.timer); $("#rp-play").textContent = "Play"; }
   $("#rp-play").addEventListener("click", () => (RP.playing ? rpPause() : rpPlay()));
   $("#rp-speed").addEventListener("change", () => { if (RP.playing) rpPlay(); });
   $("#rp-step").addEventListener("click", () => { rpPause(); rpStep(1); });
@@ -1735,7 +1736,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const q = rpQuote(p.dir, p.strike), exitMin = barMin(rpNow()) + 1;
     const pnl = +((q.bid - p.entryAsk) * 100).toFixed(2);
     // what the same option was worth 30 minutes later
-    const later = RP.bars.find((b) => barMin(b) + 1 >= Math.min(exitMin + 30, 960));
+    const later = exitMin + 30 <= 960 ? RP.bars.find((b) => barMin(b) + 1 >= exitMin + 30) : null;
     const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, p.iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
     const doc = { replayDate: RP.date, at: Date.now(), dir: p.dir, strike: p.strike, level: p.level, levelName: p.levelName, followed: p.followed, falseBreaks: p.falseBreaks,
       entryTime: fmtHM(p.entryMin), exitTime: fmtHM(exitMin), entryU: +p.entryU.toFixed(2), exitU: +q.S.toFixed(2), entryAsk: p.entryAsk, exitBid: +q.bid.toFixed(2), iv: p.iv,
@@ -1801,27 +1802,41 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     host.innerHTML = s + "</svg>";
   }
 
+  const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "Held to 4:00 pm" };
+  const after30Of = (p) => (p.exitTime && p.exitTime > "15:30" ? null : p.after30);
   function renderPracticeStats() {
     const P = [...S.practice].sort((a, b) => (b.at || 0) - (a.at || 0)), el = $("#rp-stats");
     if (!P.length) { el.innerHTML = `<div class="empty">Your practice trades and their stats show up here.</div>`; $("#rp-list").innerHTML = ""; return; }
     const wins = P.filter((p) => p.pnl > 0), losses = P.filter((p) => p.pnl <= 0), net = P.reduce((s, p) => s + p.pnl, 0);
     const avg = (a) => a.length ? a.reduce((s, p) => s + p.pnl, 0) / a.length : null;
-    const grp = (f) => { const m = new Map(); for (const p of P) { const k = f(p); if (!m.has(k)) m.set(k, []); m.get(k).push(p); } return [...m].map(([k, a]) => ({ k, n: a.length, w: a.filter((p) => p.pnl > 0).length, net: a.reduce((s, p) => s + p.pnl, 0) })); };
-    const row = (g) => `<tr><td>${esc(g.k)}</td><td class="n">${g.n}</td><td class="n">${pct(g.w / g.n, false)}</td><td class="n ${cls(g.net)}">${money(g.net, true)}</td></tr>`;
-    const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "End of day" };
-    el.innerHTML = `<div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:12px; margin-bottom:12px">
+    const group = (title, keys, f) => {
+      const rows = keys.map((k) => { const a = P.filter((p) => f(p) === k); return { k, n: a.length, w: a.filter((p) => p.pnl > 0).length, net: a.reduce((s, p) => s + p.pnl, 0) }; });
+      return `<div style="min-width:0"><div class="label" style="margin-bottom:4px">${title}</div><table style="table-layout:fixed"><colgroup><col style="width:46%"><col style="width:12%"><col style="width:20%"><col style="width:22%"></colgroup><tbody>${rows.map((g) => `<tr${g.n ? "" : ' class="faded"'}><td>${esc(g.k)}</td><td class="n">${g.n}</td><td class="n">${g.n ? pct(g.w / g.n, false) : "–"}</td><td class="n ${g.n ? cls(g.net) : ""}">${g.n ? money(g.net, true) : "–"}</td></tr>`).join("")}</tbody></table></div>`;
+    };
+    const exits = [...new Set(P.map((p) => reasonName[p.exitReason] || p.exitReason))];
+    const noSignal = P.filter((p) => !p.followed).length;
+    el.innerHTML = `<div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap:12px; margin-bottom:14px">
       <div><div class="label">Trades</div><div class="num" style="font-size:20px">${P.length}</div></div>
       <div><div class="label">Win rate</div><div class="num" style="font-size:20px">${pct(wins.length / P.length, false)}</div></div>
-      <div><div class="label">Avg win / loss</div><div class="num" style="font-size:16px"><span class="up">${money(avg(wins))}</span> / <span class="down">${money(avg(losses))}</span></div></div>
+      <div><div class="label">Avg win</div><div class="num up" style="font-size:20px">${money(avg(wins))}</div></div>
+      <div><div class="label">Avg loss</div><div class="num down" style="font-size:20px">${money(avg(losses))}</div></div>
       <div><div class="label">Net</div><div class="num ${cls(net)}" style="font-size:20px">${money(net, true)}</div></div></div>
-      <div class="tbl-wrap"><table><thead><tr><th>Grouped by</th><th class="n">Trades</th><th class="n">Win rate</th><th class="n">Net</th></tr></thead><tbody>
-      ${grp((p) => (p.followed ? "Followed V2 signal" : "No signal")).map(row).join("")}
-      ${grp((p) => bucket(p.entryTime)).map(row).join("")}
-      ${grp((p) => reasonName[p.exitReason] || p.exitReason).map(row).join("")}</tbody></table></div>
+      <div class="small muted" style="margin-bottom:8px">Each table splits the same ${P.length} trades a different way (trades · win rate · net).</div>
+      <div class="grid2" style="gap:14px">
+        ${group("By whether you followed the rule", ["Followed V2 signal", "No V2 signal"], (p) => (p.followed ? "Followed V2 signal" : "No V2 signal"))}
+        ${group("By entry time", ["Opening", "Midday", "Afternoon"], (p) => bucket(p.entryTime))}
+        ${group("By how you exited", exits, (p) => reasonName[p.exitReason] || p.exitReason)}
+      </div>
+      ${noSignal ? `<div class="why" style="margin-top:12px">${noSignal === P.length ? "None" : `${P.length - noSignal} of ${P.length}`} of your practice trades came after a confirmed V2 signal. To practice the rule, set a level first (step 1), wait for "Hold confirmed", then buy. Trades without a signal still count, but they test a different strategy.</div>` : ""}
       <p class="small muted" style="margin-top:8px">Model prices ignore real-world quirks like wider spreads in fast markets. Treat these as practice reps, not proof.</p>`;
-    $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="n">30 min later</th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
-      `<tr><td>${esc(dayName(p.replayDate))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="n">${p.after30 != null ? px(p.after30) : "–"}</td></tr>`).join("")}</tbody></table>`;
+    $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="n">30 min later</th><th></th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
+      `<tr><td style="white-space:nowrap">${esc(dayName(p.replayDate).replace(/^\w+, /, ""))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono" style="white-space:nowrap">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="n">${after30Of(p) != null ? px(after30Of(p)) : "–"}</td><td style="width:1%"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Delete this practice trade" aria-label="Delete this practice trade">×</button></td></tr>`).join("")}</tbody></table>`;
   }
+  $("#rp-list").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-pdel]"); if (!b) return;
+    if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Delete?"; setTimeout(() => { b.classList.remove("armed"); b.textContent = "×"; }, 4000); return; }
+    if (await remove("practice", b.dataset.pdel)) toast("Practice trade deleted.");
+  });
 
   // ---------- rule tester ----------
   function scanSignal(bars, L, dir, fromMin, h, target, stop) {
@@ -2485,7 +2500,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-setlevel]"); if (!b) return; const n = +b.dataset.setlevel; ls.set("guide.level", n); if (n === 3) { AL.on = true; ls.set("alerts.on", true); renderAlertsBtn(); } if (!guideOn) { guideOn = true; ls.set("guide.on", true); } renderProgress(); renderGuide(); renderRoutine(); toast(`Training level: ${LEVELS[n - 1].name}.`); if (e.target.closest("#cmd-out")) $("#cmd-out").hidden = true; });
 
   // ---------- mistakes ----------
-  const MISTAKES = [["early", "Entered before the hold", "breakhold"], ["chase", "Chased a move that already ran", "spread"], ["noplan", "No plan before entering", "exit"], ["ignored", "Ignored my plan's exit", "exit"], ["late", "Entered late in the day", "theta"], ["fearexit", "Exited early out of fear", "exit"], ["context", "Ignored the news context", "regime"], ["revenge", "Revenge trade after a loss", "size"], ["size", "Position too big", "size"]];
+  const MISTAKES = [["early", "Bought without a confirmed break and hold", "breakhold"], ["chase", "Chased a move that already ran", "spread"], ["noplan", "No plan before entering", "exit"], ["ignored", "Ignored my plan's exit", "exit"], ["late", "Entered late in the day", "theta"], ["fearexit", "Exited early out of fear", "exit"], ["context", "Ignored the news context", "regime"], ["revenge", "Revenge trade after a loss", "size"], ["size", "Position too big", "size"]];
   const mName = Object.fromEntries(MISTAKES.map(([k, n]) => [k, n]));
   function autoMistakes(t) {
     const out = [];
