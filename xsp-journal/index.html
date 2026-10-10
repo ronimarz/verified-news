@@ -229,6 +229,21 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .breakdown div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
 .breakdown div:last-child { border-bottom: 0; font-weight: 600; }
 
+/* Practice */
+.rp-grid { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(260px, 1fr); gap: 20px; }
+@media (max-width: 860px) { .rp-grid { grid-template-columns: 1fr; } }
+.rp-side { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.rp-clock { font-family: var(--display); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.shot { display: grid; gap: 8px; }
+.shot-list { display: grid; gap: 4px; max-height: 220px; overflow: auto; }
+.shot-row { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 4px; }
+.shot-row:nth-child(odd) { background: var(--panel-2); }
+.quiz-opt { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; cursor: pointer; width: 100%; }
+.quiz-opt:hover:not(:disabled) { border-color: var(--accent); }
+.quiz-opt.right { border-color: var(--good); background: var(--good-bg); }
+.quiz-opt.wrong { border-color: var(--bad); background: var(--bad-bg); }
+.alert { border-radius: 6px; padding: 8px 12px; font-size: 13px; font-weight: 500; background: var(--warn-bg); }
+
 /* Dialog */
 dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: rgba(10, 16, 24, .45); }
@@ -247,6 +262,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-dash" aria-selected="true" data-view="dash">Dashboard</button>
       <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live">Live check<span class="dot" id="open-dot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-practice" aria-selected="false" data-view="practice">Practice</button>
       <button class="tab" role="tab" id="tab-journal" aria-selected="false" data-view="journal">Journal</button>
       <button class="tab" role="tab" id="tab-news" aria-selected="false" data-view="news">News</button>
       <button class="tab" role="tab" id="tab-learn" aria-selected="false" data-view="learn">Learn</button>
@@ -352,7 +368,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
             <div class="no">4</div>
             <div class="step-body">
               <h3>Fresh option chain <button class="learn-link" type="button" data-learn="delta">How to pick a strike</button></h3>
-              <p class="small muted">Open the SPY 0DTE chain in your broker app and copy one contract's numbers.</p>
+              <p class="small muted">Open the SPY 0DTE chain in your broker app. Paste a screenshot of it here (or pick the image) and Claude reads the numbers, or type them in.</p>
+              <div class="shot" data-shot="live">
+                <div class="row"><button class="btn" type="button" data-shot-pick>Read a screenshot</button><span class="small muted">or press Ctrl/Cmd+V on this tab</span></div>
+                <div class="shot-out small"></div>
+              </div>
               <div class="fields">
                 <div class="field"><label for="lc-strike">Strike</label><input id="lc-strike" type="number" step="1" inputmode="decimal"></div>
                 <div class="field"><label for="lc-bid">Sell Bid</label><input id="lc-bid" type="number" step="0.01" inputmode="decimal"></div>
@@ -360,6 +380,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
                 <div class="field"><label for="lc-delta">Delta (optional)</label><input id="lc-delta" type="number" step="0.0001" inputmode="decimal"></div>
               </div>
               <div class="calc" id="lc-calc"></div>
+              <details id="lc-spread-box">
+                <summary>Compare with a vertical spread <button class="q" type="button" data-learn="verticals" aria-label="Explain spreads">?</button></summary>
+                <div class="fields" style="margin-top:8px">
+                  <div class="field"><label for="lc-sk">Sell strike</label><input id="lc-sk" type="number" step="1" inputmode="decimal"></div>
+                  <div class="field"><label for="lc-sbid">Its Bid</label><input id="lc-sbid" type="number" step="0.01" inputmode="decimal"></div>
+                  <div class="field"><label for="lc-sask">Its Ask</label><input id="lc-sask" type="number" step="0.01" inputmode="decimal"></div>
+                </div>
+                <div class="calc" id="lc-spread" style="margin-top:8px"></div>
+              </details>
             </div>
           </div>
         </div>
@@ -367,11 +396,85 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div style="display:grid; gap:18px;">
         <div class="decision wait" id="lc-decision"></div>
         <div class="panel">
+          <h3 style="margin-bottom:4px">Your plan, before you enter <button class="learn-link" type="button" data-learn="exit">Why plan?</button></h3>
+          <p class="small muted" style="margin-bottom:10px">Saved with the trade. The app tells you when your plan says to get out.</p>
+          <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px">
+            <div class="field"><label for="lc-pt">Take profit %</label><input id="lc-pt" type="number" step="5"></div>
+            <div class="field"><label for="lc-ps">Stop loss %</label><input id="lc-ps" type="number" step="5"></div>
+            <div class="field"><label for="lc-pm">Time stop (min)</label><input id="lc-pm" type="number" step="5"></div>
+            <div class="field wide"><label for="lc-pw">Why this trade, in one line</label><input id="lc-pw" type="text" placeholder="Broke today's high with tech leading"></div>
+          </div>
+          <div class="calc" id="lc-plan-calc" style="margin-top:8px"></div>
+        </div>
+        <div class="panel">
           <h3 style="margin-bottom:8px">Decision card</h3>
           <dl class="card-line" id="lc-card"></dl>
         </div>
         <div class="panel" id="lc-teach"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- PRACTICE -->
+  <section class="view" id="view-practice" role="tabpanel" aria-labelledby="tab-practice" hidden>
+    <div class="panel">
+      <div class="panel-head">
+        <div><h2>Replay a past day</h2><p class="small muted" style="margin-top:4px">Real SPY candles from Webull, revealed one minute at a time. Option prices come from the simulator's model, so practice trades never touch your official balance.</p></div>
+        <div class="row"><label class="small muted" for="rp-date">Day</label><select id="rp-date" style="width:auto"></select><button class="btn primary" type="button" id="rp-load">Load day</button></div>
+      </div>
+      <div class="rp-grid">
+        <div style="min-width:0">
+          <div class="row" style="justify-content:space-between; margin-bottom:6px"><div class="rp-clock" id="rp-clock">–</div><div class="seg" role="group" aria-label="Chart zoom"><button type="button" data-zoom="90" aria-pressed="true">Last 90 min</button><button type="button" data-zoom="390" aria-pressed="false">Whole day</button></div></div>
+          <div class="chart" id="rp-chart"><div class="empty">Pick a day and load it to start practicing.</div></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn primary" type="button" id="rp-play">Play</button>
+            <button class="btn" type="button" id="rp-step">+1 min</button>
+            <button class="btn" type="button" id="rp-step5">+5 min</button>
+            <button class="btn" type="button" id="rp-ff">Skip to next signal</button>
+            <label class="small muted" for="rp-speed">Speed</label>
+            <select id="rp-speed" style="width:auto"><option value="2000">Slow · 2s per min</option><option value="1000" selected>Normal · 1s per min</option><option value="400">Fast · 0.4s</option><option value="120">Very fast</option></select>
+            <label class="small row" style="gap:6px"><input type="checkbox" id="rp-pause" checked style="width:auto"> Pause at signals</label>
+          </div>
+        </div>
+        <div class="rp-side">
+          <div>
+            <div class="label" style="margin-bottom:6px">1 · Level and direction</div>
+            <div class="seg" role="group" aria-label="Practice direction"><button type="button" data-rpdir="call" aria-pressed="true">Call · up</button><button type="button" data-rpdir="put" aria-pressed="false">Put · down</button></div>
+            <div class="row" id="rp-levels" style="margin-top:8px"></div>
+            <div class="row" style="margin-top:8px; flex-wrap:nowrap"><input id="rp-level" type="number" step="0.01" placeholder="Custom level"><button class="btn sm" type="button" id="rp-setlevel">Set</button></div>
+          </div>
+          <div class="why" id="rp-status">Load a day to begin.</div>
+          <div>
+            <div class="label" style="margin-bottom:6px">2 · Contract and plan</div>
+            <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px">
+              <div class="field"><label for="rp-strike">Strike</label><input id="rp-strike" type="number" step="1"></div>
+              <div class="field"><label for="rp-iv">IV %</label><input id="rp-iv" type="number" step="0.5" value="15"></div>
+              <div class="field"><label for="rp-auto">At plan</label><select id="rp-auto"><option value="auto">Auto-exit</option><option value="pause">Pause, I decide</option></select></div>
+              <div class="field"><label for="rp-t">Take profit %</label><input id="rp-t" type="number" step="5" value="50"></div>
+              <div class="field"><label for="rp-s">Stop loss %</label><input id="rp-s" type="number" step="5" value="40"></div>
+              <div class="field"><label for="rp-m">Time stop (min)</label><input id="rp-m" type="number" step="5" value="30"></div>
+            </div>
+            <div class="calc" id="rp-quote" style="margin-top:8px"></div>
+          </div>
+          <div class="row"><button class="btn primary big" type="button" id="rp-buy" disabled>Buy at Ask</button><button class="btn big" type="button" id="rp-sell" disabled>Sell at Bid</button></div>
+          <div id="rp-pos"></div>
+        </div>
+      </div>
+    </div>
+    <div class="grid2" style="align-items:start">
+      <div class="panel"><div class="panel-head"><h2>Practice results</h2><span class="small muted">Separate from your official balance</span></div><div id="rp-stats"></div></div>
+      <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div><h2>Test the rule on history <button class="q" type="button" data-learn="breakhold" aria-label="Explain">?</button></h2><p class="small muted" style="margin-top:4px">Scans past SPY days for breaks of yesterday's high, low and close and the 15-minute opening range. Compares entering right away, after a 60-second hold, and after a 3-minute hold.</p></div>
+        <div class="row">
+          <label class="small muted" for="bt-days">Days</label><select id="bt-days" style="width:auto"><option>10</option><option selected>20</option><option>40</option><option>60</option></select>
+          <label class="small muted" for="bt-target">Win at +$</label><input id="bt-target" type="number" step="0.05" value="0.75" style="width:80px">
+          <label class="small muted" for="bt-stop">Loss at −$</label><input id="bt-stop" type="number" step="0.05" value="0.50" style="width:80px">
+          <button class="btn primary" type="button" id="bt-run">Run test</button>
+        </div>
+      </div>
+      <div id="bt-out"><div class="empty">Run the test to see how your entry rule did on past days.</div></div>
     </div>
   </section>
 
@@ -435,6 +538,17 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="why" id="sim-why" style="margin-top:14px"></div>
       </div>
     </div>
+    <div class="grid2" style="align-items:start">
+      <div class="panel" id="quiz">
+        <div class="panel-head"><div><h2>Quick quiz</h2><p class="small muted" style="margin-top:4px">Short questions, many built from your own trades.</p></div><span class="small muted" id="quiz-score"></span></div>
+        <div id="quiz-body"></div>
+        <div class="row" style="margin-top:12px"><button class="btn" type="button" id="quiz-next">Next question</button><button class="btn" type="button" id="quiz-gen">New questions from Claude</button></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><h2>Weekly coach reviews</h2><p class="small muted" style="margin-top:4px">Written every Friday at 4:47 pm ET from your trades, practice, scouts and quiz results.</p></div></div>
+        <div id="reviews"></div>
+      </div>
+    </div>
     <div class="panel">
       <div class="panel-head"><div><h2>Ask the coach</h2><p class="small muted" style="margin-top:4px">Claude answers using your journal, rules and stats. It uses your Claude usage.</p></div></div>
       <div class="chips" id="coach-chips">
@@ -454,6 +568,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 </main>
 
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+<input type="file" id="shot-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
 <div class="toast" id="toast" hidden></div>
 
 <script>
@@ -496,8 +611,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function bs0(type, S, K, ivPct, mins) { const T = Math.max(mins, 0.01) / 525600, v = Math.max(ivPct, 0.5) / 100, sq = v * Math.sqrt(T); const d1 = (Math.log(S / K) + 0.5 * v * v * T) / sq, d2 = d1 - sq; return Math.max(type === "call" ? S * ncdf(d1) - K * ncdf(d2) : K * ncdf(-d2) - S * ncdf(-d1), 0); }
 
   // ---------- state ----------
-  const DEFAULT_CFG = { startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", underlying: "SPY", rules: [] };
-  const S = { trades: [], missed: [], scout: [], cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
+  const DEFAULT_CFG = { planDefaults: { target: 50, stop: 40, time: 30 }, startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", underlying: "SPY", rules: [] };
+  const S = { trades: [], missed: [], scout: [], practice: [], reviews: [], bt: null, quiz: null, cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
   const LIVE = { snap: null, bars: [], status: "connecting", msg: "", at: null, stopped: false };
   const U = () => S.cfg.underlying || "SPY";
   const uOf = (t) => t.underlying || "XSP";
@@ -550,7 +665,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     view = v; ls.set("xsp.view", v);
     $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
     $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
-    if (v === "learn") renderSim();
+    if (v === "learn") { renderSim(); if (!QUIZ.cur) nextQuestion(); }
+    if (v === "practice" && !$("#rp-date").options.length) rpInitDates();
+    if (v !== "practice" && RP.playing) rpPause();
     schedulePoll(0);
   }
   $$(".tab").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
@@ -560,6 +677,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const st = stats();
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
     renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
+    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest();
     $("#open-dot").hidden = !st.open.length;
   }
 
@@ -693,13 +811,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const hypo = S.missed.reduce((s, m) => s + (num(m.hypoPnl) || 0), 0);
     const spreads = st.official.map((t) => { const a = num(t.entryAsk), b = num(t.entryBid); return a != null && b != null ? (a - b) * 100 : null; }).filter((v) => v != null);
     const avgSpread = spreads.length ? spreads.reduce((a, b) => a + b, 0) / spreads.length : null;
-    const needStudy = st.closed.filter((x) => num(x.t.m15) == null && num(x.t.m30) == null && num(x.t.m60) == null).length;
+    const needStudy = st.closed.filter((x) => num(x.t.m15) == null && num(x.t.m30) == null && num(x.t.m60) == null && !x.t.exitStudy).length;
+    const costs = st.closed.map((x) => x.c.cost).filter((v) => v != null), avgCost = costs.length ? costs.reduce((a, b) => a + b, 0) / costs.length : null;
+    const risk = avgCost != null && st.bal ? avgCost / st.bal : null;
+    const reviewed = st.closed.filter((x) => x.t.reviewFollowed), followed = reviewed.filter((x) => x.t.reviewFollowed === "yes").length;
     $("#edge").innerHTML = `<div class="panel-head"><h2>What the numbers say so far</h2><span class="small muted">${st.closed.length} closed official trades. Too few to change rules yet.</span></div>
       <div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
         <div><div class="label">Break-even win rate <button class="q" type="button" data-learn="stats" aria-label="Explain">?</button></div><div class="num" style="font-size:20px">${be != null ? pct(be, false) : "–"}</div><div class="small muted">${be != null ? `With these average wins and losses you need to win ${pct(be, false)} of trades to break even. You are at ${pct(st.winRate, false)}.` : "Needs at least one win and one loss."}</div></div>
         <div><div class="label">Average per trade</div><div class="num ${cls(exp)}" style="font-size:20px">${money(exp, true)}</div><div class="small muted">Net realized P/L divided by closed trades.</div></div>
         <div><div class="label">Average entry spread <button class="q" type="button" data-learn="spread" aria-label="Explain">?</button></div><div class="num" style="font-size:20px">${avgSpread != null ? money(avgSpread) : "–"}</div><div class="small muted">Ask minus Bid per contract at entry. You pay this on every round trip.</div></div>
         <div><div class="label">Missed setups</div><div class="num" style="font-size:20px">${S.missed.length}</div><div class="small muted">${S.missed.length ? `${money(hypo, true)} hypothetical, not counted.` : "None logged."} ${needStudy ? `${needStudy} closed trade${needStudy > 1 ? "s" : ""} still need exit-study prices.` : ""}</div></div>
+        <div><div class="label">Risk per trade <button class="q" type="button" data-learn="size" aria-label="Explain">?</button></div><div class="num" style="font-size:20px">${risk != null ? pct(risk, false) : "–"}</div><div class="small muted">${risk != null ? `Average cost ${money(avgCost)} vs balance ${money(st.bal)}. ${risk > 0.1 ? "That's a big slice of the account on each trade." : "A sensible size for learning."}` : "Shows once you have closed trades."}</div></div>
+        <div><div class="label">Followed your plan</div><div class="num" style="font-size:20px">${reviewed.length ? `${followed} of ${reviewed.length}` : "–"}</div><div class="small muted">${reviewed.length ? "From your after-trade reviews." : "Review trades after you exit to track this."}</div></div>
       </div>`;
   }
 
@@ -737,24 +860,41 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   document.addEventListener("visibilitychange", () => { if (!document.hidden) schedulePoll(0); });
 
   // ---------- open positions ----------
+  // What the plan says right now, from the latest Bid and the clock.
+  function planStatus(t, bid) {
+    const now = etParts().hm, out = [];
+    if (bid != null && num(t.planTargetPrice) != null && bid >= t.planTargetPrice) out.push(`Bid ${px(bid)} reached your take-profit (${px(t.planTargetPrice)}).`);
+    if (bid != null && num(t.planStopPrice) != null && bid <= t.planStopPrice) out.push(`Bid ${px(bid)} hit your stop (${px(t.planStopPrice)}).`);
+    if (t.planTimeStop && now >= t.planTimeStop && t.date === etParts().date) out.push(`It's past your time stop (${t.planTimeStop} ET).`);
+    if (etParts().min >= 945 && t.date === etParts().date) out.push("15 minutes to the close. SPY options settle into shares: close before 4:00 pm.");
+    return out;
+  }
   function openCard(t, where) {
     const c = calc(t), last = c.last, id = esc(t.id), u = uOf(t);
+    // rough live estimate from the underlying, using delta (not a quote)
+    const S0 = num(t.entryUnderlying), d = num(t.delta), Sn = u === U() && LIVE.snap ? num(LIVE.snap.price) : null;
+    const est = S0 != null && d != null && Sn != null && num(t.entryBid) != null ? Math.max(num(t.entryBid) + d * (Sn - S0), 0) : null;
+    const alerts = planStatus(t, last ? num(last.bid) : null);
+    const plan = t.planTargetPrice != null || t.planTimeStop ? `<div class="small">Plan: take profit at <b>${px(num(t.planTargetPrice))}</b> · stop at <b>${px(num(t.planStopPrice))}</b> · out by <b>${esc(t.planTimeStop || "–")}</b> ET${t.planWhy ? ` · <span class="muted">${esc(t.planWhy)}</span>` : ""}</div>` : `<div class="small muted">No plan saved with this trade.</div>`;
     return `<div class="pos" data-id="${id}">
       <div class="pos-head"><div><div class="label">Open paper position · ${esc(t.version || "")}</div><h2>${esc(u)} ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
         <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
-        <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div></div></div>
+        <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div>${est != null ? `<div class="small muted">Now ≈ ${px(est)} estimated from ${esc(u)} ${Sn.toFixed(2)} (not a quote)</div>` : ""}</div></div>
+      ${plan}
+      ${alerts.map((a) => `<div class="alert">Your plan says get out: ${esc(a)}</div>`).join("")}
       <div class="fields">
-        <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${u === U() && LIVE.snap ? esc(LIVE.snap.price) : ""}"></div>
+        <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${Sn != null ? Sn.toFixed(2) : ""}"></div>
         <div class="field"><label for="${where}-cb-${id}">Sell Bid</label><input id="${where}-cb-${id}" data-k="bid" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label for="${where}-ca-${id}">Buy Ask</label><input id="${where}-ca-${id}" data-k="ask" type="number" step="0.01" inputmode="decimal"></div>
       </div>
-      <div class="row"><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
+      <div class="shot" data-shot="pos" data-tid="${id}"><div class="shot-out small"></div></div>
+      <div class="row"><button class="btn" type="button" data-shot-pick data-shot-for="${id}">Read a screenshot</button><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
     </div>`;
   }
   function renderOpen(st) {
     for (const [sel, where] of [["#dash-open", "d"], ["#live-open", "l"]]) {
       const host = $(sel);
-      if (host.querySelector("input:focus")) continue;
+      if (host.querySelector("input:focus") || host.querySelector(".shot-out:not(:empty)")) continue;
       host.innerHTML = st.open.length ? `<div style="display:grid;gap:12px">${st.open.map((t) => openCard(t, where)).join("")}</div>` : "";
     }
   }
@@ -762,14 +902,19 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const b = e.target.closest(".pos [data-act]"); if (!b) return;
     const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
     if (b.dataset.act === "open") return openForm("trades", t);
-    const v = Object.fromEntries($$("input", card).map((i) => [i.dataset.k, num(i.value)]));
+    const v = Object.fromEntries($$(".fields input", card).map((i) => [i.dataset.k, num(i.value)]));
     if (v.bid == null) return toast("Enter the Sell Bid first.");
     if (v.xsp == null && uOf(t) === U() && LIVE.snap) v.xsp = num(LIVE.snap.price);
     const now = etParts();
     const cp = { t: now.hm, xsp: v.xsp, bid: v.bid, ask: v.ask };
     const next = { ...stripId(t), checkpoints: [...(t.checkpoints || []), cp] };
-    if (b.dataset.act === "exit") Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null, exitUnderlying: v.xsp });
-    if (await save("trades", t.id, next)) toast(b.dataset.act === "exit" ? `Closed at Bid ${px(v.bid)}. Open the trade to see what moved it.` : "Checkpoint saved.");
+    const exiting = b.dataset.act === "exit";
+    if (exiting) Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null, exitUnderlying: v.xsp });
+    $(".shot-out", card).innerHTML = "";
+    if (await save("trades", t.id, next)) {
+      if (exiting) { toast(`Closed at Bid ${px(v.bid)}.`); openReview({ id: t.id, ...next }); }
+      else { const a = planStatus(next, v.bid); toast(a.length ? "Checkpoint saved. Your plan says get out." : "Checkpoint saved."); }
+    }
   });
 
   // ---------- journal tables ----------
@@ -829,10 +974,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#news").addEventListener("click", (e) => { const b = e.target.closest("[data-edit-scout]"); if (b) openForm("scout", S.scout.find((r) => r.id === b.dataset.editScout)); });
 
   // ---------- live V2 check ----------
-  const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "" };
+  const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "", iv: "", pt: "", ps: "", pm: "", pw: "", sk: "", sbid: "", sask: "" };
   let LC = { ...LC0, ...ls.get("spy.live", {}) };
   const saveLC = () => ls.set("spy.live", LC);
-  const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta" };
+  const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta", "lc-pt": "pt", "lc-ps": "ps", "lc-pm": "pm", "lc-pw": "pw", "lc-sk": "sk", "lc-sbid": "sbid", "lc-sask": "sask" };
   for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; if (k === "level") rearm(); saveLC(); renderLive(); }); }
   function rearm() { LC.armedAt = Date.now(); LC.breakAt = null; LC.breakET = null; LC.holdET = null; LC.resets = 0; }
   $$("[data-dir]").forEach((b) => b.addEventListener("click", () => { LC.dir = b.dataset.dir; rearm(); saveLC(); renderLive(); }));
@@ -840,14 +985,50 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $$("[data-mode]").forEach((b) => b.addEventListener("click", () => { LC.mode = b.dataset.mode; rearm(); saveLC(); renderLive(); }));
   $("#lc-break").addEventListener("click", () => { LC.breakAt = Date.now(); LC.breakET = etParts().hms; LC.holdET = null; saveLC(); renderLive(); });
   $("#lc-back").addEventListener("click", () => { if (LC.breakAt) LC.resets++; LC.breakAt = null; LC.breakET = null; LC.holdET = null; saveLC(); renderLive(); });
-  $("#lc-reset").addEventListener("click", () => { LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); });
+  $("#lc-reset").addEventListener("click", () => { LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; fillPlanDefaults(); renderLive(); });
+  function fillPlanDefaults() {
+    const d = S.cfg.planDefaults || DEFAULT_CFG.planDefaults;
+    for (const [id, k, v] of [["lc-pt", "pt", d.target], ["lc-ps", "ps", d.stop], ["lc-pm", "pm", d.time]]) if (LC[k] === "" || LC[k] == null) { LC[k] = String(v); $("#" + id).value = LC[k]; }
+  }
+  // Plan prices from percentages, so the open position card can say when to get out.
+  function planOf(ask, entryMin) {
+    const t = num(LC.pt), st = num(LC.ps), m = num(LC.pm);
+    return { planTargetPct: t, planStopPct: st, planTimeMin: m, planWhy: LC.pw || "",
+      planTargetPrice: ask != null && t != null ? +(ask * (1 + t / 100)).toFixed(2) : null,
+      planStopPrice: ask != null && st != null ? +(ask * (1 - st / 100)).toFixed(2) : null,
+      planTimeStop: m != null ? fmtHM(entryMin + m) : null };
+  }
+  const fmtHM = (m) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+  function spreadCalc(dir, longK, longAsk, shortK, shortBid) {
+    if ([longK, longAsk, shortK, shortBid].some((v) => v == null)) return null;
+    const width = Math.abs(shortK - longK), debit = longAsk - shortBid;
+    if (!width || debit <= 0 || (dir === "call" ? shortK <= longK : shortK >= longK)) return { bad: true };
+    return { width, debit, maxProfit: (width - debit) * 100, maxLoss: debit * 100, breakeven: dir === "call" ? longK + debit : longK - debit, single: { cost: longAsk * 100, breakeven: dir === "call" ? longK + longAsk : longK - longAsk } };
+  }
+  function spreadOf(s) {
+    const c = spreadCalc(LC.dir, num(LC.strike), s.ask, num(LC.sk), num(LC.sbid));
+    return c && !c.bad ? { spreadShortStrike: num(LC.sk), spreadShortBid: num(LC.sbid), spreadShortAsk: num(LC.sask), spreadDebit: +c.debit.toFixed(2), spreadMaxProfit: +c.maxProfit.toFixed(0), spreadBreakeven: +c.breakeven.toFixed(2) } : {};
+  }
+  function renderSpread(s) {
+    const el = $("#lc-spread"), c = spreadCalc(LC.dir, num(LC.strike), s.ask, num(LC.sk), num(LC.sbid));
+    if (!LC.dir || num(LC.strike) == null || s.ask == null) { el.innerHTML = `<span class="muted">Fill in your main contract first. Then add a strike further ${LC.dir === "put" ? "down" : "up"} to sell.</span>`; return; }
+    if (!c) { el.innerHTML = `<span class="muted">Add the strike you would sell, ${LC.dir === "put" ? "below" : "above"} ${esc(LC.strike)}, with its Bid.</span>`; return; }
+    if (c.bad) { el.innerHTML = `<span style="color:var(--bad)">The sold strike must be ${LC.dir === "put" ? "below" : "above"} the bought one, and its Bid lower than your Ask.</span>`; return; }
+    el.innerHTML = `<span>Spread costs <b>${money(c.maxLoss)}</b> vs <b>${money(c.single.cost)}</b></span><span>Most it can make <b>${money(c.maxProfit)}</b></span><span>Break-even <b>${c.breakeven.toFixed(2)}</b> vs <b>${c.single.breakeven.toFixed(2)}</b></span><span class="muted">Cheaper and needs less move to break even, but gains stop at ${esc(LC.sk)}.</span>`;
+  }
+  function renderPlanCalc(s) {
+    const el = $("#lc-plan-calc"), ask = s.ask;
+    if (ask == null) { el.innerHTML = `<span class="muted">Enter the Ask and this turns into exact exit prices.</span>`; return; }
+    const p = planOf(ask, etParts().min);
+    el.innerHTML = `<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${money((p.planTargetPrice - ask) * 100, true)})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${money((p.planStopPrice - ask) * 100, true)})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
+  }
   $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
 
   // Read the V2 break and hold from finished 1-minute candles.
-  function detect(bars, L, dir, since) {
+  function detect(bars, L, dir, since, nowT) {
     const beyond = (b) => dir === "call" ? b.c > L : b.c < L;
     const clean = (b) => dir === "call" ? b.l > L : b.h < L;
-    const done = bars.filter((b) => b.t >= Math.floor((since || 0) / 60000) * 60000 && b.t + 60000 <= (LIVE.at || Date.now()) + 1000);
+    const done = bars.filter((b) => b.t >= Math.floor((since || 0) / 60000) * 60000 && b.t + 60000 <= (nowT ?? (LIVE.at || Date.now())) + 1000);
     let state = "watch", brk = null, hold = null, resets = 0;
     for (const b of done) {
       if (state === "watch") { if (beyond(b)) { state = "broke"; brk = b; } }
@@ -866,7 +1047,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const L = num(LC.level);
     let held = false, elapsed = 0, det = null;
     if (auto) {
-      if (L != null && LC.dir && LIVE.bars.length) det = detect(LIVE.bars, L, LC.dir, LC.armedAt);
+      if (L != null && LC.dir && LIVE.bars.length) det = detect(LIVE.bars, L, LC.dir, LC.armedAt, LIVE.at || Date.now());
       held = det?.state === "held";
     } else {
       elapsed = LC.breakAt ? (Date.now() - LC.breakAt) / 1000 : 0;
@@ -949,6 +1130,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["Context", { no: "Nothing opposing", unknown: "No known opposition, some data stale", yes: "Opposing signal" }[LC.opp] || "–"],
       ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+    renderPlanCalc(s); renderSpread(s);
     renderTeach(s);
   }
 
@@ -973,9 +1155,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
         level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
         entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
-        entryUnderlying: uPrice, exitUnderlying: null, checkpoints: [{ t: now.hm, xsp: uPrice, bid: s.bid, ask: s.ask }],
+        entryUnderlying: uPrice, exitUnderlying: null, checkpoints: [{ t: now.hm, xsp: uPrice, bid: s.bid, ask: s.ask }], iv: num(LC.iv),
+        ...planOf(s.ask, now.min), ...spreadOf(s),
         notes: `Logged from Live check (${s.auto ? "auto-watched 1-minute candles from Webull" : "manual timer"}). Break ${s.breakET} ET, hold confirmed ${s.holdET} ET, ${s.resets} false break(s). Context: ${LC.opp === "unknown" ? "no known opposition, some data stale" : "nothing opposing"}.`, createdAt: Date.now() };
-      if (await save("trades", null, doc)) { toast("Paper entry logged."); LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); }
+      if (await save("trades", null, doc)) { toast("Paper entry logged. Your plan is on the open position card."); LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; fillPlanDefaults(); renderLive(); }
     }
     if (e.target.id === "lc-missed") {
       const s = lcState(), now = etParts();
@@ -1041,6 +1224,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     timeofday: { stage: 4, title: "Time of day", one: "Markets often move most in the first 90 minutes, then slow down midday.",
       body: ["Morning breaks may follow through better.", "Afternoon 0DTE trades fight fast time decay.", "Your Time of day table tests this with your own trades."],
       yours: () => "So far: your morning trade won, your midday and afternoon trades lost. One trade each is far too few to conclude anything.", next: ["theta", "sample"] },
+    verticals: { stage: 3, title: "Vertical spreads", one: "A vertical spread buys one option and sells another further out, same expiry. It costs less but caps your profit.",
+      body: ["Call debit spread: buy the 779C, sell the 781C. Your cost is the difference, and the most you can make is the $2 width minus that cost.", "Break-even: buy strike + cost (calls) or buy strike − cost (puts).", "Selling the second option offsets some time decay and volatility, so spreads lose value more slowly than a single option.", "The catch: if SPY runs far, your gain stops at the sold strike."],
+      yours: () => "Your rules ask you to compare the two for each qualifying setup. The Live check's spread box does the math once you enter the second strike's Bid and Ask.", next: ["spread", "theta"] },
     spyxsp: { stage: 2, title: "SPY vs XSP", one: "Both follow the S&P 500. SPY is a fund you can own, XSP is an index.",
       body: ["SPY options settle into shares. Holding an in-the-money SPY option past 4:00 pm would turn into 100 shares (~$78,000). Always close before the bell.", "XSP options settle in cash.", "SPY options trade much more, so spreads are usually tighter."],
       yours: () => "Your first trades were XSP. From now on you trade SPY, because Webull can stream SPY prices into the app.", next: ["spread"] },
@@ -1049,7 +1235,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     ["1 · Market context", "What's happening in the world sets the mood.", ["catalysts", "regime", "context"]],
     ["2 · Price action", "The mood shows up as moves through key prices.", ["levels", "breakhold"]],
     ["3 · The option", "You pick a contract. Its price reacts to the move and to time.", ["callput", "strike", "premium", "delta", "gamma", "theta", "iv", "spyxsp"]],
-    ["4 · Execution", "How you get in and out decides what you keep.", ["spread", "size", "exit"]],
+    ["4 · Execution", "How you get in and out decides what you keep.", ["spread", "size", "exit", "verticals"]],
     ["5 · Results", "The journal turns trades into evidence.", ["stats", "sample", "timeofday"]],
   ];
   function renderFlow() {
@@ -1151,6 +1337,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#coach-chips").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (c) askCoach(c.textContent); });
 
   // ---------- forms ----------
+  const REVIEW_FIELDS = [
+    ["reviewFollowed", "Did you follow your plan?", "select", [["", "–"], ["yes", "Yes"], ["partly", "Partly"], ["no", "No"]]],
+    ["reviewExitReason", "Why did you exit?", "select", [["", "–"], ["target", "Hit take-profit"], ["stop", "Hit stop"], ["time", "Time stop"], ["momentum", "Momentum stalled"], ["feeling", "Gut feeling"], ["close", "End of day"], ["other", "Other"]]],
+    ["reviewFeeling", "How did you feel?", "select", [["", "–"], ["calm", "Calm"], ["anxious", "Anxious"], ["fomo", "Fear of missing out"], ["greedy", "Greedy"], ["fearful", "Fearful"], ["unsure", "Unsure"]]],
+    ["reviewNote", "What would you do differently?", "textarea", null, "wide"],
+  ];
   const F = {
     trades: [
       ["date", "Date", "date"], ["status", "Counts toward balance", "select", [["official", "Official"], ["pre-quarter", "No · pre-quarter / practice"]]],
@@ -1161,9 +1353,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["entryBid", "Entry Bid", "number"], ["entryAsk", "Entry Ask", "number"], ["exitBid", "Exit Bid", "number"], ["exitAsk", "Exit Ask", "number"],
       ["entryPrice", "Entry fill (blank = Ask)", "number"], ["exitPrice", "Exit fill (blank = Bid)", "number"], ["delta", "Delta at entry", "number"],
       ["entryUnderlying", "Underlying at entry", "number"], ["exitUnderlying", "Underlying at exit", "number"],
+      ["iv", "IV % at entry", "number"],
       ["m15", "Bid 15m after exit", "number"], ["m30", "Bid 30m after", "number"], ["m60", "Bid 60m after", "number"],
+      ["planTargetPrice", "Plan: take profit at", "number"], ["planStopPrice", "Plan: stop at", "number"], ["planTimeStop", "Plan: out by (ET)", "time"], ["planWhy", "Plan: why this trade", "text"],
+      ...REVIEW_FIELDS,
       ["notes", "Notes", "textarea", null, "wide"],
     ],
+    review: REVIEW_FIELDS,
     missed: [
       ["date", "Date", "date"], ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2"], ["pre", "Pre-quarter"]]], ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["signalTime", "Signal (ET)", "time"],
       ["contract", "Contract", "text"], ["trigger", "Trigger / level", "text", null, "wide"],
@@ -1177,8 +1373,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["notes", "Full report text", "textarea", null, "wide"],
     ],
   };
-  const TITLES = { trades: ["Add trade", "Edit trade"], missed: ["Add missed setup", "Edit missed setup"], scout: ["Add report", "Edit report"] };
-  const numericKeys = new Set(["strike", "qty", "entryBid", "entryAsk", "exitBid", "exitAsk", "entryPrice", "exitPrice", "delta", "entryUnderlying", "exitUnderlying", "m15", "m30", "m60", "hypoPnl"]);
+  const STORE = { review: "trades" };
+  const TITLES = { review: ["Review this trade", "Review this trade"], trades: ["Add trade", "Edit trade"], missed: ["Add missed setup", "Edit missed setup"], scout: ["Add report", "Edit report"] };
+  const numericKeys = new Set(["strike", "qty", "entryBid", "entryAsk", "exitBid", "exitAsk", "entryPrice", "exitPrice", "delta", "entryUnderlying", "exitUnderlying", "m15", "m30", "m60", "hypoPnl", "iv", "planTargetPrice", "planStopPrice"]);
 
   function fieldHtml([k, label, type, opts, wide], v) {
     const id = "f-" + k, val = v ?? "";
@@ -1202,22 +1399,80 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   let formCtx = null;
   function openForm(coll, rec, preset) {
     const now = etParts();
-    const defaults = { trades: { date: now.date, status: "official", underlying: U(), version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "XSP News Scout" } }[coll];
+    const defaults = { trades: { date: now.date, status: "official", underlying: U(), version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "News Scout" }, review: {} }[coll];
     const data = rec ? { underlying: coll === "trades" ? uOf(rec) : undefined, ...rec } : { ...defaults, ...(preset || {}) };
-    formCtx = { coll, id: rec?.id || null, base: rec ? stripId(rec) : {} };
+    formCtx = { coll, store: STORE[coll] || coll, id: rec?.id || null, base: rec ? stripId(rec) : {} };
+    const isTrade = coll === "trades" && rec;
+    const pending = isTrade && rec.qual === "pending" ? `<div class="alert" style="background:var(--warn-bg)"><div style="margin-bottom:6px">This trade's rule check is still pending. Did the entry follow the rule version it was taken under (${esc(rec.version || "?")})?</div><div class="row"><input id="f-qual-why" type="text" placeholder="Reason, in one line" style="flex:1;min-width:180px"><button class="btn sm" type="button" data-setqual="verified">Mark verified</button><button class="btn sm" type="button" data-setqual="not">Mark not qualified</button></div></div>` : "";
+    const reviewIntro = coll === "review" ? `<p class="small muted">Thirty seconds now saves you repeating the same mistake. ${rec && rec.planTargetPrice != null ? `Your plan was: take profit at ${px(num(rec.planTargetPrice))}, stop at ${px(num(rec.planStopPrice))}, out by ${esc(rec.planTimeStop || "–")}. You exited at ${esc(rec.exitTime)} with Bid ${px(num(rec.exitBid))}.` : ""}</p>` : "";
     form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>${TITLES[coll][rec ? 1 : 0]}</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
-      ${coll === "trades" && rec ? debriefHtml(rec) + `<div class="row"><button class="btn sm" type="button" data-coach="trade" data-coach-q="${esc(`Walk me through my ${rec.date} ${uOf(rec)} ${contractName(rec)} trade: what went right, what went wrong, and what it teaches me.`)}">Ask the coach about this trade</button></div>` : ""}
+      ${reviewIntro}${pending}
+      ${isTrade ? debriefHtml(rec) + `<div id="f-exitstudy">${exitStudyHtml(rec)}</div>` + `<div class="row"><button class="btn sm" type="button" data-coach="trade" data-coach-q="${esc(`Walk me through my ${rec.date} ${uOf(rec)} ${contractName(rec)} trade: what went right, what went wrong, and what it teaches me.`)}">Ask the coach about this trade</button>${calc(rec).open ? "" : `<button class="btn sm" type="button" data-review="${esc(rec.id)}">Review this trade</button>`}</div>` : ""}
       ${coll === "trades" ? '<div class="calc" id="f-calc"></div>' : ""}
       <div class="fields">${F[coll].map((f) => fieldHtml(f, data[f[0]])).join("")}</div>
-      ${coll === "trades" && rec?.checkpoints?.length ? `<div><div class="label" style="margin-bottom:6px">Checkpoints</div><div class="cp">${rec.checkpoints.map((c) => `<span class="mono">${esc(c.t)}</span><span class="mono">${esc(c.xsp ?? "–")}</span><span class="mono">Bid ${px(num(c.bid))} / Ask ${px(num(c.ask))}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ""}</span>`).join("")}</div></div>` : ""}
-      </div><div class="dlg-foot"><div>${rec ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
+      ${isTrade && rec.checkpoints?.length ? `<div><div class="label" style="margin-bottom:6px">Checkpoints</div><div class="cp">${rec.checkpoints.map((c) => `<span class="mono">${esc(c.t)}</span><span class="mono">${esc(c.xsp ?? "–")}</span><span class="mono">Bid ${px(num(c.bid))} / Ask ${px(num(c.ask))}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ""}</span>`).join("")}</div></div>` : ""}
+      </div><div class="dlg-foot"><div>${rec && coll !== "review" ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" value="cancel" formnovalidate>${coll === "review" ? "Skip" : "Cancel"}</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
     if (coll === "trades") { const upd = () => { const v = collect(); const c = calc(v); $("#f-calc").innerHTML = `<span>Cost <b>${money(c.cost)}</b></span><span>Proceeds <b>${money(c.proceeds)}</b></span><span>P/L <b class="${cls(c.pnl)}">${money(c.pnl, true)}</b></span><span>Return <b>${pct(c.ret)}</b></span><span>Entry spread <b>${num(v.entryAsk) != null && num(v.entryBid) != null ? money((v.entryAsk - v.entryBid) * 100) : "–"}</b></span>${c.open ? '<span class="pill info">open</span>' : ""}`; }; form.oninput = upd; upd(); } else form.oninput = null;
     const del = $("#f-del");
     if (del) del.addEventListener("click", async () => {
       if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = "Click again to delete"; return; }
-      if (await remove(formCtx.coll, formCtx.id)) { dlg.close(); toast("Deleted."); }
+      if (await remove(formCtx.store, formCtx.id)) { dlg.close(); toast("Deleted."); }
     });
     if (!dlg.open) dlg.showModal();
+    if (isTrade && needsExitStudy(rec) && S.mcp) runExitStudy(rec, true);
+  }
+  function openReview(t) { openForm("review", t); }
+  document.addEventListener("click", async (e) => {
+    const r = e.target.closest("[data-review]"); if (r) { e.preventDefault(); const t = S.trades.find((x) => x.id === r.dataset.review); if (t) openReview(t); return; }
+    const q = e.target.closest("[data-setqual]"); if (!q || formCtx?.coll !== "trades") return;
+    e.preventDefault();
+    const why = ($("#f-qual-why")?.value || "").trim(), stamp = `${etParts().date}: rule check set to ${q.dataset.setqual === "verified" ? "verified" : "not qualified"}${why ? ` (${why})` : ""}.`;
+    const doc = { ...formCtx.base, qual: q.dataset.setqual, notes: [formCtx.base.notes, stamp].filter(Boolean).join("\n") };
+    if (await save("trades", formCtx.id, doc)) { dlg.close(); toast("Rule check updated."); }
+  });
+
+  // ---------- exit study (estimated from Webull candles + the option model) ----------
+  const needsExitStudy = (t) => !calc(t).open && uOf(t) === "SPY" && !t.exitStudy && t.exitTime && num(t.strike) != null;
+  function impliedVol(type, S0, K, mins, price) {
+    if (!(price > 0.02)) return null;
+    let lo = 1, hi = 300;
+    for (let i = 0; i < 60; i++) { const mid = (lo + hi) / 2; if (bs0(type, S0, K, mid, mins) > price) hi = mid; else lo = mid; }
+    return (lo + hi) / 2;
+  }
+  async function runExitStudy(t, quiet) {
+    try {
+      const bars = await dayBars(t.date);
+      const exitMin = toMin(t.exitTime), endBar = (m) => bars.filter((b) => etParts(new Date(b.t)).min + 1 <= m).pop();
+      const at = endBar(exitMin); if (!at) throw new Error("no candles for that day");
+      const S0 = num(t.exitUnderlying) ?? at.c, K = num(t.strike), type = t.dir, mins0 = 960 - exitMin;
+      const exitMid = num(t.exitBid) != null && num(t.exitAsk) != null ? (t.exitBid + t.exitAsk) / 2 : num(t.exitBid);
+      const iv = num(t.iv) ?? impliedVol(type, S0, K, mins0, exitMid) ?? 15;
+      const out = { iv: +iv.toFixed(1), at: Date.now(), estimated: true };
+      for (const k of [15, 30, 60]) {
+        const m = exitMin + k; if (m > 960) continue;
+        const b = endBar(m); if (!b) continue;
+        out["u" + k] = +b.c.toFixed(2); out["o" + k] = +Math.max(bs0(type, b.c, K, iv, Math.max(960 - m, 0.01)) - 0.01, 0).toFixed(2);
+      }
+      const doc = { ...stripId(t), exitStudy: out };
+      await save("trades", t.id, doc);
+      if (dlg.open && formCtx?.id === t.id) { formCtx.base.exitStudy = out; const box = $("#f-exitstudy"); if (box) box.innerHTML = exitStudyHtml(doc); }
+      if (!quiet) toast("Exit study filled in.");
+    } catch (err) { if (!quiet) toast("Couldn't get candles for that day from Webull."); }
+  }
+  function exitStudyHtml(t) {
+    if (calc(t).open) return "";
+    const x = t.exitStudy, real = [15, 30, 60].filter((k) => num(t["m" + k]) != null);
+    if (!x && !real.length) return uOf(t) === "SPY" && !S.mcp ? `<div class="yours"><div class="label">If you had held longer</div>Needs Webull to estimate this. Open the journal on claude.ai with Webull connected.</div>` : uOf(t) === "SPY" ? `<div class="yours"><div class="label">If you had held longer</div>Loading candles from Webull to estimate what the option was worth 15, 30 and 60 minutes after you exited…</div>` : `<div class="yours"><div class="label">If you had held longer</div>Webull has no ${esc(uOf(t))} candles, so this needs the real Bids typed into the "Bid 15m / 30m / 60m after exit" fields below.</div>`;
+    const exitBid = num(t.exitBid);
+    const rows = [15, 30, 60].map((k) => {
+      const realBid = num(t["m" + k]), est = x ? num(x["o" + k]) : null, v = realBid ?? est;
+      if (v == null) return "";
+      const diff = exitBid != null ? (v - exitBid) * 100 * (num(t.qty) || 1) : null;
+      return `<div><span>${k} min later${x && x["u" + k] != null ? ` · SPY ${x["u" + k]}` : ""} · ${realBid != null ? "real Bid" : "estimate"} ${px(v)}</span><span class="mono ${cls(diff)}">${diff != null ? money(diff, true) + " vs your exit" : ""}</span></div>`;
+    }).join("");
+    const later = [15, 30, 60].map((k) => num(t["m" + k]) ?? (x ? num(x["o" + k]) : null)).filter((v) => v != null);
+    const verdict = exitBid == null || !later.length ? "" : later.every((v) => v <= exitBid) ? "Holding longer would not have helped. Your exit timing was good." : later.some((v) => v > exitBid * 1.3) ? "The option was worth noticeably more later. You may have exited early. Check whether your plan's target would have caught it." : "Mixed: a little higher at times, not by much.";
+    return `<div class="yours"><div class="label">If you had held longer <button class="q" type="button" data-learn="exit" aria-label="Explain">?</button></div><div class="breakdown" style="margin-top:6px">${rows}</div><p class="small" style="margin-top:8px">${verdict}${x ? ` Estimates use the option model with ${x.iv}% volatility, calibrated to your exit price.` : ""}</p></div>`;
   }
   function collect() {
     const out = {};
@@ -1226,10 +1481,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (e.submitter?.value !== "save" || !["trades", "missed", "scout"].includes(formCtx?.coll)) return dlg.close();
+    if (e.submitter?.value !== "save" || !["trades", "missed", "scout", "review"].includes(formCtx?.coll)) return dlg.close();
     const doc = { ...formCtx.base, ...collect() };
     if (!formCtx.id) doc.createdAt = Date.now();
-    if (await save(formCtx.coll, formCtx.id, doc)) { dlg.close(); toast("Saved."); }
+    if (await save(formCtx.store, formCtx.id, doc)) { dlg.close(); toast(formCtx.coll === "review" ? "Review saved. It feeds your weekly coach review." : "Saved."); }
   });
   form.addEventListener("click", (e) => { if (e.target.value === "cancel") { e.preventDefault(); dlg.close(); } });
   $("#new-trade").addEventListener("click", () => openForm("trades"));
@@ -1251,6 +1506,416 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     dlg.showModal();
   });
 
+  // ---------- market history (Webull) ----------
+  const HIST = { daily: [], dayCache: new Map() };
+  const toBars = (rows) => (rows || []).map((x) => ({ t: Date.parse(x.time), o: +x.open, h: +x.high, l: +x.low, c: +x.close })).filter((x) => !isNaN(x.t)).sort((a, b) => a.t - b.t);
+  const barMin = (b) => etParts(new Date(b.t)).min;           // minute the candle starts (ET)
+  const barDate = (b) => etParts(new Date(b.t)).date;
+  const LONG_CACHE = { cache: { staleTime: 300000, gcTime: 86400000 } };
+  async function loadDaily(n = 90) {
+    if (HIST.daily.length >= n - 5) return HIST.daily;
+    const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "D", count: n }, LONG_CACHE);
+    HIST.daily = (r.payload?.result?.[0]?.result || []).map((x) => ({ date: String(x.time).slice(0, 10), o: +x.open, h: +x.high, l: +x.low, c: +x.close })).sort((a, b) => a.date.localeCompare(b.date));
+    return HIST.daily;
+  }
+  const pastDates = () => HIST.daily.map((d) => d.date).filter((d) => d < etParts().date || (d === etParts().date && !marketOpen() && etParts().min >= 960));
+  const prevDay = (date) => { const i = HIST.daily.findIndex((d) => d.date === date); return i > 0 ? HIST.daily[i - 1] : null; };
+  async function dayBars(date) {
+    if (HIST.dayCache.has(date)) return HIST.dayCache.get(date);
+    const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(date + "T12:00:00Z"), end_time: Date.parse(date + "T22:00:00Z"), count: 420, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+    const bars = toBars(r.payload?.result?.[0]?.result).filter((b) => barDate(b) === date && barMin(b) >= 570 && barMin(b) < 960);
+    if (date < etParts().date) HIST.dayCache.set(date, bars);
+    return bars;
+  }
+  async function manyDays(dates, onProgress) {
+    const out = new Map(), need = dates.filter((d) => !HIST.dayCache.has(d));
+    for (let i = 0; i < need.length; i += 4) {
+      const chunk = need.slice(i, i + 4);
+      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1650, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+      for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; if (!HIST.dayCache.has(d)) HIST.dayCache.set(d, []); HIST.dayCache.get(d).push(b); }
+      onProgress?.(Math.min(i + 4, need.length), need.length);
+    }
+    for (const d of dates) out.set(d, HIST.dayCache.get(d) || []);
+    return out;
+  }
+  const liveErr = (e) => ({ server_not_connected: "Connect Webull in claude.ai Settings → Connectors.", needs_reauth: "Reconnect Webull in claude.ai Settings → Connectors.", not_in_manifest: "Webull is turned off for this page. Allow it from the page's permissions." }[e?.code] || "Webull didn't answer. Try again in a moment.");
+
+  // ---------- practice replay ----------
+  const RP = { date: null, bars: [], idx: -1, playing: false, timer: null, dir: "call", level: null, levelName: "", armedT: null, pos: null, zoom: 90, ff: false, lastState: "watch", note: "" };
+  const rpNow = () => RP.bars[RP.idx];
+  const rpMinsLeft = () => (rpNow() ? 960 - (barMin(rpNow()) + 1) : 390);
+  function rpQuote(type, K) {
+    const b = rpNow(); if (!b || K == null) return null;
+    const mid = bs0(type, b.c, K, num($("#rp-iv").value) || 15, Math.max(rpMinsLeft(), 0.01));
+    return { mid, bid: Math.max(mid - 0.01, 0), ask: mid + 0.01, S: b.c };
+  }
+  function rpBestStrike() {
+    const b = rpNow(); if (!b) return null; const type = RP.dir; let best = null;
+    for (let k = Math.floor(b.c) - 4; k <= Math.ceil(b.c) + 4; k++) { const q = rpQuote(type, k); if (q && (!best || Math.abs(q.ask - 1) < Math.abs(best.q.ask - 1))) best = { k, q }; }
+    return best?.k ?? Math.round(b.c);
+  }
+  async function rpInitDates() {
+    const sel = $("#rp-date");
+    if (!S.mcp) { sel.innerHTML = `<option>Needs Webull</option>`; $("#rp-status").textContent = LIVE.status === "off" ? "Practice needs live data, which isn't available in this view." : "Connecting to Webull…"; return; }
+    try {
+      await loadDaily(90);
+      const ds = pastDates().slice(-60).reverse();
+      sel.innerHTML = ds.map((d) => `<option value="${d}">${esc(dayName(d))}${S.trades.some((t) => t.date === d) ? " · you traded" : ""}</option>`).join("");
+      $("#rp-status").textContent = "Pick a day and press Load day.";
+    } catch (e) { $("#rp-status").textContent = liveErr(e); }
+  }
+  $("#rp-load").addEventListener("click", async () => {
+    const d = $("#rp-date").value; if (!d || !S.mcp) return;
+    rpPause(); $("#rp-status").textContent = `Loading ${dayName(d)}…`;
+    try {
+      const bars = await dayBars(d);
+      if (bars.length < 30) { $("#rp-status").textContent = "Webull returned too few candles for that day. Try another."; return; }
+      Object.assign(RP, { date: d, bars, idx: 0, pos: null, level: null, levelName: "", armedT: null, lastState: "watch", note: "" });
+      $("#rp-strike").value = ""; rpRender();
+      $("#rp-status").textContent = `${dayName(d)} loaded at the 9:30 open. Pick a level, then press Play.`;
+    } catch (e) { $("#rp-status").textContent = liveErr(e); }
+  });
+  function rpLevels() {
+    const p = prevDay(RP.date), out = [];
+    if (p) out.push(["Yesterday's high", p.h], ["Yesterday's low", p.l], ["Yesterday's close", p.c]);
+    const seen = RP.bars.slice(0, RP.idx + 1);
+    if (RP.idx >= 14) { const or = RP.bars.slice(0, 15); out.push(["Opening range high", Math.max(...or.map((b) => b.h))], ["Opening range low", Math.min(...or.map((b) => b.l))]); }
+    if (seen.length > 20) out.push(["High so far", Math.max(...seen.slice(0, -5).map((b) => b.h))], ["Low so far", Math.min(...seen.slice(0, -5).map((b) => b.l))]);
+    return out;
+  }
+  function rpSetLevel(L, name) { RP.level = L; RP.levelName = name; RP.armedT = rpNow() ? rpNow().t + 60000 : null; RP.lastState = "watch"; rpRender(); }
+  $("#rp-levels").addEventListener("click", (e) => { const b = e.target.closest("[data-rplvl]"); if (b) rpSetLevel(+b.dataset.rplvl, b.dataset.name); });
+  $("#rp-setlevel").addEventListener("click", () => { const v = num($("#rp-level").value); if (v != null) rpSetLevel(v, "Custom level"); });
+  $$("[data-rpdir]").forEach((b) => b.addEventListener("click", () => { RP.dir = b.dataset.rpdir; $("#rp-strike").value = ""; if (RP.level != null) rpSetLevel(RP.level, RP.levelName); else rpRender(); }));
+  $$("[data-zoom]").forEach((b) => b.addEventListener("click", () => { RP.zoom = +b.dataset.zoom; rpRender(); }));
+  ["rp-strike", "rp-iv", "rp-t", "rp-s", "rp-m"].forEach((id) => $("#" + id).addEventListener("input", () => rpRender()));
+  const rpDetect = () => RP.level != null && RP.idx >= 0 ? detect(RP.bars.slice(0, RP.idx + 1), RP.level, RP.dir, RP.armedT, rpNow().t + 60000) : null;
+
+  function rpStep(n = 1) {
+    for (let i = 0; i < n; i++) {
+      if (RP.idx >= RP.bars.length - 1) { rpPause(); if (RP.pos) rpExit("close"); RP.note = "That's the 4:00 pm close. Load another day to keep practicing."; break; }
+      RP.idx++;
+      const det = rpDetect();
+      if (det && det.state !== RP.lastState) {
+        const was = RP.lastState; RP.lastState = det.state;
+        if (det.state === "broke" && was === "watch") RP.note = `Break at ${det.breakET}. Now wait for one full candle that stays ${RP.dir === "put" ? "below" : "above"} the level.`;
+        if (det.state === "held") { RP.note = `Hold confirmed at ${det.holdET}. This is a V2 signal. Decide: buy, or skip and watch what happens.`; if ($("#rp-pause").checked || RP.ff) { rpPause(); RP.ff = false; break; } }
+        if (det.state === "watch" && was === "broke") RP.note = `False break: price came back across. ${det.resets} so far.`;
+      }
+      if (RP.pos && rpCheckPlan()) break;
+    }
+    rpRender();
+  }
+  function rpCheckPlan() {
+    const q = rpQuote(RP.pos.dir, RP.pos.strike); if (!q) return false;
+    const chg = (q.bid - RP.pos.entryAsk) / RP.pos.entryAsk, held = barMin(rpNow()) + 1 - RP.pos.entryMin;
+    let why = null;
+    if (RP.pos.plan.t != null && chg * 100 >= RP.pos.plan.t) why = "target"; else if (RP.pos.plan.s != null && -chg * 100 >= RP.pos.plan.s) why = "stop"; else if (RP.pos.plan.m != null && held >= RP.pos.plan.m) why = "time";
+    if (!why || RP.pos.alerted === why) return false;
+    if ($("#rp-auto").value === "auto") { rpExit(why); RP.note = `Auto-exit: your ${why === "target" ? "take-profit" : why === "stop" ? "stop loss" : "time stop"} was hit.`; rpPause(); return true; }
+    RP.pos.alerted = why; RP.note = `Your plan says exit now (${why === "target" ? "take-profit hit" : why === "stop" ? "stop hit" : "time is up"}). Sell, or note why you're staying in.`; rpPause(); return true;
+  }
+  function rpPlay() { if (!RP.bars.length) return; RP.playing = true; $("#rp-play").textContent = "Pause"; clearInterval(RP.timer); RP.timer = setInterval(() => rpStep(1), RP.ff ? 60 : +$("#rp-speed").value); }
+  function rpPause() { RP.playing = false; clearInterval(RP.timer); $("#rp-play").textContent = "Play"; }
+  $("#rp-play").addEventListener("click", () => (RP.playing ? rpPause() : rpPlay()));
+  $("#rp-speed").addEventListener("change", () => { if (RP.playing) rpPlay(); });
+  $("#rp-step").addEventListener("click", () => { rpPause(); rpStep(1); });
+  $("#rp-step5").addEventListener("click", () => { rpPause(); rpStep(5); });
+  $("#rp-ff").addEventListener("click", () => { if (RP.level == null && !RP.pos) return toast("Set a level first."); RP.ff = true; rpPlay(); });
+  $("#rp-buy").addEventListener("click", () => {
+    const K = num($("#rp-strike").value) ?? rpBestStrike(), q = rpQuote(RP.dir, K); if (!q) return;
+    const det = rpDetect();
+    RP.pos = { dir: RP.dir, strike: K, entryAsk: +q.ask.toFixed(2), entryU: q.S, entryMin: barMin(rpNow()) + 1, entryT: rpNow().t, iv: num($("#rp-iv").value) || 15,
+      plan: { t: num($("#rp-t").value), s: num($("#rp-s").value), m: num($("#rp-m").value) }, followed: det?.state === "held", falseBreaks: det?.resets || 0, level: RP.level, levelName: RP.levelName };
+    RP.note = RP.pos.followed ? "Bought on a confirmed V2 signal. Let the plan do the work." : "Bought without a confirmed V2 signal. That's fine for practice, but it's marked as not following the rule.";
+    rpRender();
+  });
+  $("#rp-sell").addEventListener("click", () => { if (RP.pos) { rpExit(RP.pos.alerted ? "plan" : "manual"); rpPause(); } });
+  async function rpExit(reason) {
+    const p = RP.pos; if (!p) return; RP.pos = null;
+    const q = rpQuote(p.dir, p.strike), exitMin = barMin(rpNow()) + 1;
+    const pnl = +((q.bid - p.entryAsk) * 100).toFixed(2);
+    // what the same option was worth 30 minutes later
+    const later = RP.bars.find((b) => barMin(b) + 1 >= Math.min(exitMin + 30, 960));
+    const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, p.iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
+    const doc = { replayDate: RP.date, at: Date.now(), dir: p.dir, strike: p.strike, level: p.level, levelName: p.levelName, followed: p.followed, falseBreaks: p.falseBreaks,
+      entryTime: fmtHM(p.entryMin), exitTime: fmtHM(exitMin), entryU: +p.entryU.toFixed(2), exitU: +q.S.toFixed(2), entryAsk: p.entryAsk, exitBid: +q.bid.toFixed(2), iv: p.iv,
+      pnl, pct: +(pnl / (p.entryAsk * 100)).toFixed(4), minsHeld: exitMin - p.entryMin, plan: p.plan, exitReason: reason, after30 };
+    RP.note = `Closed at ${px(q.bid)}: ${money(pnl, true)}.${after30 != null ? ` Thirty minutes later it would have been worth ${px(after30)}.` : ""}`;
+    rpRender();
+    if (S.db) await save("practice", null, doc);
+  }
+
+  function rpRender() {
+    $$("[data-rpdir]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.rpdir === RP.dir)));
+    $$("[data-zoom]").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.zoom === RP.zoom)));
+    const b = rpNow();
+    $("#rp-clock").textContent = b ? `${dayName(RP.date)} · ${fmtClock(barMin(b) + 1)} · SPY ${b.c.toFixed(2)}` : "–";
+    $("#rp-levels").innerHTML = b ? rpLevels().map(([n, v]) => `<button class="btn sm" type="button" data-rplvl="${v.toFixed(2)}" data-name="${esc(n)}"${RP.level != null && Math.abs(RP.level - v) < 0.005 ? ' style="border-color:var(--accent);color:var(--accent)"' : ""}>${esc(n)} ${v.toFixed(2)}</button>`).join("") : "";
+    const det = rpDetect();
+    const lvlTxt = RP.level != null ? `Watching ${RP.levelName} ${RP.level.toFixed(2)} for a ${RP.dir === "put" ? "break down" : "break up"}. ` : b ? "Pick a level to watch. " : "";
+    $("#rp-status").textContent = b ? (RP.note || lvlTxt + (det ? { watch: "No break yet.", broke: `Broke at ${det.breakET}, waiting for the hold.`, held: `Hold confirmed at ${det.holdET}.` }[det.state] : "")) : $("#rp-status").textContent;
+    // contract quote
+    if (b && !$("#rp-strike").value) $("#rp-strike").value = rpBestStrike();
+    const K = num($("#rp-strike").value), q = b ? rpQuote(RP.dir, K) : null;
+    $("#rp-quote").innerHTML = q ? `<span>SPY ${K}${RP.dir === "put" ? "P" : "C"} · Bid <b>${px(q.bid)}</b> Ask <b>${px(q.ask)}</b></span><span>Cost <b>${money(q.ask * 100)}</b></span><span class="muted">${rpMinsLeft()} min to expiry · model price</span>` : `<span class="muted">Load a day to see model prices.</span>`;
+    $("#rp-buy").disabled = !q || !!RP.pos; $("#rp-sell").disabled = !RP.pos;
+    // position
+    if (RP.pos) {
+      const pq = rpQuote(RP.pos.dir, RP.pos.strike), pl = (pq.bid - RP.pos.entryAsk) * 100, held = barMin(b) + 1 - RP.pos.entryMin;
+      $("#rp-pos").innerHTML = `<div class="pos"><div class="pos-head"><div><div class="label">Practice position${RP.pos.followed ? " · V2 signal" : " · no signal"}</div><h3>SPY ${RP.pos.strike}${RP.pos.dir === "put" ? "P" : "C"} at ${px(RP.pos.entryAsk)}</h3></div><div style="text-align:right"><div class="big ${cls(pl)}">${money(pl, true)}</div><div class="small muted">Bid ${px(pq.bid)} · ${held} min held</div></div></div>
+        <div class="small">Plan: +${RP.pos.plan.t ?? "–"}% at ${px(RP.pos.entryAsk * (1 + (RP.pos.plan.t || 0) / 100))} · −${RP.pos.plan.s ?? "–"}% at ${px(RP.pos.entryAsk * (1 - (RP.pos.plan.s || 0) / 100))} · ${RP.pos.plan.m ?? "–"} min</div></div>`;
+    } else $("#rp-pos").innerHTML = "";
+    rpChart(det);
+  }
+  const shown_len = (R) => Math.min(R.idx + 1, R.zoom);
+  function rpChart(det) {
+    const host = $("#rp-chart");
+    if (!RP.bars.length) return;
+    const shown = RP.bars.slice(Math.max(0, RP.idx + 1 - RP.zoom), RP.idx + 1), slots = RP.zoom === 390 ? 390 : Math.min(RP.zoom, Math.max(shown_len(RP), 30));
+    const W = 720, H = 300, L = 8, R = 120, T = 10, B = 24;
+    let lo = Math.min(...shown.map((x) => x.l)), hi = Math.max(...shown.map((x) => x.h));
+    const refs = rpLevels().filter(([n]) => !/so far/.test(n)).concat(RP.level != null && !rpLevels().some(([, v]) => Math.abs(v - RP.level) < 0.005) ? [[RP.levelName || "Level", RP.level]] : []);
+    if (RP.level != null) { lo = Math.min(lo, RP.level); hi = Math.max(hi, RP.level); }
+    const pad = Math.max((hi - lo) * 0.08, 0.15); lo -= pad; hi += pad;
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B), cw = (W - L - R) / slots, x = (i) => L + i * cw;
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Replay candles">`;
+    const near = (v) => refs.some(([, r]) => Math.abs(r - v) < (hi - lo) * 0.05) || (shown.length && Math.abs(shown[shown.length - 1].c - v) < (hi - lo) * 0.05);
+    niceTicks(lo, hi, 5).filter((t) => t > lo && t < hi && !near(t)).forEach((t) => { s += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${W - R + 6}" y="${y(t) + 4}">${t.toFixed(2)}</text>`; });
+    for (const [n, v] of refs) {
+      const sel = RP.level != null && Math.abs(v - RP.level) < 0.005, inside = v > lo && v < hi;
+      if (!inside && !sel) continue;
+      s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${sel ? "var(--warn)" : "var(--faint)"}" stroke-dasharray="${sel ? "5 3" : "2 4"}" stroke-width="${sel ? 1.5 : 1}"/><text x="${W - R + 6}" y="${y(v) - 3}" style="fill:${sel ? "var(--warn)" : "var(--muted)"}">${esc(n.replace("Yesterday's", "Prev").replace("Opening range", "OR"))}</text>`;
+    }
+    const bk = det?.breakET, hd = det?.holdET;
+    shown.forEach((b, i) => {
+      const end = fmtHM(barMin(b) + 1), up = b.c >= b.o;
+      const col = end === hd ? "var(--good)" : end === bk ? "var(--accent)" : up ? "var(--muted)" : "var(--faint)";
+      const cx = x(i) + cw / 2, bw = Math.max(cw * 0.65, 1);
+      s += `<line x1="${cx}" x2="${cx}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}"/><rect x="${cx - bw / 2}" y="${Math.min(y(b.o), y(b.c))}" width="${bw}" height="${Math.max(Math.abs(y(b.o) - y(b.c)), 1)}" fill="${up ? "var(--panel)" : col}" stroke="${col}"/>`;
+    });
+    if (RP.pos) { const pe = shown.findIndex((b) => b.t === RP.pos.entryT); if (pe >= 0) s += `<circle cx="${x(pe) + cw / 2}" cy="${y(RP.pos.entryU)}" r="5" fill="var(--accent)" stroke="var(--panel)" stroke-width="2"/>`; }
+    const last = shown[shown.length - 1];
+    s += `<text x="${L}" y="${H - 6}">${fmtClock(barMin(shown[0]))}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${fmtClock(barMin(last) + 1)}</text>`;
+    s += `<rect x="${W - R + 2}" y="${y(last.c) - 9}" width="58" height="18" rx="3" fill="var(--ink)"/><text x="${W - R + 6}" y="${y(last.c) + 4}" style="fill:var(--bg)">${last.c.toFixed(2)}</text>`;
+    host.innerHTML = s + "</svg>";
+  }
+
+  function renderPracticeStats() {
+    const P = [...S.practice].sort((a, b) => (b.at || 0) - (a.at || 0)), el = $("#rp-stats");
+    if (!P.length) { el.innerHTML = `<div class="empty">Your practice trades and their stats show up here.</div>`; $("#rp-list").innerHTML = ""; return; }
+    const wins = P.filter((p) => p.pnl > 0), losses = P.filter((p) => p.pnl <= 0), net = P.reduce((s, p) => s + p.pnl, 0);
+    const avg = (a) => a.length ? a.reduce((s, p) => s + p.pnl, 0) / a.length : null;
+    const grp = (f) => { const m = new Map(); for (const p of P) { const k = f(p); if (!m.has(k)) m.set(k, []); m.get(k).push(p); } return [...m].map(([k, a]) => ({ k, n: a.length, w: a.filter((p) => p.pnl > 0).length, net: a.reduce((s, p) => s + p.pnl, 0) })); };
+    const row = (g) => `<tr><td>${esc(g.k)}</td><td class="n">${g.n}</td><td class="n">${pct(g.w / g.n, false)}</td><td class="n ${cls(g.net)}">${money(g.net, true)}</td></tr>`;
+    const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "End of day" };
+    el.innerHTML = `<div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap:12px; margin-bottom:12px">
+      <div><div class="label">Trades</div><div class="num" style="font-size:20px">${P.length}</div></div>
+      <div><div class="label">Win rate</div><div class="num" style="font-size:20px">${pct(wins.length / P.length, false)}</div></div>
+      <div><div class="label">Avg win / loss</div><div class="num" style="font-size:16px"><span class="up">${money(avg(wins))}</span> / <span class="down">${money(avg(losses))}</span></div></div>
+      <div><div class="label">Net</div><div class="num ${cls(net)}" style="font-size:20px">${money(net, true)}</div></div></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Grouped by</th><th class="n">Trades</th><th class="n">Win rate</th><th class="n">Net</th></tr></thead><tbody>
+      ${grp((p) => (p.followed ? "Followed V2 signal" : "No signal")).map(row).join("")}
+      ${grp((p) => bucket(p.entryTime)).map(row).join("")}
+      ${grp((p) => reasonName[p.exitReason] || p.exitReason).map(row).join("")}</tbody></table></div>
+      <p class="small muted" style="margin-top:8px">Model prices ignore real-world quirks like wider spreads in fast markets. Treat these as practice reps, not proof.</p>`;
+    $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="n">30 min later</th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
+      `<tr><td>${esc(dayName(p.replayDate))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="n">${p.after30 != null ? px(p.after30) : "–"}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  // ---------- rule tester ----------
+  function scanSignal(bars, L, dir, fromMin, h, target, stop) {
+    const beyond = (b) => dir === "call" ? b.c > L : b.c < L, clean = (b) => dir === "call" ? b.l > L : b.h < L, sign = dir === "call" ? 1 : -1;
+    let armed = false, falseBreaks = 0;
+    for (let i = 0; i < bars.length; i++) {
+      const b = bars[i], m = barMin(b);
+      if (m < fromMin) continue;
+      if (m >= 930) break;
+      if (!armed) { if (!beyond(b)) armed = true; continue; }
+      if (!beyond(b)) continue;
+      let ok = true;
+      for (let j = 1; j <= h; j++) if (!bars[i + j] || !clean(bars[i + j])) { ok = false; break; }
+      if (!ok) { falseBreaks++; continue; }
+      const ei = i + h, entry = bars[ei].c, waitCost = (entry - b.c) * sign;
+      let result = "flat", move = null;
+      for (let k = ei + 1; k <= Math.min(ei + 30, bars.length - 1); k++) {
+        const x = bars[k], fav = dir === "call" ? x.h - entry : entry - x.l, adv = dir === "call" ? entry - x.l : x.h - entry;
+        if (adv >= stop) { result = "loss"; move = -stop; break; }
+        if (fav >= target) { result = "win"; move = target; break; }
+      }
+      if (move == null) move = (bars[Math.min(ei + 30, bars.length - 1)].c - entry) * sign;
+      return { min: barMin(bars[ei]) + 1, result, move, waitCost, falseBreaks };
+    }
+    return null;
+  }
+  $("#bt-run").addEventListener("click", async () => {
+    if (!S.mcp) return toast("The rule test needs Webull, which isn't available in this view.");
+    const nDays = +$("#bt-days").value, target = num($("#bt-target").value) || 0.75, stop = num($("#bt-stop").value) || 0.5, out = $("#bt-out"), btn = $("#bt-run");
+    btn.disabled = true; out.innerHTML = `<div class="empty">Loading ${nDays} days of 1-minute candles from Webull…</div>`;
+    try {
+      await loadDaily(Math.max(90, nDays + 10));
+      const dates = pastDates().slice(-nDays);
+      const days = await manyDays(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading candles… ${a} of ${b} days</div>`; });
+      const holds = [[0, "Enter on the break"], [1, "Wait 60 seconds (V2)"], [3, "Wait 3 minutes (V1)"]];
+      const res = holds.map(([h, name]) => ({ h, name, sig: [] }));
+      for (const d of dates) {
+        const bars = days.get(d), p = prevDay(d); if (!bars?.length || !p) continue;
+        const or = bars.slice(0, 15), orh = Math.max(...or.map((b) => b.h)), orl = Math.min(...or.map((b) => b.l));
+        const lv = [["Prev high", p.h, "call", 571], ["Prev low", p.l, "put", 571], ["Prev close", p.c, "call", 571], ["Prev close", p.c, "put", 571], ["OR high", orh, "call", 585], ["OR low", orl, "put", 585]];
+        for (const r of res) for (const [name, L, dir, from] of lv) { const sg = scanSignal(bars, L, dir, from, r.h, target, stop); if (sg) r.sig.push({ ...sg, date: d, level: name, dir }); }
+      }
+      const summary = res.map((r) => {
+        const n = r.sig.length, cnt = (k) => r.sig.filter((x) => x.result === k).length, avg = (f) => n ? r.sig.reduce((s, x) => s + f(x), 0) / n : null;
+        const tod = ["Opening", "Midday", "Afternoon"].map((k) => { const a = r.sig.filter((x) => bucket(fmtHM(x.min)) === k); return { k, n: a.length, win: a.filter((x) => x.result === "win").length, avg: a.length ? a.reduce((s, x) => s + x.move, 0) / a.length : null }; });
+        return { h: r.h, name: r.name, n, win: cnt("win"), loss: cnt("loss"), flat: cnt("flat"), avgMove: avg((x) => x.move), waitCost: avg((x) => x.waitCost), falseBreaks: r.sig.reduce((s, x) => s + x.falseBreaks, 0), tod };
+      });
+      const doc = { ranAt: Date.now(), days: dates.length, from: dates[0], to: dates[dates.length - 1], target, stop, summary };
+      S.bt = doc; renderBacktest();
+      if (S.db) await S.db.doc("backtest/latest").set(doc).catch(() => {});
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    finally { btn.disabled = false; }
+  });
+  function renderBacktest() {
+    const d = S.bt, out = $("#bt-out"); if (!d || $("#bt-run").disabled) return;
+    const rough = (m) => m == null ? null : m * 50 - 2;  // ~0.50 delta, $0.02 spread, ignores decay
+    const best = [...d.summary].sort((a, b) => (b.avgMove ?? -9) - (a.avgMove ?? -9))[0], v2 = d.summary.find((x) => x.h === 1), v1 = d.summary.find((x) => x.h === 3), now0 = d.summary.find((x) => x.h === 0);
+    const maxAbs = Math.max(...d.summary.map((x) => Math.abs(x.avgMove || 0)), 0.01);
+    out.innerHTML = `<p style="margin-bottom:12px">Over <b>${d.days} trading days</b> (${esc(dayName(d.from))} – ${esc(dayName(d.to))}), a "win" means SPY went <b>+$${d.target}</b> your way before going <b>−$${d.stop}</b> against you within 30 minutes. <b>${esc(best.name)}</b> did best on average.</p>
+      <div class="tbl-wrap"><table><thead><tr><th>Entry rule</th><th class="n">Signals</th><th class="n">Win</th><th class="n">Loss</th><th class="n">No follow-through</th><th class="n">Avg SPY result</th><th class="bar-cell" aria-label="Average result bar"></th><th class="n">Cost of waiting</th><th class="n">Rough option result</th></tr></thead><tbody>
+      ${d.summary.map((r) => `<tr${r.h === 1 ? ' style="font-weight:600"' : ""}><td>${esc(r.name)}</td><td class="n">${r.n}</td><td class="n">${r.n ? pct(r.win / r.n, false) : "–"}</td><td class="n">${r.n ? pct(r.loss / r.n, false) : "–"}</td><td class="n">${r.n ? pct(r.flat / r.n, false) : "–"}</td><td class="n ${cls(r.avgMove)}">${r.avgMove != null ? sgn(r.avgMove) : "–"}</td><td class="bar-cell">${r.avgMove != null ? hbar(r.avgMove, maxAbs) : ""}</td><td class="n">${r.h ? (r.waitCost != null ? sgn(-r.waitCost) : "–") : "–"}</td><td class="n ${cls(rough(r.avgMove))}">${money(rough(r.avgMove), true)}</td></tr>`).join("")}
+      </tbody></table></div>
+      <div class="grid2" style="margin-top:14px">
+        <div><div class="label" style="margin-bottom:6px">60-second rule by time of day</div><table><tbody>${v2.tod.map((t) => `<tr${t.n ? "" : ' class="faded"'}><td>${t.k}</td><td class="n">${t.n} signals</td><td class="n">${t.n ? pct(t.win / t.n, false) + " win" : "–"}</td><td class="n ${cls(t.avg)}">${t.avg != null ? sgn(t.avg) : "–"}</td></tr>`).join("")}</tbody></table></div>
+        <div class="why">
+          <b>Reading this:</b> waiting filters out ${v2.falseBreaks} false breaks for the 60-second rule and ${v1.falseBreaks} for the 3-minute rule, but each wait moves your entry. "Cost of waiting" is how much worse your average entry was than the break candle's close. "Rough option result" assumes delta 0.50 and a $0.02 spread, and ignores time decay. It shows direction, not exact profit.
+          ${now0.n && v2.n ? `<br><br>Here, ${v2.avgMove > now0.avgMove ? "waiting 60 seconds beat entering right away" : "entering right away beat waiting 60 seconds"}, and ${v2.avgMove > v1.avgMove ? "60 seconds beat 3 minutes" : "3 minutes beat 60 seconds"}. Re-run with more days before trusting it.` : ""}
+        </div>
+      </div>
+      <p class="small muted" style="margin-top:10px">Last run ${esc(new Date(d.ranAt).toLocaleString())}. One signal per level, per direction, per day, before 3:30 pm.</p>`;
+  }
+
+  // ---------- screenshot reader ----------
+  let shotCtx = null;
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-shot-pick]"); if (!b) return;
+    shotCtx = b.dataset.shotFor ? { kind: "pos", id: b.dataset.shotFor, host: b.closest(".pos").querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') };
+    $("#shot-file").value = ""; $("#shot-file").click();
+  });
+  $("#shot-file").addEventListener("change", () => { const f = $("#shot-file").files[0]; if (f && shotCtx) readShot(f, shotCtx); });
+  document.addEventListener("paste", (e) => {
+    if (dlg.open || !["live", "dash"].includes(view)) return;
+    const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/")); if (!f) return;
+    e.preventDefault();
+    const open = S.trades.filter((t) => calc(t).open && t.status === "official");
+    const host = view === "live" && !open.length ? $('[data-shot="live"] .shot-out') : null;
+    const ctx = host ? { kind: "live", host } : open.length ? { kind: "pos", id: open[0].id, host: $(`#${view === "live" ? "live" : "dash"}-open .pos[data-id="${open[0].id}"] .shot-out`) } : { kind: "live", host: $('[data-shot="live"] .shot-out') };
+    readShot(f, ctx);
+  });
+  async function readShot(file, ctx) {
+    const host = ctx.host; if (!host) return;
+    if (!S.sample) { host.innerHTML = `<span style="color:var(--bad)">Reading screenshots needs Claude, which isn't available in this view.</span>`; return; }
+    host.innerHTML = `<span class="muted">Reading the screenshot… this takes a few seconds.</span>`;
+    const prompt = `This image is a screenshot from a broker app (Fidelity, Webull, Robinhood or similar) showing an options chain or an option quote. Read ONLY numbers that are clearly visible. Never guess or calculate a missing number; use null.
+Reply with only JSON in this shape:
+{"underlying":"SPY","underlyingPrice":778.5,"expiry":"Oct 12 or 0DTE or null","time":"HH:MM or null","contracts":[{"type":"call","strike":779,"bid":0.95,"ask":0.98,"last":0.96,"delta":0.46,"iv":14.2}]}
+iv is a percent number (14.2 means 14.2%). Include every contract row you can read, up to 20.`;
+    try {
+      const r = await S.sample.json(prompt, { images: [file], modelTier: "default" });
+      const cs = (Array.isArray(r?.contracts) ? r.contracts : []).filter((c) => num(c.strike) != null && (num(c.bid) != null || num(c.ask) != null));
+      if (!cs.length) { host.innerHTML = `<span style="color:var(--warn)">Couldn't find option prices in that image. Try a tighter screenshot of the chain rows.</span>`; return; }
+      host.dataset.shot = JSON.stringify({ ...r, contracts: cs });
+      const want = ctx.kind === "pos" ? S.trades.find((t) => t.id === ctx.id) : null;
+      host.innerHTML = `<div class="small muted" style="margin-bottom:4px">Read from screenshot${r.time ? ` (${esc(r.time)})` : ""}${num(r.underlyingPrice) != null ? ` · ${esc(r.underlying || "")} ${esc(r.underlyingPrice)}` : ""}. Check the numbers before using them.</div><div class="shot-list">${cs.map((c, i) => {
+        const match = want && +c.strike === +want.strike && (c.type || want.dir) === want.dir;
+        return `<div class="shot-row"${match ? ' style="outline:1px solid var(--accent)"' : ""}><b class="mono">${esc(c.strike)}${c.type === "put" ? "P" : "C"}</b><span class="mono">Bid ${esc(c.bid ?? "–")} · Ask ${esc(c.ask ?? "–")}${c.delta != null ? ` · Δ ${esc(c.delta)}` : ""}${c.iv != null ? ` · IV ${esc(c.iv)}%` : ""}</span><span class="row" style="gap:4px"><button class="btn sm" type="button" data-shot-use="${i}">Use</button>${ctx.kind === "live" ? `<button class="btn sm" type="button" data-shot-short="${i}">As sell leg</button>` : ""}</span></div>`;
+      }).join("")}</div>`;
+      host.dataset.kind = ctx.kind; host.dataset.tid = ctx.id || "";
+    } catch (e) {
+      const msg = { not_granted: "Allow the page to use Claude to read screenshots.", images_unavailable: "This view can't send images to Claude.", image_rejected: "That image couldn't be read. Try a PNG or JPEG screenshot.", invalid_json: "Claude couldn't read clear numbers from that image. Try a tighter crop.", rate_limited: "Too many requests. Wait a minute and try again." }[e?.code];
+      host.innerHTML = `<span style="color:var(--bad)">${esc(msg || "Reading the screenshot failed. Try again.")}</span>`;
+    }
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-shot-use],[data-shot-short]"); if (!b) return;
+    const host = b.closest(".shot-out"), data = JSON.parse(host.dataset.shot || "{}"), c = data.contracts?.[+(b.dataset.shotUse ?? b.dataset.shotShort)]; if (!c) return;
+    if (host.dataset.kind === "pos") {
+      const card = host.closest(".pos"), set = (k, v) => { const i = card.querySelector(`.fields input[data-k="${k}"]`); if (i && v != null) i.value = v; };
+      set("bid", c.bid); set("ask", c.ask); set("xsp", data.underlyingPrice); toast("Filled in. Check the numbers, then save or exit.");
+      return;
+    }
+    const put = (id, k, v) => { if (v == null) return; LC[k] = String(v); $("#" + id).value = LC[k]; };
+    if (b.dataset.shotShort != null) { put("lc-sk", "sk", c.strike); put("lc-sbid", "sbid", c.bid); put("lc-sask", "sask", c.ask); $("#lc-spread-box").open = true; }
+    else { if (c.type === "call" || c.type === "put") LC.dir = c.type; put("lc-strike", "strike", c.strike); put("lc-bid", "bid", c.bid); put("lc-ask", "ask", c.ask); put("lc-delta", "delta", c.delta); if (c.iv != null) LC.iv = String(c.iv); }
+    saveLC(); renderLive(); toast("Filled in from the screenshot. Check the numbers.");
+  });
+
+  // ---------- quiz ----------
+  function quizBank() {
+    const s = stats(), Q = [];
+    Q.push({ id: "delta1", lesson: "delta", q: "SPY rises $2. Your call has a delta of 0.40. Roughly how much does one contract gain?", opts: ["$0.40", "$0.80", "$40", "$80"], a: 3, why: "Delta 0.40 × $2 = $0.80 per share, and one contract is 100 shares, so about $80." });
+    Q.push({ id: "spread1", lesson: "spread", q: "Bid $0.95, Ask $1.00. You buy at the Ask and sell right away at the Bid. Result per contract?", opts: ["$0", "−$5", "+$5", "−$95"], a: 1, why: "You pay $1.00 and get $0.95 back: −$0.05 × 100 = −$5. That's the spread you pay on every round trip." });
+    Q.push({ id: "theta1", lesson: "theta", q: "It's 2:30 pm. SPY hasn't moved for an hour. What happened to your 0DTE call?", opts: ["Same price", "Gained value", "Lost value to time decay", "Can't tell"], a: 2, why: "With nothing else changing, an expiring option loses time value every minute, faster in the afternoon." });
+    Q.push({ id: "itm1", lesson: "strike", q: "SPY is at 780. Which call is in the money?", opts: ["775 call", "780 call", "785 call", "None"], a: 0, why: "A call is in the money when SPY is above its strike. 775 < 780, so it already has $5 of intrinsic value." });
+    Q.push({ id: "max1", lesson: "callput", q: "You buy one put for $1.10. What is the most you can lose?", opts: ["$1.10", "$110", "Unlimited", "$1,100"], a: 1, why: "Buying an option risks only what you paid: $1.10 × 100 = $110." });
+    Q.push({ id: "fb1", lesson: "breakhold", q: "SPY closes a candle above today's high, then the next candle drops back below it. That's called…", opts: ["A hold", "A false break", "A gap", "A reversal confirmation"], a: 1, why: "Price broke the level but couldn't stay past it. Your 60-second hold exists to filter these." });
+    Q.push({ id: "spy1", lesson: "spyxsp", q: "You still hold an in-the-money SPY call at 4:00 pm. What happens?", opts: ["It settles in cash", "It turns into 100 SPY shares", "It expires worthless", "Nothing until Monday"], a: 1, why: "SPY options settle into shares. That's why your rules say close before the bell." });
+    Q.push({ id: "iv1", lesson: "iv", q: "Right after a big scheduled report, SPY barely moves but your option gets cheaper. The most likely reason?", opts: ["Delta", "Volatility dropped (IV crush)", "The spread widened", "Dividends"], a: 1, why: "Before the event, options carry extra expected movement. Once it passes, implied volatility falls and so do prices." });
+    Q.push({ id: "gamma1", lesson: "gamma", q: "Why can a 0DTE option double in a few minutes?", opts: ["High gamma near expiry", "Low volume", "Dividends", "The spread"], a: 0, why: "Near expiry, delta changes very fast (high gamma), so a small move can sharply raise or crush the option's price." });
+    Q.push({ id: "sample1", lesson: "sample", q: "You've taken 3 trades with 2 wins. What can you conclude?", opts: ["The strategy works", "The strategy fails", "Not much yet: too few trades", "Win rate is 67%, so it's profitable"], a: 2, why: "Three trades is far too small a sample. You need many trades under the same rules." });
+    if (s.avgWin != null && s.avgLoss) { const be = Math.abs(s.avgLoss) / (s.avgWin + Math.abs(s.avgLoss)); const opts = [be * 100, 50, Math.min(be * 100 + 25, 90), Math.max(be * 100 - 15, 5)].map((v) => Math.round(v) + "%"); Q.push({ id: "be1", lesson: "stats", q: `Your average win is ${money(s.avgWin)} and average loss ${money(s.avgLoss)}. What win rate do you need to break even?`, opts, a: 0, why: `Average loss ÷ (average win + average loss) = ${Math.abs(s.avgLoss).toFixed(0)} ÷ ${(s.avgWin + Math.abs(s.avgLoss)).toFixed(0)} ≈ ${opts[0]}.` }); }
+    const t29 = S.trades.find((t) => t.date === "2026-09-29");
+    if (t29) Q.push({ id: "you29", lesson: "theta", q: "On Sep 29 your put lost 98% even though XSP first moved your way. The main reason?", opts: ["Wrong direction from the start", "Time decay in the afternoon with a slow move", "A wide spread", "The option was in the money"], a: 1, why: "The move was too slow. From 1:05 to 3:20 pm time decay ate the option's value." });
+    const vt = { id: "vert1", lesson: "verticals", q: "Compared with buying a single call, a call debit spread…", opts: ["Costs more and has unlimited profit", "Costs less but caps profit", "Can't lose money", "Has no time decay"], a: 1, why: "Selling the higher strike pays for part of the call, but your gain stops at that strike." };
+    Q.push(vt);
+    return Q.concat(QUIZ.extra);
+  }
+  const QUIZ = { cur: null, extra: [], answered: false };
+  function nextQuestion() {
+    const bank = quizBank(), wrong = S.quiz?.wrong || {}, done = new Set(Object.keys(S.quiz?.right || {}));
+    const pool = bank.filter((q) => !done.has(q.id) || wrong[q.id]); const list = pool.length ? pool : bank;
+    QUIZ.cur = list[Math.floor(Math.random() * list.length)]; QUIZ.answered = false; renderQuiz();
+  }
+  function renderQuiz() {
+    const q = QUIZ.cur, el = $("#quiz-body"); if (!q) { el.innerHTML = ""; return; }
+    el.innerHTML = `<p style="font-weight:500; margin-bottom:10px">${esc(q.q)}</p><div style="display:grid; gap:6px">${q.opts.map((o, i) => `<button class="quiz-opt" type="button" data-qa="${i}">${esc(o)}</button>`).join("")}</div><div id="quiz-why" style="margin-top:10px"></div>`;
+  }
+  function renderQuizScore() {
+    const p = S.quiz; $("#quiz-score").textContent = p ? `${p.correct || 0} of ${p.answered || 0} right` : "";
+  }
+  $("#quiz-body").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-qa]"); if (!b || QUIZ.answered) return;
+    QUIZ.answered = true; const q = QUIZ.cur, ok = +b.dataset.qa === q.a;
+    $$("[data-qa]").forEach((x) => { x.disabled = true; if (+x.dataset.qa === q.a) x.classList.add("right"); });
+    if (!ok) b.classList.add("wrong");
+    $("#quiz-why").innerHTML = `<div class="why"><b>${ok ? "Right." : "Not quite."}</b> ${esc(q.why)} <button class="learn-link" type="button" data-learn="${q.lesson}">Lesson</button></div>`;
+    const p = { answered: 0, correct: 0, right: {}, wrong: {}, ...(S.quiz || {}) };
+    p.answered++; if (ok) { p.correct++; p.right = { ...p.right, [q.id]: 1 }; const w = { ...p.wrong }; delete w[q.id]; p.wrong = w; } else p.wrong = { ...p.wrong, [q.id]: 1 };
+    p.byLesson = { ...(p.byLesson || {}), [q.lesson]: { right: (p.byLesson?.[q.lesson]?.right || 0) + (ok ? 1 : 0), wrong: (p.byLesson?.[q.lesson]?.wrong || 0) + (ok ? 0 : 1) } };
+    S.quiz = p; renderQuizScore();
+    if (S.db) S.db.doc("quiz/progress").set(p).catch(() => {});
+  });
+  $("#quiz-next").addEventListener("click", nextQuestion);
+  $("#quiz-gen").addEventListener("click", async () => {
+    if (!S.sample) return toast("New questions need Claude, which isn't available in this view.");
+    const btn = $("#quiz-gen"); btn.disabled = true; btn.textContent = "Writing questions…";
+    try {
+      const lessons = Object.keys(LESSONS).join(", ");
+      const r = await S.sample.json(`Write 5 multiple-choice quiz questions for a beginner learning 0DTE SPY options through paper trading. Base at least 2 on the journal below (their real trades and numbers). Each has exactly 4 options and one correct answer. Keep questions under 30 words and explanations under 40 words, in plain language.\nReply with only a JSON array: [{"q":"...","opts":["a","b","c","d"],"a":0,"why":"...","lesson":"one of: ${lessons}"}]\n\n${journalBrief()}`, { modelTier: "default", cache: false });
+      const add = (Array.isArray(r) ? r : []).filter((x) => x && x.q && Array.isArray(x.opts) && x.opts.length === 4 && Number.isInteger(x.a) && x.a >= 0 && x.a < 4)
+        .map((x, i) => ({ id: "gen-" + Date.now() + "-" + i, lesson: LESSONS[x.lesson] ? x.lesson : "callput", q: String(x.q), opts: x.opts.map(String), a: x.a, why: String(x.why || "") }));
+      if (!add.length) throw { code: "invalid_json" };
+      QUIZ.extra.push(...add); QUIZ.cur = add[0]; QUIZ.answered = false; renderQuiz(); toast(`${add.length} new questions added.`);
+    } catch (e) { toast(e?.code === "not_granted" ? "Allow the page to use Claude to write questions." : "Couldn't write new questions. Try again."); }
+    finally { btn.disabled = false; btn.textContent = "New questions from Claude"; }
+  });
+
+  // ---------- weekly reviews ----------
+  function renderReviews() {
+    const R = [...S.reviews].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    $("#reviews").innerHTML = R.length ? R.slice(0, 8).map((r, i) => `<details${i === 0 ? " open" : ""} style="border-top:1px solid var(--line); padding:10px 0"><summary><b>${esc(r.title || "Week of " + dayName(r.date))}</b> <span class="muted small">${esc(dayName(r.date))}</span></summary>${r.focus ? `<div class="yours" style="margin-top:8px"><div class="label">Focus next week</div>${esc(r.focus)}</div>` : ""}<p style="white-space:pre-wrap; margin-top:8px; font-size:13px">${esc(r.summary || "")}</p></details>`).join("")
+      : `<div class="empty">Your first weekly review arrives Friday after the close.</div>`;
+  }
+
   // ---------- storage ----------
   const stripId = (o) => { const { id, ...rest } = o; return rest; };
   async function save(coll, id, data) {
@@ -1271,7 +1936,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
 
   // ---------- boot ----------
-  showView(["dash", "live", "journal", "news", "learn"].includes(view) ? view : "dash");
+  showView(["dash", "live", "practice", "journal", "news", "learn"].includes(view) ? view : "dash");
+  fillPlanDefaults();
   setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
@@ -1287,14 +1953,17 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     try { const user = await use("user"); const w = user && (await user.can?.("data.write")); if (w === false) S.canWrite = false; } catch {}
     const onErr = () => { const b = $("#banner"); b.hidden = false; b.textContent = "Live updates stopped. Reload the page to reconnect."; };
     const listen = (coll, key) => db.collection(coll).onSnapshot((snap) => { S[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderAll(); }, onErr);
-    listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout");
-    db.doc("config/main").onSnapshot((d) => { const prevU = U(); S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; if (U() !== prevU) { LIVE.bars = []; LIVE.snap = null; schedulePoll(0); } renderAll(); }, onErr);
+    listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout"); listen("practice", "practice"); listen("reviews", "reviews");
+    db.doc("backtest/latest").onSnapshot((d) => { S.bt = d.exists ? d.data() : null; renderBacktest(); }, () => {});
+    db.doc("quiz/progress").onSnapshot((d) => { S.quiz = d.exists ? d.data() : null; renderQuizScore(); }, () => {});
+    db.doc("config/main").onSnapshot((d) => { const prevU = U(); S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; fillPlanDefaults(); if (U() !== prevU) { LIVE.bars = []; LIVE.snap = null; schedulePoll(0); } renderAll(); }, onErr);
   })();
   (async () => { S.sample = await use("sample"); })();
   (async () => {
     const mcp = await use("mcp");
-    if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); return; }
+    if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); rpInitDates(); return; }
     S.mcp = mcp; schedulePoll(0);
+    if (view === "practice") rpInitDates();
   })();
 })();
 </script>
