@@ -1,8 +1,8 @@
-<title>XSP Quarter Journal</title>
+<title>Quarter Trading Journal</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a trading-desk journal. A sticky tab bar over four working views; summary first, detail below. */
+/* Layout: a trading-desk journal. A sticky tab bar over five working views; summary first, detail below. */
 :root {
   --bg: #f3f5f8;
   --panel: #ffffff;
@@ -15,6 +15,7 @@
   --accent-ink: #ffffff;
   --gain: #2a78d6;
   --loss: #d64545;
+  --later: #eb6834;
   --good: #0c8a0c;
   --warn: #b77d00;
   --bad: #c43535;
@@ -30,14 +31,14 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #0f141a; --panel: #171f28; --panel-2: #1d2731; --ink: #e6ecf2; --muted: #9eabb8; --faint: #6f7c89;
-    --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767;
+    --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767; --later: #d95926;
     --good: #3fbf3f; --warn: #e8a92c; --bad: #ec6b6b; --good-bg: #183019; --warn-bg: #33290f; --bad-bg: #3a1b1b; --info-bg: #182a40;
     --grid: #222c37; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0f141a; --panel: #171f28; --panel-2: #1d2731; --ink: #e6ecf2; --muted: #9eabb8; --faint: #6f7c89;
-  --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767;
+  --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767; --later: #d95926;
   --good: #3fbf3f; --warn: #e8a92c; --bad: #ec6b6b; --good-bg: #183019; --warn-bg: #33290f; --bad-bg: #3a1b1b; --info-bg: #182a40;
   --grid: #222c37; color-scheme: dark;
 }
@@ -48,6 +49,7 @@ body { background: var(--bg); color: var(--ink); font-family: var(--body); font-
 h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; text-wrap: balance; }
 h2 { font-size: 22px; }
 h3 { font-size: 17px; }
+p { margin: 0; }
 .label { font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 12.5px; color: var(--muted); font-weight: 600; }
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
@@ -57,9 +59,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Top bar */
 .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
 .top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-block: 12px 0; }
-.brand { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.brand { display: flex; align-items: baseline; gap: 6px 14px; flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
 .brand h1 { font-size: 26px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
-.brand .tick { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tick { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ticker { display: inline-flex; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.ticker b { font-weight: 500; font-size: 15px; }
 .tabs { display: flex; gap: 2px; overflow-x: auto; width: 100%; }
 .tab { border: 0; background: none; padding: 10px 14px 9px; cursor: pointer; font-family: var(--display); font-size: 16px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
@@ -70,6 +74,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
 .panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 12px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.learn-link { border: 0; background: none; padding: 0 2px; color: var(--accent); cursor: pointer; font-size: 12px; font-family: var(--body); text-decoration: underline; text-underline-offset: 2px; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.q { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--faint); color: var(--muted); font-size: 10.5px; font-weight: 600; cursor: pointer; background: none; padding: 0; margin-left: 4px; vertical-align: 1px; font-family: var(--body); letter-spacing: 0; }
+.q:hover { border-color: var(--accent); color: var(--accent); }
 
 /* KPI strip */
 .kpis { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
@@ -80,7 +87,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .kpi .s { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
 .up { color: var(--gain); } .down { color: var(--loss); }
 @media (max-width: 820px) { .kpis { grid-template-columns: 1fr 1fr; } .kpi { border-left: 0; border-top: 1px solid var(--line); } .kpi.hero { grid-column: 1 / -1; border-top: 0; } .kpi:nth-child(odd):not(.hero) { border-left: 1px solid var(--line); } }
-
 .meter { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; margin-top: 8px; display: flex; gap: 2px; }
 .meter i { display: block; flex: 1; background: var(--grid); }
 .meter i.on { background: var(--good); }
@@ -127,6 +133,7 @@ tr.faded td { color: var(--faint); }
 .btn.danger { color: var(--bad); }
 .btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
 .btn.big { padding: 12px 18px; font-size: 15px; }
+.btn.sm { padding: 4px 10px; font-size: 12.5px; }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
 .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
@@ -135,12 +142,11 @@ tr.faded td { color: var(--faint); }
 .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
 input, select, textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 8px 10px; min-width: 0; }
 input[type="number"], input[type="time"] { font-family: var(--mono); }
+input[type="range"] { padding: 0; border: 0; background: none; accent-color: var(--accent); }
 textarea { min-height: 90px; resize: vertical; }
-fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
-legend { padding: 0; margin-bottom: 4px; }
 .calc { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 10px 12px; background: var(--panel-2); border-radius: 6px; font-size: 13px; }
 .calc b { font-family: var(--mono); font-weight: 500; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
 .seg button { border: 0; background: var(--panel); padding: 8px 14px; cursor: pointer; border-left: 1px solid var(--line); }
 .seg button:first-child { border-left: 0; }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
@@ -153,8 +159,12 @@ legend { padding: 0; margin-bottom: 4px; }
 .step.done .no { background: var(--good); color: #fff; }
 .step.stop .no { background: var(--bad); color: #fff; }
 .step-body { display: grid; gap: 8px; min-width: 0; }
+.step-body h3 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .timer { font-family: var(--display); font-size: 54px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
 .ring { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.livebox { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; padding: 10px 12px; border-radius: 6px; background: var(--panel-2); font-size: 13px; }
+.livebox .big { font-family: var(--mono); font-size: 22px; font-weight: 500; }
+.candles { display: flex; gap: 3px; align-items: flex-end; height: 64px; padding: 4px 0; }
 .decision { border-radius: 8px; padding: 16px; display: grid; gap: 6px; }
 .decision .verdict { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
 .decision.wait { background: var(--panel-2); }
@@ -165,6 +175,7 @@ legend { padding: 0; margin-bottom: 4px; }
 .card-line { display: grid; grid-template-columns: 120px 1fr; gap: 4px 10px; font-size: 13px; }
 .card-line dt { font-family: var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; font-size: 12px; padding-top: 1px; }
 .card-line dd { margin: 0; min-width: 0; }
+.why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
 .pos { border: 1px solid var(--accent); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; background: var(--panel); }
@@ -189,6 +200,35 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
 
+/* Learn */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; }
+.stage { display: grid; gap: 8px; align-content: start; padding: 0 14px; position: relative; min-width: 0; }
+.stage + .stage { border-left: 1px dashed var(--line); }
+.stage + .stage::before { content: "→"; position: absolute; left: -9px; top: 0; background: var(--panel); color: var(--muted); font-size: 14px; line-height: 18px; width: 18px; text-align: center; }
+.stage .label { color: var(--ink); }
+.stage p { font-size: 12.5px; color: var(--muted); }
+.concept { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 7px 10px; cursor: pointer; font-size: 13px; font-weight: 500; }
+.concept:hover { border-color: var(--accent); color: var(--accent); }
+.concept.seen { border-color: var(--good); }
+.concept.seen::after { content: " ✓"; color: var(--good); }
+@media (max-width: 860px) {
+  .flow { grid-template-columns: 1fr; gap: 14px; }
+  .stage { padding: 0; }
+  .stage + .stage { border-left: 0; border-top: 1px dashed var(--line); padding-top: 18px; }
+  .stage + .stage::before { content: "↓"; left: 0; top: -10px; }
+}
+.lesson { display: grid; gap: 12px; }
+.lesson .one { font-size: 16px; font-weight: 500; }
+.lesson ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+.yours { background: var(--info-bg); border-radius: 6px; padding: 10px 12px; font-size: 13px; }
+.yours .label { color: var(--accent); margin-bottom: 4px; }
+.coach-out { white-space: pre-wrap; font-size: 13.5px; line-height: 1.55; background: var(--panel-2); border-radius: 6px; padding: 12px 14px; min-height: 60px; }
+.sim-out { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.sim-out .v { font-family: var(--mono); font-size: 20px; }
+.breakdown { display: grid; gap: 6px; font-size: 13px; }
+.breakdown div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+.breakdown div:last-child { border-bottom: 0; font-weight: 600; }
+
 /* Dialog */
 dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: rgba(10, 16, 24, .45); }
@@ -198,17 +238,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 .cp { display: grid; grid-template-columns: 64px 80px 1fr; gap: 6px 10px; font-size: 13px; }
 .empty { padding: 26px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
 .toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 6px; font-size: 13px; z-index: 20; }
-@media (prefers-reduced-motion: no-preference) { .tab, .btn, .chip { transition: background-color .15s, color .15s, border-color .15s; } }
+@media (prefers-reduced-motion: no-preference) { .tab, .btn, .chip, .concept { transition: background-color .15s, color .15s, border-color .15s; } }
 </style>
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><h1>XSP Quarter Journal</h1><span class="tick" id="clock">ET --:--:--</span></div>
+    <div class="brand"><h1>Quarter Trading Journal</h1><span class="ticker" id="ticker"></span><span class="tick" id="clock">ET --:--:--</span></div>
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-dash" aria-selected="true" data-view="dash">Dashboard</button>
       <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live">Live check<span class="dot" id="open-dot" hidden></span></button>
       <button class="tab" role="tab" id="tab-journal" aria-selected="false" data-view="journal">Journal</button>
       <button class="tab" role="tab" id="tab-news" aria-selected="false" data-view="news">News</button>
+      <button class="tab" role="tab" id="tab-learn" aria-selected="false" data-view="learn">Learn</button>
     </nav>
   </div>
 </header>
@@ -233,11 +274,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     </div>
     <div class="grid2">
       <div class="panel">
-        <div class="panel-head"><h2>Time of day</h2><span class="small muted">By entry time, official trades</span></div>
+        <div class="panel-head"><h2>Time of day <button class="q" type="button" data-learn="timeofday" aria-label="Explain time of day">?</button></h2><span class="small muted">By entry time, official trades</span></div>
         <div class="tbl-wrap" id="tod"></div>
       </div>
       <div class="panel">
-        <div class="panel-head"><h2>Rule versions</h2><span class="small muted">Results kept separate per version</span></div>
+        <div class="panel-head"><h2>Rule versions <button class="q" type="button" data-learn="sample" aria-label="Explain rule versions">?</button></h2><span class="small muted">Results kept separate per version</span></div>
         <div class="tbl-wrap" id="versions"></div>
       </div>
     </div>
@@ -254,7 +295,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <div class="step" id="st1">
             <div class="no">1</div>
             <div class="step-body">
-              <h3>Pick the level and direction</h3>
+              <h3>Pick the level and direction <button class="learn-link" type="button" data-learn="levels">What makes a good level?</button></h3>
+              <div class="livebox" id="lc-live"></div>
               <div class="row">
                 <div class="seg" role="group" aria-label="Direction">
                   <button type="button" data-dir="call" aria-pressed="false">Call · break up</button>
@@ -262,46 +304,57 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
                 </div>
               </div>
               <div class="fields">
-                <div class="field"><label for="lc-level">Important level (XSP)</label><input id="lc-level" type="number" step="0.01" inputmode="decimal" placeholder="780.51"></div>
-                <div class="field"><label for="lc-why">Why it matters</label><input id="lc-why" type="text" placeholder="Prior intraday high"></div>
+                <div class="field"><label for="lc-level" id="lc-level-label">Important level</label><input id="lc-level" type="number" step="0.01" inputmode="decimal" placeholder="779.42"></div>
+                <div class="field"><label for="lc-why">Why it matters</label><input id="lc-why" type="text" placeholder="Today's high"></div>
               </div>
+              <div class="row" id="lc-suggest"></div>
             </div>
           </div>
           <div class="step" id="st2">
             <div class="no">2</div>
             <div class="step-body">
-              <h3>Break, then hold 60 seconds</h3>
-              <p class="small muted" style="margin:0">Tap when a candle closes beyond the level. If price comes back across, tap Reset and the clock starts over.</p>
-              <div class="ring">
-                <div class="timer" id="lc-timer">0:60</div>
-                <div class="row">
-                  <button class="btn primary" type="button" id="lc-break">Level broke</button>
-                  <button class="btn" type="button" id="lc-back">Back across · reset</button>
+              <h3>Break, then hold 60 seconds <button class="learn-link" type="button" data-learn="breakhold">Why wait?</button></h3>
+              <div class="seg" role="group" aria-label="How to watch">
+                <button type="button" data-mode="auto" aria-pressed="true">Auto-watch candles</button>
+                <button type="button" data-mode="manual" aria-pressed="false">Tap it myself</button>
+              </div>
+              <div id="lc-auto">
+                <p class="small muted">The app checks finished 1-minute candles. A candle that closes past your level is the break. The next full candle that never touches the level again is the 60-second hold. If price comes back across, the count starts over.</p>
+                <div class="candles" id="lc-candles" aria-label="Recent 1-minute candles"></div>
+              </div>
+              <div id="lc-manual" hidden>
+                <p class="small muted">Tap when a candle closes beyond the level. If price comes back across, tap Reset and the clock starts over.</p>
+                <div class="ring">
+                  <div class="timer" id="lc-timer">0:60</div>
+                  <div class="row">
+                    <button class="btn primary" type="button" id="lc-break">Level broke</button>
+                    <button class="btn" type="button" id="lc-back">Back across · reset</button>
+                  </div>
                 </div>
               </div>
-              <div class="small muted" id="lc-break-info"></div>
+              <div class="small" id="lc-break-info"></div>
             </div>
           </div>
           <div class="step" id="st3">
             <div class="no">3</div>
             <div class="step-body">
-              <h3>Scout context</h3>
+              <h3>Scout context <button class="learn-link" type="button" data-learn="regime">How news connects</button></h3>
               <div id="lc-scout" class="small"></div>
               <div class="seg" role="group" aria-label="Known opposing signal">
                 <button type="button" data-opp="no" aria-pressed="false">Nothing opposing</button>
                 <button type="button" data-opp="unknown" aria-pressed="false">Some data stale</button>
                 <button type="button" data-opp="yes" aria-pressed="false">Opposing signal</button>
               </div>
-              <p class="small muted" style="margin:0">Stale or missing data does not block an entry. A known opposing signal does.</p>
+              <p class="small muted">Stale or missing data does not block an entry. A known opposing signal does.</p>
             </div>
           </div>
           <div class="step" id="st4">
             <div class="no">4</div>
             <div class="step-body">
-              <h3>Fresh option chain</h3>
+              <h3>Fresh option chain <button class="learn-link" type="button" data-learn="delta">How to pick a strike</button></h3>
+              <p class="small muted">Open the SPY 0DTE chain in your broker app and copy one contract's numbers.</p>
               <div class="fields">
                 <div class="field"><label for="lc-strike">Strike</label><input id="lc-strike" type="number" step="1" inputmode="decimal"></div>
-                <div class="field"><label for="lc-xsp">XSP now</label><input id="lc-xsp" type="number" step="0.01" inputmode="decimal"></div>
                 <div class="field"><label for="lc-bid">Sell Bid</label><input id="lc-bid" type="number" step="0.01" inputmode="decimal"></div>
                 <div class="field"><label for="lc-ask">Buy Ask</label><input id="lc-ask" type="number" step="0.01" inputmode="decimal"></div>
                 <div class="field"><label for="lc-delta">Delta (optional)</label><input id="lc-delta" type="number" step="0.0001" inputmode="decimal"></div>
@@ -317,6 +370,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <h3 style="margin-bottom:8px">Decision card</h3>
           <dl class="card-line" id="lc-card"></dl>
         </div>
+        <div class="panel" id="lc-teach"></div>
       </div>
     </div>
   </section>
@@ -350,6 +404,53 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     </div>
     <div id="news" class="view" style="padding-top:0"></div>
   </section>
+
+  <!-- LEARN -->
+  <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
+    <div class="panel">
+      <div class="panel-head"><div><h2>How a trade fits together</h2><p class="small muted" style="margin-top:4px">Read left to right. Each stage feeds the next. Tap any idea for a short lesson.</p></div><span class="small muted" id="learn-progress"></span></div>
+      <div class="flow" id="flow"></div>
+    </div>
+    <div class="grid2" style="align-items:start">
+      <div class="panel">
+        <div class="panel-head"><div><h2>Option price simulator</h2><p class="small muted" style="margin-top:4px">Drag the sliders to see what moves a 0DTE option. Model estimates for learning, not real prices.</p></div></div>
+        <div class="fields" style="grid-template-columns: repeat(auto-fill, minmax(140px, 1fr))">
+          <div class="field"><label for="sim-type">Option</label><select id="sim-type"><option value="call">Call</option><option value="put">Put</option></select></div>
+          <div class="field"><label for="sim-s">SPY now</label><input id="sim-s" type="number" step="0.01"></div>
+          <div class="field"><label for="sim-k">Strike</label><input id="sim-k" type="number" step="1"></div>
+          <div class="field"><label for="sim-iv">Implied volatility %</label><input id="sim-iv" type="number" step="0.5" value="14"></div>
+        </div>
+        <div class="fields" style="margin-top:12px; grid-template-columns: 1fr">
+          <div class="field"><label for="sim-mins">Minutes left until 4:00 pm: <b class="mono" id="sim-mins-v"></b></label><input id="sim-mins" type="range" min="5" max="390" step="5" value="180"></div>
+          <div class="field"><label for="sim-move">SPY moves by: <b class="mono" id="sim-move-v"></b></label><input id="sim-move" type="range" min="-4" max="4" step="0.1" value="1"></div>
+          <div class="field"><label for="sim-wait">…over the next: <b class="mono" id="sim-wait-v"></b></label><input id="sim-wait" type="range" min="0" max="120" step="5" value="15"></div>
+        </div>
+        <div class="chart" id="sim-chart" style="margin-top:12px"></div>
+        <div class="legend"><span style="--c: var(--gain)">Option value now</span><span style="--c: var(--later)">After the wait</span></div>
+      </div>
+      <div class="panel">
+        <h3 style="margin-bottom:10px">What happens to your option</h3>
+        <div class="sim-out" id="sim-out"></div>
+        <div class="breakdown" id="sim-breakdown" style="margin-top:14px"></div>
+        <div class="why" id="sim-why" style="margin-top:14px"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div><h2>Ask the coach</h2><p class="small muted" style="margin-top:4px">Claude answers using your journal, rules and stats. It uses your Claude usage.</p></div></div>
+      <div class="chips" id="coach-chips">
+        <button class="chip" type="button">Why did my Sep 29 put lose almost everything?</button>
+        <button class="chip" type="button">Is a 33% win rate bad?</button>
+        <button class="chip" type="button">What should I focus on learning next?</button>
+        <button class="chip" type="button">Explain delta and theta using my Oct 9 trade</button>
+      </div>
+      <div class="row" style="margin-top:10px; flex-wrap: nowrap">
+        <input id="coach-q" type="text" placeholder="Ask anything about options or your trades">
+        <button class="btn primary" type="button" id="coach-ask">Ask</button>
+        <button class="btn" type="button" id="coach-stop" hidden>Stop</button>
+      </div>
+      <div class="coach-out" id="coach-out" style="margin-top:12px">Answers show up here.</div>
+    </div>
+  </section>
 </main>
 
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
@@ -365,21 +466,41 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const money = (v, sign = false) => v == null ? "–" : (sign && v > 0 ? "+" : v < 0 ? "−" : "") + "$" + Math.abs(v).toFixed(Math.abs(v) % 1 ? 2 : 0);
   const pct = (v, sign = true) => v == null ? "–" : (sign && v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(1) + "%";
   const px = (v) => v == null ? "–" : "$" + v.toFixed(2);
+  const sgn = (v, d = 2) => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(d);
   const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
   const ls = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 
   function etParts(d = new Date()) {
-    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(d).map((x) => [x.type, x.value]));
-    return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}:${p.minute}:${p.second}` };
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(d).map((x) => [x.type, x.value]));
+    return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}:${p.minute}:${p.second}`, min: +p.hour * 60 + +p.minute, wd: p.weekday };
   }
   const dayName = (iso) => { const d = new Date(iso + "T12:00:00Z"); return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }); };
   const toMin = (hm) => { if (!hm) return null; const m = /^(\d{1,2}):(\d{2})/.exec(hm); return m ? +m[1] * 60 + +m[2] : null; };
   function weekdays(a, b) { let n = 0; const d = new Date(a + "T12:00:00Z"), e = new Date(b + "T12:00:00Z"); while (d <= e) { const w = d.getUTCDay(); if (w && w < 6) n++; d.setUTCDate(d.getUTCDate() + 1); } return n; }
-  function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2600); }
+  function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2800); }
+  const marketOpen = () => { const e = etParts(); return !["Sat", "Sun"].includes(e.wd) && e.min >= 570 && e.min < 960; };
+
+  // ---------- option math (Black-Scholes, for teaching only) ----------
+  const ncdf = (x) => { const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; };
+  const npdf = (x) => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
+  function bs(type, S, K, ivPct, mins) {
+    const T = Math.max(mins, 0.01) / 525600, v = Math.max(ivPct, 0.5) / 100, sq = v * Math.sqrt(T);
+    const d1 = (Math.log(S / K) + 0.5 * v * v * T) / sq, d2 = d1 - sq;
+    const call = S * ncdf(d1) - K * ncdf(d2), put = K * ncdf(-d2) - S * ncdf(-d1);
+    const price = Math.max(type === "call" ? call : put, 0);
+    const delta = type === "call" ? ncdf(d1) : ncdf(d1) - 1;
+    const gamma = npdf(d1) / (S * sq);
+    const thetaPerMin = (bs0(type, S, K, ivPct, Math.max(mins - 1, 0.01)) - price);
+    return { price, delta, gamma, thetaPerMin, intrinsic: Math.max(type === "call" ? S - K : K - S, 0) };
+  }
+  function bs0(type, S, K, ivPct, mins) { const T = Math.max(mins, 0.01) / 525600, v = Math.max(ivPct, 0.5) / 100, sq = v * Math.sqrt(T); const d1 = (Math.log(S / K) + 0.5 * v * v * T) / sq, d2 = d1 - sq; return Math.max(type === "call" ? S * ncdf(d1) - K * ncdf(d2) : K * ncdf(-d2) - S * ncdf(-d1), 0); }
 
   // ---------- state ----------
-  const DEFAULT_CFG = { startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", rules: [] };
-  const S = { trades: [], missed: [], scout: [], cfg: DEFAULT_CFG, loaded: false, db: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all") };
+  const DEFAULT_CFG = { startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", underlying: "SPY", rules: [] };
+  const S = { trades: [], missed: [], scout: [], cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
+  const LIVE = { snap: null, bars: [], status: "connecting", msg: "", at: null, stopped: false };
+  const U = () => S.cfg.underlying || "SPY";
+  const uOf = (t) => t.underlying || "XSP";
 
   // Trade math: buy at Ask and sell at Bid unless a specific fill was declared.
   function calc(t) {
@@ -398,6 +519,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   const sortKey = (t) => `${t.date || ""} ${(t.entryTime || "99:99").padStart(5, "0")}`;
   const bucket = (hm) => { const m = toMin(hm); if (m == null) return "Unknown"; return m < 660 ? "Opening" : m < 780 ? "Midday" : "Afternoon"; };
+  const contractName = (t) => `${t.strike ?? "?"}${t.dir === "put" ? "P" : "C"}`;
 
   function stats() {
     const all = [...S.trades].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
@@ -406,13 +528,21 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const open = official.filter((t) => calc(t).open);
     let bal = num(S.cfg.startBalance) ?? 100;
     const curve = [{ label: "Start", date: S.cfg.quarterStart, value: bal }];
-    for (const x of closed) { bal += x.c.pnl; curve.push({ label: `${dayName(x.t.date)} · ${contractName(x.t)}`, date: x.t.date, value: bal, pnl: x.c.pnl, t: x.t }); }
+    for (const x of closed) { bal += x.c.pnl; curve.push({ label: `${dayName(x.t.date)} · ${uOf(x.t)} ${contractName(x.t)}`, date: x.t.date, value: bal, pnl: x.c.pnl, t: x.t }); }
     const wins = closed.filter((x) => x.c.pnl > 0), losses = closed.filter((x) => x.c.pnl <= 0);
     const avg = (a) => a.length ? a.reduce((s, x) => s + x.c.pnl, 0) / a.length : null;
     const net = closed.reduce((s, x) => s + x.c.pnl, 0);
     return { all, official, closed, open, bal, curve, wins, losses, net, avgWin: avg(wins), avgLoss: avg(losses), winRate: closed.length ? wins.length / closed.length : null };
   }
-  const contractName = (t) => `${t.strike ?? "?"}${t.dir === "put" ? "P" : "C"}`;
+
+  // What moved the option: split the result into the part the underlying move explains (delta) and the rest (time decay, volatility, gamma).
+  function debrief(t) {
+    const c = calc(t), d = num(t.delta), e = num(t.entryUnderlying), x = num(t.exitUnderlying);
+    if (c.open || d == null || e == null || x == null) return null;
+    const move = x - e, deltaPart = d * move * 100 * c.qty, other = c.pnl - deltaPart;
+    const mins = toMin(t.exitTime) - toMin(t.entryTime);
+    return { move, deltaPart, other, mins, pnl: c.pnl, delta: d };
+  }
 
   // ---------- tabs ----------
   let view = ls.get("xsp.view", "dash");
@@ -420,15 +550,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     view = v; ls.set("xsp.view", v);
     $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
     $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
+    if (v === "learn") renderSim();
+    schedulePoll(0);
   }
   $$(".tab").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
-  showView(["dash", "live", "journal", "news"].includes(view) ? view : "dash");
 
   // ---------- rendering ----------
   function renderAll() {
     const st = stats();
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
-    renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive();
+    renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
     $("#open-dot").hidden = !st.open.length;
   }
 
@@ -446,13 +577,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#kpis").innerHTML = `
       <div class="kpi hero"><div class="label">Official balance</div><div class="v">${money(st.bal)}</div>
         <div class="s"><span class="${cls(st.net)} num">${money(st.net, true)}</span> from ${money(start)} start · ${st.closed.length} closed${st.open.length ? ` · ${st.open.length} open` : ""}</div></div>
-      <div class="kpi"><div class="label">Win rate</div><div class="v">${pct(st.winRate, false)}</div><div class="s">${st.wins.length} W · ${st.losses.length} L</div></div>
-      <div class="kpi"><div class="label">Avg win / loss</div><div class="v"><span class="up">${money(st.avgWin)}</span> <span class="muted">/</span> <span class="down">${money(st.avgLoss)}</span></div><div class="s">${pay != null ? `Wins are ${pay.toFixed(2)}× losses` : "Need a win and a loss"}</div></div>
-      <div class="kpi"><div class="label">${esc(cur)} setups</div><div class="v">${verified} <span class="muted small">of ${target}</span></div><div class="meter" aria-label="${verified} verified, ${pending} pending">${cells}</div><div class="s">${pending ? `${pending} pending review` : "Verified qualifying entries"}</div></div>
+      <div class="kpi"><div class="label">Win rate <button class="q" type="button" data-learn="stats" aria-label="Explain win rate">?</button></div><div class="v">${pct(st.winRate, false)}</div><div class="s">${st.wins.length} W · ${st.losses.length} L</div></div>
+      <div class="kpi"><div class="label">Avg win / loss <button class="q" type="button" data-learn="stats" aria-label="Explain average win and loss">?</button></div><div class="v"><span class="up">${money(st.avgWin)}</span> <span class="muted">/</span> <span class="down">${money(st.avgLoss)}</span></div><div class="s">${pay != null ? `Wins are ${pay.toFixed(2)}× losses` : "Need a win and a loss"}</div></div>
+      <div class="kpi"><div class="label">${esc(cur)} setups <button class="q" type="button" data-learn="sample" aria-label="Explain verified setups">?</button></div><div class="v">${verified} <span class="muted small">of ${target}</span></div><div class="meter" aria-label="${verified} verified, ${pending} pending">${cells}</div><div class="s">${pending ? `${pending} pending review` : "Verified qualifying entries"}</div></div>
       <div class="kpi"><div class="label">Quarter</div><div class="v">${done} <span class="muted small">of ${total} days</span></div><div class="meter"><i class="on" style="flex:${done}"></i><i style="flex:${Math.max(total - done, 0.001)}"></i></div><div class="s">${dayName(S.cfg.quarterStart)} – ${dayName(S.cfg.quarterEnd)}</div></div>`;
   }
 
-  // Shared tooltip wiring for SVG charts.
   function wireTip(host) {
     const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
     $$("[data-tip]", host).forEach((el) => {
@@ -479,16 +609,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#eq-sub").textContent = st.closed.length ? `${st.closed.length} closed trades` : "";
     if (pts.length < 2) { host.innerHTML = `<div class="empty">The balance line appears after your first closed official trade.</div>`; return; }
     const W = 560, H = 230, L = 44, R = 16, T = 18, B = 30;
-    const vals = pts.map((p) => p.value), ticks = niceTicks(Math.min(...vals, st.curve[0].value), Math.max(...vals));
+    const vals = pts.map((p) => p.value), ticks = niceTicks(Math.min(...vals), Math.max(...vals));
     const lo = ticks[0], hi = ticks[ticks.length - 1];
     const x = (i) => L + (i * (W - L - R)) / (pts.length - 1), y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - T - B);
     const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
     const area = `${line}L${x(pts.length - 1)},${H - B}L${x(0)},${H - B}Z`;
-    const startY = y(pts[0].value);
     let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Official balance after each closed trade">`;
     s += `<defs><linearGradient id="eqg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--gain)" stop-opacity=".22"/><stop offset="1" stop-color="var(--gain)" stop-opacity="0"/></linearGradient></defs>`;
     ticks.forEach((t) => { s += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">$${t}</text>`; });
-    s += `<line class="zero" x1="${L}" x2="${W - R}" y1="${startY}" y2="${startY}" stroke-dasharray="3 3"/>`;
+    s += `<line class="zero" x1="${L}" x2="${W - R}" y1="${y(pts[0].value)}" y2="${y(pts[0].value)}" stroke-dasharray="3 3"/>`;
     s += `<path d="${area}" fill="url(#eqg)"/><path d="${line}" fill="none" stroke="var(--gain)" stroke-width="2" stroke-linejoin="round"/>`;
     pts.forEach((p, i) => {
       const last = i === pts.length - 1;
@@ -518,14 +647,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     rows.forEach((r, i) => {
       const v = r.c.pnl, cx = L + slot * i + slot / 2, y0 = y(0), y1 = y(v), top = Math.min(y0, y1), h = Math.max(Math.abs(y1 - y0), 1);
       const col = v > 0 ? "var(--gain)" : "var(--loss)", rad = Math.min(4, h / 2);
-      // rounded data end, square at the zero line
       const path = v > 0
         ? `M${cx - bw / 2},${y0}V${top + rad}Q${cx - bw / 2},${top} ${cx - bw / 2 + rad},${top}H${cx + bw / 2 - rad}Q${cx + bw / 2},${top} ${cx + bw / 2},${top + rad}V${y0}Z`
         : `M${cx - bw / 2},${y0}V${y1 - rad}Q${cx - bw / 2},${y1} ${cx - bw / 2 + rad},${y1}H${cx + bw / 2 - rad}Q${cx + bw / 2},${y1} ${cx + bw / 2},${y1 - rad}V${y0}Z`;
       s += `<path d="${path}" fill="${col}"/>`;
       s += `<text x="${cx}" y="${v > 0 ? y1 - 6 : y1 + 14}" text-anchor="middle" style="fill:var(--ink)">${money(v, true)}</text>`;
       s += `<text x="${cx}" y="${H - 10}" text-anchor="middle">${esc(dayName(r.t.date).replace(/^\w+, /, ""))}</text>`;
-      const tipTxt = `${esc(dayName(r.t.date))} · XSP ${esc(contractName(r.t))} · ${esc(r.t.version || "")}<br>${px(r.c.entry)} → ${px(r.c.exit)} · <b>${money(v, true)}</b> (${pct(r.c.ret)})`;
+      const tipTxt = `${esc(dayName(r.t.date))} · ${esc(uOf(r.t))} ${esc(contractName(r.t))} · ${esc(r.t.version || "")}<br>${px(r.c.entry)} → ${px(r.c.exit)} · <b>${money(v, true)}</b> (${pct(r.c.ret)})`;
       s += `<rect x="${cx - slot / 2}" y="${T}" width="${slot}" height="${H - T - B}" fill="transparent" tabindex="0" data-tip="${esc(tipTxt)}" data-ty="${top - T}"/>`;
     });
     host.innerHTML = s + "</svg>"; wireTip(host);
@@ -545,7 +673,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const range = { Opening: "9:30–11:00", Midday: "11:00–1:00", Afternoon: "1:00–4:00" };
     $("#tod").innerHTML = `<table><thead><tr><th>Window (ET)</th><th class="n">Trades</th><th class="n">W–L</th><th class="n">Net P/L</th><th class="bar-cell" aria-label="Net P/L bar"></th></tr></thead><tbody>${groups.map((g) =>
       `<tr${g.n ? "" : ' class="faded"'}><td>${g.k} <span class="muted small">${range[g.k]}</span></td><td class="n">${g.n}</td><td class="n">${g.w}–${g.n - g.w}</td><td class="n ${cls(g.net)}">${g.n ? money(g.net, true) : "–"}</td><td class="bar-cell">${g.n ? hbar(g.net, max) : ""}</td></tr>`).join("")}</tbody></table>
-      <p class="small muted" style="margin:10px 0 0">Tests the early-session hypothesis. Missed setups are not included.</p>`;
+      <p class="small muted" style="margin-top:10px">Tests the early-session idea: do mornings move more? Missed setups are not included.</p>`;
   }
 
   function renderVersions(st) {
@@ -556,36 +684,67 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       return `<tr${ts.length ? "" : ' class="faded"'}><td><b>${esc(v)}</b>${v === S.cfg.currentVersion ? ' <span class="pill info plain">current</span>' : ""}</td><td class="n">${ts.length}</td><td class="n">${ts.filter((t) => t.qual === "verified").length} / ${(S.cfg.targets || {})[v] ?? "–"}</td><td class="n">${cl.filter((x) => x.c.pnl > 0).length}–${cl.filter((x) => x.c.pnl <= 0).length}</td><td class="n ${cls(net)}">${cl.length ? money(net, true) : "–"}</td></tr>`;
     }).join("");
     $("#versions").innerHTML = `<table><thead><tr><th>Version</th><th class="n">Entries</th><th class="n">Verified / goal</th><th class="n">W–L</th><th class="n">Net P/L</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="small muted" style="margin:10px 0 0">V2 is never applied to earlier trades. Its first ${(S.cfg.targets || {}).V2 ?? 5} entries are reviewed on their own.</p>`;
+      <p class="small muted" style="margin-top:10px">V2 is never applied to earlier trades. Its first ${(S.cfg.targets || {}).V2 ?? 5} entries are reviewed on their own.</p>`;
   }
 
   function renderEdge(st) {
-    const el = $("#edge");
     const be = st.avgWin != null && st.avgLoss ? Math.abs(st.avgLoss) / (st.avgWin + Math.abs(st.avgLoss)) : null;
     const exp = st.closed.length ? st.net / st.closed.length : null;
     const hypo = S.missed.reduce((s, m) => s + (num(m.hypoPnl) || 0), 0);
     const spreads = st.official.map((t) => { const a = num(t.entryAsk), b = num(t.entryBid); return a != null && b != null ? (a - b) * 100 : null; }).filter((v) => v != null);
     const avgSpread = spreads.length ? spreads.reduce((a, b) => a + b, 0) / spreads.length : null;
     const needStudy = st.closed.filter((x) => num(x.t.m15) == null && num(x.t.m30) == null && num(x.t.m60) == null).length;
-    el.innerHTML = `<div class="panel-head"><h2>What the numbers say so far</h2><span class="small muted">${st.closed.length} closed official trades. Too few to change rules yet.</span></div>
+    $("#edge").innerHTML = `<div class="panel-head"><h2>What the numbers say so far</h2><span class="small muted">${st.closed.length} closed official trades. Too few to change rules yet.</span></div>
       <div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
-        <div><div class="label">Break-even win rate</div><div class="num" style="font-size:20px">${be != null ? pct(be, false) : "–"}</div><div class="small muted">${be != null ? `With these average wins and losses you need to win ${pct(be, false)} of trades to break even. You are at ${pct(st.winRate, false)}.` : "Needs at least one win and one loss."}</div></div>
+        <div><div class="label">Break-even win rate <button class="q" type="button" data-learn="stats" aria-label="Explain">?</button></div><div class="num" style="font-size:20px">${be != null ? pct(be, false) : "–"}</div><div class="small muted">${be != null ? `With these average wins and losses you need to win ${pct(be, false)} of trades to break even. You are at ${pct(st.winRate, false)}.` : "Needs at least one win and one loss."}</div></div>
         <div><div class="label">Average per trade</div><div class="num ${cls(exp)}" style="font-size:20px">${money(exp, true)}</div><div class="small muted">Net realized P/L divided by closed trades.</div></div>
-        <div><div class="label">Average entry spread</div><div class="num" style="font-size:20px">${avgSpread != null ? money(avgSpread) : "–"}</div><div class="small muted">Ask minus Bid per contract at entry. You pay this on every round trip.</div></div>
+        <div><div class="label">Average entry spread <button class="q" type="button" data-learn="spread" aria-label="Explain">?</button></div><div class="num" style="font-size:20px">${avgSpread != null ? money(avgSpread) : "–"}</div><div class="small muted">Ask minus Bid per contract at entry. You pay this on every round trip.</div></div>
         <div><div class="label">Missed setups</div><div class="num" style="font-size:20px">${S.missed.length}</div><div class="small muted">${S.missed.length ? `${money(hypo, true)} hypothetical, not counted.` : "None logged."} ${needStudy ? `${needStudy} closed trade${needStudy > 1 ? "s" : ""} still need exit-study prices.` : ""}</div></div>
       </div>`;
   }
 
+  // ---------- live market data (Webull) ----------
+  function renderTicker() {
+    const s = LIVE.snap, el = $("#ticker");
+    if (!s) { el.innerHTML = LIVE.status === "off" ? "" : `<span class="muted">${esc(U())} ${LIVE.status === "error" ? "· no live data" : "· connecting…"}</span>`; return; }
+    const ch = num(s.change), r = num(s.change_ratio), closed = !marketOpen();
+    el.innerHTML = `<span class="muted">${esc(s.symbol)}</span><b>${num(s.price).toFixed(2)}</b><span class="${cls(ch)}">${sgn(ch)} (${pct(r)})</span><span class="muted small">${closed ? "closed · " : ""}${esc(etParts(new Date(+s.quote_time || Date.now())).hm)} ET</span>`;
+  }
+  let pollT = null;
+  function schedulePoll(ms) { clearTimeout(pollT); if (!LIVE.stopped && S.mcp) pollT = setTimeout(poll, ms); }
+  async function poll() {
+    if (document.hidden) return schedulePoll(15000);
+    const sym = U();
+    try {
+      const r = await S.mcp.callTool("Webull", "get_stock_snapshot", { symbols: sym, category: "US_ETF", extend_hour_required: false, overnight_required: false }, { cache: false });
+      const p = Array.isArray(r.payload) ? r.payload[0] : null;
+      if (p) { LIVE.snap = p; LIVE.status = "ok"; LIVE.at = Date.now(); }
+      if (view === "live" && (marketOpen() || !LIVE.bars.length)) {
+        const b = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [sym], category: "US_ETF", timespan: "M1", count: 60, real_time_required: false }, { cache: false });
+        const rows = b.payload?.result?.[0]?.result || [];
+        LIVE.bars = rows.map((x) => ({ t: Date.parse(x.time), o: +x.open, h: +x.high, l: +x.low, c: +x.close })).filter((x) => !isNaN(x.t)).sort((a, b) => a.t - b.t);
+      }
+    } catch (e) {
+      const code = e?.code;
+      if (["server_not_connected", "needs_reauth", "selection_required", "server_not_found"].includes(code)) { LIVE.status = "error"; LIVE.msg = code === "needs_reauth" ? "Webull needs to be reconnected in claude.ai Settings → Connectors." : "Connect Webull in claude.ai Settings → Connectors to get live prices."; LIVE.stopped = true; }
+      else if (["not_in_manifest", "blocked_by_policy", "approval_required", "not_granted", "capability_disabled", "capability_removed", "consent_required"].includes(code)) { LIVE.status = "error"; LIVE.msg = "Live prices are turned off for this page. Allow Webull from the page's permissions to turn them on."; LIVE.stopped = true; }
+      else if (code === "tool_error") { LIVE.status = "error"; LIVE.msg = "Webull returned an error: " + (e.message || "unknown") + ". Trying again shortly."; }
+      else { LIVE.msg = LIVE.snap ? "Live prices paused. Showing the last price received." : "Webull is not answering. Trying again shortly."; if (!LIVE.snap) LIVE.status = "error"; }
+    }
+    renderTicker(); renderLive();
+    schedulePoll(view === "live" && marketOpen() ? 10000 : 30000);
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) schedulePoll(0); });
+
   // ---------- open positions ----------
   function openCard(t, where) {
-    const c = calc(t), last = c.last;
-    const id = esc(t.id);
+    const c = calc(t), last = c.last, id = esc(t.id), u = uOf(t);
     return `<div class="pos" data-id="${id}">
-      <div class="pos-head"><div><div class="label">Open paper position · ${esc(t.version || "")}</div><h2>XSP ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
+      <div class="pos-head"><div><div class="label">Open paper position · ${esc(t.version || "")}</div><h2>${esc(u)} ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
         <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
-        <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · XSP ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div></div></div>
+        <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div></div></div>
       <div class="fields">
-        <div class="field"><label for="${where}-cx-${id}">XSP now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${u === U() && LIVE.snap ? esc(LIVE.snap.price) : ""}"></div>
         <div class="field"><label for="${where}-cb-${id}">Sell Bid</label><input id="${where}-cb-${id}" data-k="bid" type="number" step="0.01" inputmode="decimal"></div>
         <div class="field"><label for="${where}-ca-${id}">Buy Ask</label><input id="${where}-ca-${id}" data-k="ask" type="number" step="0.01" inputmode="decimal"></div>
       </div>
@@ -595,21 +754,22 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderOpen(st) {
     for (const [sel, where] of [["#dash-open", "d"], ["#live-open", "l"]]) {
       const host = $(sel);
-      if (host.contains(document.activeElement) && host.querySelector("input:focus")) continue; // don't wipe typing
+      if (host.querySelector("input:focus")) continue;
       host.innerHTML = st.open.length ? `<div style="display:grid;gap:12px">${st.open.map((t) => openCard(t, where)).join("")}</div>` : "";
     }
   }
   document.addEventListener("click", async (e) => {
     const b = e.target.closest(".pos [data-act]"); if (!b) return;
     const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
-    if (b.dataset.act === "open") return openTrade(t);
+    if (b.dataset.act === "open") return openForm("trades", t);
     const v = Object.fromEntries($$("input", card).map((i) => [i.dataset.k, num(i.value)]));
     if (v.bid == null) return toast("Enter the Sell Bid first.");
+    if (v.xsp == null && uOf(t) === U() && LIVE.snap) v.xsp = num(LIVE.snap.price);
     const now = etParts();
     const cp = { t: now.hm, xsp: v.xsp, bid: v.bid, ask: v.ask };
     const next = { ...stripId(t), checkpoints: [...(t.checkpoints || []), cp] };
-    if (b.dataset.act === "exit") Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null });
-    if (await save("trades", t.id, next)) toast(b.dataset.act === "exit" ? `Closed at Bid ${px(v.bid)}.` : "Checkpoint saved.");
+    if (b.dataset.act === "exit") Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null, exitUnderlying: v.xsp });
+    if (await save("trades", t.id, next)) toast(b.dataset.act === "exit" ? `Closed at Bid ${px(v.bid)}. Open the trade to see what moved it.` : "Checkpoint saved.");
   });
 
   // ---------- journal tables ----------
@@ -620,12 +780,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const bal = new Map(st.curve.filter((p) => p.t).map((p) => [p.t.id, p.value]));
     $("#trades-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Contract</th><th>Ver.</th><th>Entry → exit (ET)</th><th class="n">Cost</th><th class="n">P/L</th><th class="n">Return</th><th class="n">Balance</th><th>Rule check</th></tr></thead><tbody>${rows.map((t) => {
       const c = calc(t), pre = t.status !== "official";
-      return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td>${esc(t.version || "–")}</td>
+      return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(uOf(t))} ${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td>${esc(t.version || "–")}</td>
         <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="n">${money(c.cost)}</td><td class="n ${pre ? "" : cls(c.pnl)}">${money(c.pnl, true)}</td><td class="n">${pct(c.ret)}</td><td class="n">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
-  $("#trades-tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data-id]"); if (r) openTrade(S.trades.find((t) => t.id === r.dataset.id)); });
-  $("#trades-tbl").addEventListener("keydown", (e) => { if (e.key === "Enter") { const r = e.target.closest("tr[data-id]"); if (r) openTrade(S.trades.find((t) => t.id === r.dataset.id)); } });
+  const openRow = (e) => { const r = e.target.closest("tr[data-id]"); if (r) openForm("trades", S.trades.find((t) => t.id === r.dataset.id)); };
+  $("#trades-tbl").addEventListener("click", openRow);
+  $("#trades-tbl").addEventListener("keydown", (e) => { if (e.key === "Enter") openRow(e); });
 
   function renderMissed() {
     const rows = [...S.missed].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
@@ -647,110 +808,359 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (const r of S.scout) items.push({ kind: r.kind === "obs" ? "obs" : "scout", date: r.date, time: r.time, r });
     for (const t of S.trades) {
       const c = calc(t);
-      if (t.entryTime) items.push({ kind: "trade", date: t.date, time: t.entryTime, html: `<b>Paper entry</b> · XSP ${esc(contractName(t))} at Ask ${px(c.entry)} (${money(c.cost)}) · ${esc(t.version || "")} ${qualPill(t.qual)}`, t });
-      if (!c.open) items.push({ kind: "trade", date: t.date, time: t.exitTime, html: `<b>Paper exit</b> · XSP ${esc(contractName(t))} at ${px(c.exit)} · <span class="${cls(c.pnl)} num">${money(c.pnl, true)}</span> (${pct(c.ret)})`, t });
+      if (t.entryTime) items.push({ kind: "trade", date: t.date, time: t.entryTime, html: `<b>Paper entry</b> · ${esc(uOf(t))} ${esc(contractName(t))} at Ask ${px(c.entry)} (${money(c.cost)}) · ${esc(t.version || "")} ${qualPill(t.qual)}` });
+      if (!c.open) items.push({ kind: "trade", date: t.date, time: t.exitTime, html: `<b>Paper exit</b> · ${esc(uOf(t))} ${esc(contractName(t))} at ${px(c.exit)} · <span class="${cls(c.pnl)} num">${money(c.pnl, true)}</span> (${pct(c.ret)})` });
     }
     const f = S.newsFilter, shown = items.filter((i) => f === "all" || i.kind === f);
-    if (!shown.length) { $("#news").innerHTML = `<div class="empty">${S.scout.length ? "Nothing matches this filter." : "Add a scout report to start the timeline. Paste the report text and pick its catalyst class."}</div>`; return; }
+    if (!shown.length) { $("#news").innerHTML = `<div class="empty">${S.scout.length ? "Nothing matches this filter." : "Scout reports land here automatically at 8:47, 9:47, 12:47 and 8:12 pm ET on weekdays. You can also add one by hand."}</div>`; return; }
     const days = new Map();
     shown.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).forEach((i) => { if (!days.has(i.date)) days.set(i.date, []); days.get(i.date).push(i); });
-    const catPill = (c) => !c ? "" : /^BIG/i.test(c) ? `<span class="pill bad">${esc(c.split(/[ —-]/)[0])}</span>` : /^MOD/i.test(c) ? `<span class="pill warn">MODERATE</span>` : `<span class="pill">${esc(c.split(/[ —-]/)[0])}</span>`;
+    const catPill = (c) => !c ? "" : /^BIG/i.test(c) ? `<span class="pill bad">BIG</span>` : /^MOD/i.test(c) ? `<span class="pill warn">MODERATE</span>` : `<span class="pill">${esc(c.split(/[ —-]/)[0])}</span>`;
     const verdict = (a) => !a ? "" : /NO (NEW )?TRADE/i.test(a) ? `<span class="pill bad plain">${esc(a.match(/NO (NEW )?TRADE/i)[0].toUpperCase())}</span>` : /WAIT/i.test(a) ? `<span class="pill plain">WAIT</span>` : "";
     $("#news").innerHTML = [...days].map(([d, list]) => `<div class="day"><div class="day-h"><h2>${esc(dayName(d))}</h2><span class="small muted">${list.filter((i) => i.kind === "scout").length} reports · ${list.filter((i) => i.kind === "trade").length} trade events</span></div><div class="tl">${list.map((i) => {
       if (i.kind === "trade") return `<div class="ev trade"><div class="ev-top"><span class="ev-time">${esc(i.time)}</span><span>${i.html}</span></div></div>`;
       const r = i.r;
-      return `<div class="ev ${i.kind}" data-id="${esc(r.id)}"><div class="ev-top"><span class="ev-time">${esc(r.time || "")}</span><span class="label">${esc(r.scout || (i.kind === "obs" ? "Chart / chain note" : "Scout"))}</span>${catPill(r.catalyst)}${r.regime ? `<span class="pill info plain">${esc(r.regime)}</span>` : ""}${verdict(r.assessment)}</div>
+      return `<div class="ev ${i.kind}"><div class="ev-top"><span class="ev-time">${esc(r.time || "")}</span><span class="label">${esc(r.scout || (i.kind === "obs" ? "Chart / chain note" : "Scout"))}</span>${catPill(r.catalyst)}${r.regime ? `<span class="pill info plain">${esc(r.regime)}</span>` : ""}${verdict(r.assessment)}</div>
         ${r.headline ? `<h3>${esc(r.headline)}</h3>` : ""}${r.assessment ? `<div class="small"><span class="muted">Rule check:</span> ${esc(r.assessment)}</div>` : ""}
-        <div class="row" style="justify-content:space-between">${r.notes ? `<details><summary>Full notes</summary><p>${esc(r.notes)}</p></details>` : "<span></span>"}<button class="btn small" type="button" data-edit-scout="${esc(r.id)}" style="padding:4px 10px">Edit</button></div></div>`;
+        <div class="row" style="justify-content:space-between">${r.notes ? `<details><summary>Full notes</summary><p>${esc(r.notes)}</p></details>` : "<span></span>"}<button class="btn sm" type="button" data-edit-scout="${esc(r.id)}">Edit</button></div></div>`;
     }).join("")}</div></div>`).join("");
   }
   $("#news-filter").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (!c) return; S.newsFilter = c.dataset.f; ls.set("xsp.newsFilter", S.newsFilter); renderNews(); });
   $("#news").addEventListener("click", (e) => { const b = e.target.closest("[data-edit-scout]"); if (b) openForm("scout", S.scout.find((r) => r.id === b.dataset.editScout)); });
 
   // ---------- live V2 check ----------
-  const LC0 = { dir: null, level: "", why: "", breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", xsp: "", bid: "", ask: "", delta: "" };
-  let LC = { ...LC0, ...ls.get("xsp.live", {}) };
-  const saveLC = () => ls.set("xsp.live", LC);
-  const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-xsp": "xsp", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta" };
-  for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; saveLC(); renderLive(); }); }
-  $$("[data-dir]").forEach((b) => b.addEventListener("click", () => { LC.dir = b.dataset.dir; saveLC(); renderLive(); }));
+  const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "" };
+  let LC = { ...LC0, ...ls.get("spy.live", {}) };
+  const saveLC = () => ls.set("spy.live", LC);
+  const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta" };
+  for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; if (k === "level") rearm(); saveLC(); renderLive(); }); }
+  function rearm() { LC.armedAt = Date.now(); LC.breakAt = null; LC.breakET = null; LC.holdET = null; LC.resets = 0; }
+  $$("[data-dir]").forEach((b) => b.addEventListener("click", () => { LC.dir = b.dataset.dir; rearm(); saveLC(); renderLive(); }));
   $$("[data-opp]").forEach((b) => b.addEventListener("click", () => { LC.opp = b.dataset.opp; saveLC(); renderLive(); }));
+  $$("[data-mode]").forEach((b) => b.addEventListener("click", () => { LC.mode = b.dataset.mode; rearm(); saveLC(); renderLive(); }));
   $("#lc-break").addEventListener("click", () => { LC.breakAt = Date.now(); LC.breakET = etParts().hms; LC.holdET = null; saveLC(); renderLive(); });
   $("#lc-back").addEventListener("click", () => { if (LC.breakAt) LC.resets++; LC.breakAt = null; LC.breakET = null; LC.holdET = null; saveLC(); renderLive(); });
-  $("#lc-reset").addEventListener("click", () => { LC = { ...LC0 }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); });
+  $("#lc-reset").addEventListener("click", () => { LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); });
+  $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
+
+  // Read the V2 break and hold from finished 1-minute candles.
+  function detect(bars, L, dir, since) {
+    const beyond = (b) => dir === "call" ? b.c > L : b.c < L;
+    const clean = (b) => dir === "call" ? b.l > L : b.h < L;
+    const done = bars.filter((b) => b.t >= Math.floor((since || 0) / 60000) * 60000 && b.t + 60000 <= (LIVE.at || Date.now()) + 1000);
+    let state = "watch", brk = null, hold = null, resets = 0;
+    for (const b of done) {
+      if (state === "watch") { if (beyond(b)) { state = "broke"; brk = b; } }
+      else if (state === "broke") {
+        if (clean(b)) { state = "held"; hold = b; break; }
+        resets++;
+        if (beyond(b)) brk = b; else { state = "watch"; brk = null; }
+      }
+    }
+    const et = (b) => b ? etParts(new Date(b.t + 60000)).hm : null;
+    return { state, breakET: et(brk), holdET: et(hold), resets, done };
+  }
 
   function lcState() {
-    const elapsed = LC.breakAt ? (Date.now() - LC.breakAt) / 1000 : 0;
-    const held = !!LC.breakAt && elapsed >= 60;
-    if (held && !LC.holdET) { LC.holdET = etParts(new Date(LC.breakAt + 60000)).hms; saveLC(); }
+    const auto = LC.mode === "auto";
+    const L = num(LC.level);
+    let held = false, elapsed = 0, det = null;
+    if (auto) {
+      if (L != null && LC.dir && LIVE.bars.length) det = detect(LIVE.bars, L, LC.dir, LC.armedAt);
+      held = det?.state === "held";
+    } else {
+      elapsed = LC.breakAt ? (Date.now() - LC.breakAt) / 1000 : 0;
+      held = !!LC.breakAt && elapsed >= 60;
+      if (held && !LC.holdET) { LC.holdET = etParts(new Date(LC.breakAt + 60000)).hms; saveLC(); }
+    }
+    const breakET = auto ? det?.breakET : LC.breakET, holdET = auto ? det?.holdET : LC.holdET, resets = auto ? det?.resets || 0 : LC.resets;
+    const broke = auto ? det && det.state !== "watch" : !!LC.breakAt;
     const bid = num(LC.bid), ask = num(LC.ask);
-    const s1 = !!LC.dir && num(LC.level) != null, s2 = held, s3 = LC.opp === "no" || LC.opp === "unknown", s4 = bid != null && ask != null && ask >= bid && num(LC.strike) != null;
-    return { elapsed, held, bid, ask, s1, s2, s3, s4, stop: LC.opp === "yes" };
+    const s1 = !!LC.dir && L != null, s2 = held, s3 = LC.opp === "no" || LC.opp === "unknown", s4 = bid != null && ask != null && ask >= bid && num(LC.strike) != null;
+    return { auto, det, elapsed, held, broke, breakET, holdET, resets, bid, ask, L, s1, s2, s3, s4, stop: LC.opp === "yes" };
   }
+
+  function renderCandles(s) {
+    const host = $("#lc-candles"), bars = LIVE.bars.slice(-24);
+    if (!bars.length) { host.innerHTML = `<span class="small muted">${LIVE.status === "error" ? esc(LIVE.msg) : "Waiting for candles from Webull…"}</span>`; return; }
+    const L = s.L, lo = Math.min(...bars.map((b) => b.l), L ?? Infinity), hi = Math.max(...bars.map((b) => b.h), L ?? -Infinity), H = 56, W = 12, gap = 4;
+    const y = (v) => 4 + (1 - (v - lo) / (hi - lo || 1)) * H;
+    const bk = s.det?.breakET, hd = s.det?.holdET;
+    let svg = `<svg viewBox="0 0 ${bars.length * (W + gap) + 60} ${H + 8}" role="img" aria-label="Last ${bars.length} one-minute candles" style="width:100%;height:64px">`;
+    if (L != null) svg += `<line x1="0" x2="${bars.length * (W + gap)}" y1="${y(L)}" y2="${y(L)}" stroke="var(--warn)" stroke-dasharray="4 3"/><text x="${bars.length * (W + gap) + 4}" y="${y(L) + 4}" style="fill:var(--warn)">${L.toFixed(2)}</text>`;
+    bars.forEach((b, i) => {
+      const x = i * (W + gap), up = b.c >= b.o, end = etParts(new Date(b.t + 60000)).hm;
+      const col = end === hd ? "var(--good)" : end === bk ? "var(--accent)" : up ? "var(--faint)" : "var(--muted)";
+      svg += `<line x1="${x + W / 2}" x2="${x + W / 2}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}"/><rect x="${x}" y="${Math.min(y(b.o), y(b.c))}" width="${W}" height="${Math.max(Math.abs(y(b.o) - y(b.c)), 1.5)}" rx="1.5" fill="${col}"><title>${end} ET · O ${b.o} H ${b.h} L ${b.l} C ${b.c}</title></rect>`;
+    });
+    host.innerHTML = svg + "</svg>";
+  }
+
   function renderLive() {
-    const s = lcState();
+    const s = lcState(), u = U(), snap = LIVE.snap;
+    $("#lc-level-label").textContent = `Important level (${u})`;
+    // live price box + suggested levels
+    if (snap) {
+      const price = num(snap.price), dist = s.L != null ? price - s.L : null;
+      $("#lc-live").innerHTML = `<span class="label">${esc(u)} live</span><span class="big">${price.toFixed(2)}</span><span>Bid ${esc(snap.bid)} / Ask ${esc(snap.ask)}</span><span class="muted">High ${(+snap.high).toFixed(2)} · Low ${(+snap.low).toFixed(2)} · Prior close ${(+snap.pre_close).toFixed(2)}</span>${dist != null ? `<span class="${dist >= 0 ? "up" : "down"}">${sgn(dist)} from your level</span>` : ""}${marketOpen() ? "" : '<span class="pill plain">Market closed</span>'}`;
+      $("#lc-suggest").innerHTML = `<span class="small muted">Use a level:</span>` + [["Today's high", snap.high], ["Today's low", snap.low], ["Yesterday's close", snap.pre_close], ["Open", snap.open]].map(([n, v]) => `<button class="btn sm" type="button" data-lvl="${(+v).toFixed(2)}" data-why="${esc(n)}">${esc(n)} ${(+v).toFixed(2)}</button>`).join("");
+    } else {
+      $("#lc-live").innerHTML = `<span class="muted small">${LIVE.status === "error" ? esc(LIVE.msg) : LIVE.status === "off" ? "Live prices aren't available in this view." : "Connecting to Webull for live " + esc(u) + " prices…"}</span>`;
+      $("#lc-suggest").innerHTML = "";
+    }
     $$("[data-dir]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.dir === LC.dir)));
     $$("[data-opp]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.opp === LC.opp)));
+    $$("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === LC.mode)));
+    $("#lc-auto").hidden = !s.auto; $("#lc-manual").hidden = s.auto;
     $("#st1").className = "step" + (s.s1 ? " done" : ""); $("#st2").className = "step" + (s.s2 ? " done" : "");
     $("#st3").className = "step" + (s.stop ? " stop" : s.s3 ? " done" : ""); $("#st4").className = "step" + (s.s4 ? " done" : "");
-    const left = Math.max(0, 60 - Math.floor(s.elapsed));
-    $("#lc-timer").textContent = !LC.breakAt ? "0:60" : s.held ? "HELD" : `0:${String(left).padStart(2, "0")}`;
-    $("#lc-timer").style.color = s.held ? "var(--good)" : LC.breakAt ? "var(--ink)" : "var(--faint)";
-    $("#lc-break-info").textContent = (LC.breakET ? `Break at ${LC.breakET} ET.` + (LC.holdET ? ` Hold confirmed ${LC.holdET} ET.` : "") : "Waiting for a break.") + (LC.resets ? ` ${LC.resets} false break${LC.resets > 1 ? "s" : ""} this setup.` : "");
+    if (s.auto) renderCandles(s);
+    else {
+      const left = Math.max(0, 60 - Math.floor(s.elapsed));
+      $("#lc-timer").textContent = !LC.breakAt ? "0:60" : s.held ? "HELD" : `0:${String(left).padStart(2, "0")}`;
+      $("#lc-timer").style.color = s.held ? "var(--good)" : LC.breakAt ? "var(--ink)" : "var(--faint)";
+    }
+    const info = !s.s1 ? "Set a direction and level first." : s.breakET ? `Break at ${s.breakET} ET.${s.holdET ? ` Hold confirmed ${s.holdET} ET.` : ""}` : s.auto && marketOpen() ? `Watching for a 1-minute close ${LC.dir === "put" ? "below" : "above"} ${LC.level}.` : s.auto ? "Market is closed. Auto-watch runs 9:30 am – 4:00 pm ET." : "Waiting for a break.";
+    $("#lc-break-info").innerHTML = esc(info) + (s.resets ? ` <span style="color:var(--warn)">${s.resets} false break${s.resets > 1 ? "s" : ""} so far.</span>` : "");
     // latest scout
     const today = etParts().date, sc = [...S.scout].filter((r) => r.kind !== "obs").sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0];
-    $("#lc-scout").innerHTML = sc ? `<div class="notes-box" style="max-height:none"><b>${esc(sc.scout || "Scout")} · ${esc(sc.date === today ? "today" : dayName(sc.date))} ${esc(sc.time || "")}</b>${sc.regime ? ` · ${esc(sc.regime)}` : ""}<br>${esc(sc.headline || "")}${sc.assessment ? `<br><span class="muted">Rule check: ${esc(sc.assessment)}</span>` : ""}</div>${sc.date !== today ? '<div class="small" style="color:var(--warn);margin-top:4px">This is not from today. Treat it as stale.</div>' : ""}` : `<span class="muted">No scout reports yet. Add them in the News tab.</span>`;
+    $("#lc-scout").innerHTML = sc ? `<div class="notes-box" style="max-height:none"><b>${esc(sc.scout || "Scout")} · ${esc(sc.date === today ? "today" : dayName(sc.date))} ${esc(sc.time || "")}</b>${sc.regime ? ` · ${esc(sc.regime)}` : ""}<br>${esc(sc.headline || "")}${sc.assessment ? `<br><span class="muted">Rule check: ${esc(sc.assessment)}</span>` : ""}</div>${sc.date !== today ? '<div class="small" style="color:var(--warn);margin-top:4px">This is not from today. Treat it as stale.</div>' : ""}` : `<span class="muted">No scout reports yet.</span>`;
     // chain math
     const spread = s.bid != null && s.ask != null ? (s.ask - s.bid) * 100 : null;
     const pref = s.ask != null ? (s.ask >= 0.8 && s.ask <= 1.2 ? '<span class="pill good">Near the $1.00 preference</span>' : `<span class="pill warn">Ask is ${s.ask < 0.8 ? "below" : "above"} the ~$1.00 preference</span>`) : "";
-    $("#lc-calc").innerHTML = s.ask != null ? `<span>Cost at Ask <b>${money(s.ask * 100)}</b></span><span>Spread <b>${spread != null ? money(spread) : "–"}</b></span><span>Instant mark to Bid <b class="${cls(spread != null ? -spread : 0)}">${spread != null ? money(-spread, true) : "–"}</b></span>${pref}` : `<span class="muted">Enter Bid and Ask from the Fidelity chain. Fills use the Ask to buy and the Bid to sell.</span>`;
+    $("#lc-calc").innerHTML = s.ask != null ? `<span>Cost at Ask <b>${money(s.ask * 100)}</b></span><span>Spread <b>${spread != null ? money(spread) : "–"}</b></span><span>Instant mark to Bid <b class="${cls(spread != null ? -spread : 0)}">${spread != null ? money(-spread, true) : "–"}</b></span>${pref}` : `<span class="muted">Enter Bid and Ask from the chain. Fills use the Ask to buy and the Bid to sell.</span>`;
     // decision
-    const d = $("#lc-decision");
-    let cls2 = "wait", verdict = "Wait", why = "", btns = "";
-    if (s.stop) { cls2 = "stop"; verdict = "No trade"; why = "A known opposing signal blocks this entry."; btns = `<button class="btn" type="button" id="lc-missed">Log as missed setup instead</button>`; }
+    const d = $("#lc-decision"), side = LC.dir === "put" ? "below" : "above";
+    let c2 = "wait", verdict = "Wait", why = "", btns = "";
+    if (s.stop) { c2 = "stop"; verdict = "No trade"; why = "A known opposing signal blocks this entry."; btns = `<button class="btn" type="button" id="lc-missed">Log as missed setup instead</button>`; }
     else if (!s.s1) why = "Pick a direction and the level you are watching.";
-    else if (!LC.breakAt) why = `Watching ${LC.dir === "put" ? "below" : "above"} ${esc(LC.level)}. Tap Level broke when a candle closes past it.`;
-    else if (!s.held) why = `Holding for ${Math.max(0, 60 - Math.floor(s.elapsed))} more seconds. Reset if price returns across ${esc(LC.level)}.`;
+    else if (!s.broke) why = `Watching ${side} ${esc(LC.level)}. ${s.auto ? "The app marks the break when a 1-minute candle closes past it." : "Tap Level broke when a candle closes past it."}`;
+    else if (!s.held) why = s.auto ? `Broke at ${esc(s.breakET)}. Waiting for one full candle that stays ${side} ${esc(LC.level)}.` : `Holding for ${Math.max(0, 60 - Math.floor(s.elapsed))} more seconds. Reset if price returns across ${esc(LC.level)}.`;
     else if (!s.s3) why = "Hold confirmed. Check the latest scout context.";
     else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
-    else { cls2 = "go"; verdict = "Qualified · V2"; why = `Buy 1× XSP ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is labeled in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
-    d.className = "decision " + cls2;
+    else { c2 = "go"; verdict = "Qualified · V2"; why = `Buy 1× ${esc(u)} ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is noted in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
+    d.className = "decision " + c2;
     d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}`;
     $("#lc-card").innerHTML = [
       ["Level", s.s1 ? `${esc(LC.level)} ${LC.dir === "put" ? "↓ put" : "↑ call"}${LC.why ? ` · ${esc(LC.why)}` : ""}` : "–"],
-      ["Break", LC.breakET ? `${esc(LC.breakET)} ET` : "–"],
-      ["Hold 60s", s.held ? `Yes · ${esc(LC.holdET)} ET` : LC.breakAt ? "In progress" : "–"],
-      ["False breaks", String(LC.resets)],
+      ["Break", s.breakET ? `${esc(s.breakET)} ET` : "–"],
+      ["Hold 60s", s.held ? `Yes · ${esc(s.holdET)} ET` : s.broke ? "In progress" : "–"],
+      ["False breaks", String(s.resets)],
       ["Context", { no: "Nothing opposing", unknown: "No known opposition, some data stale", yes: "Opposing signal" }[LC.opp] || "–"],
-      ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.xsp) != null ? ` · XSP ${esc(LC.xsp)}` : ""}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
+      ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+    renderTeach(s);
   }
+
+  // A short "what to learn from this moment" note beside the decision.
+  function renderTeach(s) {
+    let title = "What to think about now", body = "", link = "levels";
+    if (!s.s1) { body = "Good levels are prices where the market already turned or paused: today's high or low, yesterday's close, the opening price. They work because many traders watch the same numbers."; link = "levels"; }
+    else if (!s.broke) { body = "Patience is part of the rule. Most of the time price does not break your level, and no trade is the correct result. Forcing a trade is how small accounts shrink."; link = "breakhold"; }
+    else if (!s.held) { body = "A break that snaps back is a false break. Waiting one full minute filters many of them, but it costs part of the move. Your journal is testing whether 60 seconds is the right trade-off."; link = "breakhold"; }
+    else if (!s.s4) { body = `Pick a strike with an Ask near $1.00. Closer to the price means higher delta: the option follows ${U()} more closely but costs more. Further away is cheaper but needs a bigger move.`; link = "delta"; }
+    else {
+      const spread = s.bid != null ? (s.ask - s.bid) * 100 : 0, d = Math.abs(num(LC.delta) || 0.5);
+      const need = d ? (spread / 100) / d : null;
+      body = `The moment you buy, you are down the spread (${money(spread)}). With delta ${d.toFixed(2)}, ${U()} has to move about $${need != null ? need.toFixed(2) : "?"} your way just to get back to even, before time decay. Decide your exit before you enter.`; link = "spread";
+    }
+    $("#lc-teach").innerHTML = `<h3 style="margin-bottom:6px">${title}</h3><p class="small" style="color:var(--muted)">${body}</p><button class="learn-link" type="button" data-learn="${link}" style="margin-top:8px">Read the lesson</button>`;
+  }
+
   document.addEventListener("click", async (e) => {
     if (e.target.id === "lc-log") {
-      const s = lcState(), now = etParts();
-      const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
-        level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (LC.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
+      const s = lcState(), now = etParts(), uPrice = LIVE.snap ? num(LIVE.snap.price) : null;
+      const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
+        level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
         entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
-        checkpoints: [{ t: now.hm, xsp: num(LC.xsp), bid: s.bid, ask: s.ask }],
-        notes: `Logged from Live check. Break ${LC.breakET} ET, 60s hold confirmed ${LC.holdET} ET, ${LC.resets} false break(s). Context: ${LC.opp === "unknown" ? "no known opposition, some data stale" : "nothing opposing"}.`, createdAt: Date.now() };
-      if (await save("trades", null, doc)) { toast("Paper entry logged."); LC = { ...LC0 }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); }
+        entryUnderlying: uPrice, exitUnderlying: null, checkpoints: [{ t: now.hm, xsp: uPrice, bid: s.bid, ask: s.ask }],
+        notes: `Logged from Live check (${s.auto ? "auto-watched 1-minute candles from Webull" : "manual timer"}). Break ${s.breakET} ET, hold confirmed ${s.holdET} ET, ${s.resets} false break(s). Context: ${LC.opp === "unknown" ? "no known opposition, some data stale" : "nothing opposing"}.`, createdAt: Date.now() };
+      if (await save("trades", null, doc)) { toast("Paper entry logged."); LC = { ...LC0, mode: LC.mode }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); }
     }
     if (e.target.id === "lc-missed") {
       const s = lcState(), now = etParts();
-      openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held ? " + 60s hold" : ""}`.trim(), signalTime: (LC.breakET || "").slice(0, 5), contract: LC.strike ? `XSP ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: S.cfg.currentVersion || "V2" });
+      openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held ? " + 60s hold" : ""}`.trim(), signalTime: (s.breakET || "").slice(0, 5), contract: LC.strike ? `${U()} ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: S.cfg.currentVersion || "V2" });
     }
   });
+
+  // ---------- lessons ----------
+  const st0 = () => stats();
+  const findTrade = (date) => S.trades.find((t) => t.date === date);
+  const LESSONS = {
+    catalysts: { stage: 0, title: "News and catalysts", one: "A catalyst is a scheduled or surprise event that can move the whole market.",
+      body: ["Scheduled: economic reports (jobs, inflation, consumer sentiment), Fed speeches, Treasury auctions, big earnings. You know the time in advance.", "Surprise: geopolitics, oil shocks, big company headlines.", "Big news does not guarantee a clean trend. Often it causes chop in both directions first."],
+      yours: () => "Oct 8 had BIG catalysts (auctions, Iran, an AI selloff), and your scouts saw two-way moves with no verified setup. Big news, no clean trade.", next: ["regime", "breakhold"] },
+    regime: { stage: 0, title: "Market mood (regime)", one: "The regime is the market's current behavior: trending up, trending down, or chopping back and forth.",
+      body: ["Trending days reward breakout trades: a break tends to keep going.", "Choppy (two-way) days punish them: breaks often snap back.", "Your scout reports label the regime so you can compare it with how your trades went."],
+      yours: () => "Oct 9 was labeled CHANGING / two-way whipsaw in the morning. The 779.63 breakout reversed, and your 12:33 call stalled.", next: ["context", "breakhold"] },
+    context: { stage: 0, title: "Breadth, VIX, yields, oil", one: "These are side gauges that tell you whether the broad market agrees with the move.",
+      body: ["Breadth: how many stocks are rising vs falling. Many rising supports calls.", "VIX: expected volatility. Falling VIX usually goes with rising stocks.", "10-year yield and oil: sharply rising rates or oil often weigh on stocks.", "Your V2 rule only needs no known opposing signal. Stale data does not block you."],
+      yours: () => "On Oct 8 the S&P fell while about two-thirds of its stocks rose. Big tech dragged the index while breadth disagreed.", next: ["regime"] },
+    levels: { stage: 1, title: "Important levels", one: "A level is a price where the market turned or paused before, so traders watch it.",
+      body: ["Common ones: today's high and low, yesterday's close, the opening price, round numbers.", "Pick the level before price gets there. Choosing it after the move is hindsight.", "The Live check suggests today's high, low, open and prior close from Webull."],
+      yours: () => "Your Oct 9 call used 780.51, the prior intraday high.", next: ["breakhold"] },
+    breakhold: { stage: 1, title: "Break, hold and false breaks", one: "A break is price closing past your level. A hold is it staying there long enough to trust it.",
+      body: ["False break: price pokes through, then snaps back. Very common on choppy days.", "Waiting longer filters more false breaks but uses up more of the move.", "V1 waited 3–5 minutes. V2 waits 60 seconds. Your journal tests which works better.", "Auto-watch uses finished 1-minute candles: one closes past the level (break), the next never touches it (hold)."],
+      yours: () => { const m = S.missed[0]; return m ? `On ${dayName(m.date)} you waited for a ~5-minute hold and missed the move: ${money(num(m.hypoPnl), true)} hypothetical. That is why V2 shortened the wait.` : ""; }, next: ["callput", "levels"] },
+    callput: { stage: 2, title: "Calls and puts", one: "A call gains when the price goes up. A put gains when the price goes down.",
+      body: ["Buying either one, the most you can lose is what you paid (the premium).", "One contract covers 100 shares, so a $1.15 option costs $115.", "0DTE means it expires at 4:00 pm today. Every minute it gets closer to worthless unless price moves your way."],
+      yours: () => "Sep 28 you bought a put for $64 and sold it for $162 four minutes later because the price dropped fast.", next: ["strike", "theta"] },
+    strike: { stage: 2, title: "Strike and moneyness", one: "The strike is the price your option is based on. Where it sits relative to the market decides its cost.",
+      body: ["In the money (ITM): already has value. A 775 call when SPY is 778 is worth at least $3.", "At the money (ATM): strike near the current price. Most sensitive to small moves.", "Out of the money (OTM): pure time value. Cheap, but needs a bigger move."],
+      yours: () => "On Oct 9 you compared the 780C (Ask $1.15, delta 0.68) with the 781C (Ask $0.53, delta 0.45). The cheaper one needed more movement.", next: ["delta", "premium"] },
+    premium: { stage: 2, title: "What an option's price is made of", one: "Price = intrinsic value (how far in the money) + time value (the chance it gets there).",
+      body: ["Intrinsic value does not decay.", "Time value shrinks every minute and is zero at 4:00 pm.", "Higher implied volatility makes time value bigger."],
+      yours: () => "Try it in the simulator below: set minutes left to 5 and watch an out-of-the-money option go to almost zero.", next: ["theta", "iv"] },
+    delta: { stage: 2, title: "Delta", one: "Delta is roughly how many cents the option moves when the stock moves $1.",
+      body: ["Delta 0.50: SPY up $1 means the option is up about $0.50, or $50 per contract.", "Calls have positive delta, puts negative.", "Higher delta means it follows the price closely and costs more. Your rule aims for an Ask near $1.00."],
+      yours: () => { const t = findTrade("2026-10-09"); const d = t && debrief(t); return d ? `Oct 9: XSP moved ${sgn(d.move)} while you held. With delta ${d.delta}, that alone explains about ${money(d.deltaPart, true)} of your ${money(d.pnl, true)} result. The rest was time decay and lower volatility.` : ""; }, next: ["gamma", "theta"] },
+    gamma: { stage: 2, title: "Gamma", one: "Gamma is how fast delta itself changes. On expiry day it is very high.",
+      body: ["High gamma means small moves can double an option quickly, or wipe it out.", "This is why 0DTE options can jump 100%+ in minutes.", "Gamma works in both directions."],
+      yours: () => "Sep 28: XSP fell about $2 and your put went from $0.64 to $1.62 (+153%) in 4 minutes. That was gamma.", next: ["theta"] },
+    theta: { stage: 2, title: "Time decay (theta)", one: "Theta is how much value the option loses as time passes, if nothing else changes.",
+      body: ["On expiry day, decay speeds up through the afternoon.", "If price goes your way but too slowly, decay can still make you lose.", "This is why entries late in the day need a fast move."],
+      yours: () => "Sep 29: you entered a put at 1:05 pm. Price drifted the right way at first, but slowly. By 3:20 pm the put was worth $0.01. Time decay took almost all of it.", next: ["iv", "exit"] },
+    iv: { stage: 2, title: "Implied volatility", one: "IV is how much movement the market expects. Higher IV makes options cost more.",
+      body: ["IV often drops after a big scheduled event passes. This is called IV crush.", "Falling IV lowers your option's price even if the stock doesn't move.", "Vega is the Greek that measures this."],
+      yours: () => "Oct 9: the 779C's IV fell from 12.4% at 10:13 to 10.5% at 10:32 as the morning settled, quietly lowering call prices.", next: ["premium"] },
+    spread: { stage: 3, title: "Bid, ask and spread", one: "Ask is what buyers pay. Bid is what sellers get. The gap is the spread, and you pay it every trade.",
+      body: ["Your rule buys at the Ask and sells at the Bid, the honest worst case.", "Right after buying, your position is worth the Bid, so you start down by the spread.", "SPY options usually have tighter spreads than XSP, so this cost gets smaller."],
+      yours: () => { const t = findTrade("2026-10-09"); return t ? `Oct 9: Bid $${t.entryBid} / Ask $${t.entryAsk}. You were down $${((t.entryAsk - t.entryBid) * 100).toFixed(0)} the moment you entered.` : ""; }, next: ["size", "exit"] },
+    size: { stage: 3, title: "Position size and risk", one: "Decide how much you can lose before you enter. With bought options, the max loss is the premium.",
+      body: ["Your experiment uses one contract with an Ask near $1.00 (about $100).", "Never add to a losing 0DTE position (no averaging down). Your rules say No DCA.", "Paper trading is the right place to learn this. Real money adds emotion."],
+      yours: () => "With a $100 start, one losing $64 trade (Sep 29) wiped out most of a win. Size and exits matter more than win rate.", next: ["exit", "stats"] },
+    exit: { stage: 3, title: "Exit plan", one: "Know when you'll take profit and when you'll cut a loss before you enter.",
+      body: ["Profit: a fixed % gain, or when momentum stalls.", "Loss: a % loss, a time limit, or price returning across your level.", "Your exit study (option price 15, 30 and 60 minutes after exit) shows whether you left too early or too late."],
+      yours: () => "Sep 28 exit at $1.62 looked early: the put hit $2.01 nine minutes later, then fell to $0.28 by 1:23 pm. Taking the fast gain was right in the end.", next: ["stats"] },
+    stats: { stage: 4, title: "Win rate, payoff and break-even", one: "Win rate alone means little. What matters is win rate together with how big wins are vs losses.",
+      body: ["Payoff ratio = average win ÷ average loss.", "Break-even win rate = average loss ÷ (average win + average loss).", "A 33% win rate is profitable if wins are more than twice the size of losses."],
+      yours: () => { const s = st0(); const be = s.avgWin != null && s.avgLoss ? Math.abs(s.avgLoss) / (s.avgWin + Math.abs(s.avgLoss)) : null; return be != null ? `Your average win is ${money(s.avgWin)} and average loss ${money(s.avgLoss)}. You need ${pct(be, false)} wins to break even, and you're at ${pct(s.winRate, false)}.` : ""; }, next: ["sample"] },
+    sample: { stage: 4, title: "Sample size and rule versions", one: "A few trades prove nothing. You need enough trades under the same rules to see a real pattern.",
+      body: ["That's why rules are frozen in versions (V1, V2) and judged separately.", "Change one thing at a time so you know what made the difference.", "Missed setups count as evidence too. They show whether rules are too strict."],
+      yours: () => `You have ${st0().closed.length} closed official trades. Your plan reviews V2 after its first ${(S.cfg.targets || {}).V2 ?? 5}.`, next: ["stats"] },
+    timeofday: { stage: 4, title: "Time of day", one: "Markets often move most in the first 90 minutes, then slow down midday.",
+      body: ["Morning breaks may follow through better.", "Afternoon 0DTE trades fight fast time decay.", "Your Time of day table tests this with your own trades."],
+      yours: () => "So far: your morning trade won, your midday and afternoon trades lost. One trade each is far too few to conclude anything.", next: ["theta", "sample"] },
+    spyxsp: { stage: 2, title: "SPY vs XSP", one: "Both follow the S&P 500. SPY is a fund you can own, XSP is an index.",
+      body: ["SPY options settle into shares. Holding an in-the-money SPY option past 4:00 pm would turn into 100 shares (~$78,000). Always close before the bell.", "XSP options settle in cash.", "SPY options trade much more, so spreads are usually tighter."],
+      yours: () => "Your first trades were XSP. From now on you trade SPY, because Webull can stream SPY prices into the app.", next: ["spread"] },
+  };
+  const STAGES = [
+    ["1 · Market context", "What's happening in the world sets the mood.", ["catalysts", "regime", "context"]],
+    ["2 · Price action", "The mood shows up as moves through key prices.", ["levels", "breakhold"]],
+    ["3 · The option", "You pick a contract. Its price reacts to the move and to time.", ["callput", "strike", "premium", "delta", "gamma", "theta", "iv", "spyxsp"]],
+    ["4 · Execution", "How you get in and out decides what you keep.", ["spread", "size", "exit"]],
+    ["5 · Results", "The journal turns trades into evidence.", ["stats", "sample", "timeofday"]],
+  ];
+  function renderFlow() {
+    $("#flow").innerHTML = STAGES.map(([t, p, ids]) => `<div class="stage"><div class="label">${t}</div><p>${p}</p>${ids.map((id) => `<button class="concept${S.seen.has(id) ? " seen" : ""}" type="button" data-learn="${id}">${esc(LESSONS[id].title)}</button>`).join("")}</div>`).join("");
+    const n = Object.keys(LESSONS).length;
+    $("#learn-progress").textContent = `${[...S.seen].filter((k) => LESSONS[k]).length} of ${n} lessons read`;
+  }
+  function openLesson(id) {
+    const L = LESSONS[id]; if (!L) return;
+    S.seen.add(id); ls.set("learn.seen", [...S.seen]);
+    let yours = ""; try { yours = L.yours?.() || ""; } catch {}
+    formCtx = { coll: "lesson" };
+    form.innerHTML = `<div class="dlg lesson"><div class="panel-head" style="margin:0"><div><div class="label">${esc(STAGES[L.stage][0])}</div><h2>${esc(L.title)}</h2></div><button class="btn" value="cancel" formnovalidate>Close</button></div>
+      <p class="one">${esc(L.one)}</p><ul>${L.body.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+      ${yours ? `<div class="yours"><div class="label">In your journal</div>${esc(yours)}</div>` : ""}
+      <div class="row"><span class="small muted">Connects to:</span>${(L.next || []).map((n) => `<button class="btn sm" type="button" data-learn="${n}">${esc(LESSONS[n].title)}</button>`).join("")}<button class="btn sm" type="button" data-coach="${esc(L.title)}">Ask the coach about this</button></div></div>`;
+    if (!dlg.open) dlg.showModal();
+    renderFlow();
+  }
+  document.addEventListener("click", (e) => {
+    const l = e.target.closest("[data-learn]"); if (l) { e.preventDefault(); openLesson(l.dataset.learn); return; }
+    const c = e.target.closest("[data-coach]"); if (c) { e.preventDefault(); if (dlg.open) dlg.close(); showView("learn"); askCoach(c.dataset.coachQ || `Explain "${c.dataset.coach}" simply, using my own trades as examples.`); }
+  });
+
+  // ---------- simulator ----------
+  function renderSim() {
+    const S0 = num($("#sim-s").value) ?? (LIVE.snap ? num(LIVE.snap.price) : 778);
+    if (!$("#sim-s").value) $("#sim-s").value = S0.toFixed(2);
+    if (!$("#sim-k").value) $("#sim-k").value = Math.round(S0);
+    const type = $("#sim-type").value, K = num($("#sim-k").value), iv = num($("#sim-iv").value) || 14;
+    const mins = +$("#sim-mins").value, move = +$("#sim-move").value, wait = Math.min(+$("#sim-wait").value, mins - 1);
+    const h = Math.floor(mins / 60), m = mins % 60;
+    $("#sim-mins-v").textContent = `${h ? h + "h " : ""}${m}m (about ${fmtClock(960 - mins)})`;
+    $("#sim-move-v").textContent = `${move >= 0 ? "+" : "−"}$${Math.abs(move).toFixed(2)}`;
+    $("#sim-wait-v").textContent = `${wait} min`;
+    const now = bs(type, S0, K, iv, mins), later = bs(type, S0 + move, K, iv, mins - wait);
+    const moveOnly = bs0(type, S0 + move, K, iv, mins), timeOnly = later.price - moveOnly;
+    const pl = (later.price - now.price) * 100;
+    $("#sim-out").innerHTML = `
+      <div><div class="label">Value now</div><div class="v">${px(now.price)}</div><div class="small muted">${money(now.price * 100)} per contract</div></div>
+      <div><div class="label">After ${wait} min</div><div class="v">${px(later.price)}</div><div class="small ${cls(pl)}">${money(pl, true)} (${pct(now.price ? (later.price - now.price) / now.price : 0)})</div></div>
+      <div><div class="label">Delta</div><div class="v">${now.delta.toFixed(2)}</div><div class="small muted">≈ ${money(Math.abs(now.delta) * 100)} per $1 move</div></div>
+      <div><div class="label">Time decay</div><div class="v">${money(now.thetaPerMin * 100)}</div><div class="small muted">per contract, per minute, right now</div></div>`;
+    $("#sim-breakdown").innerHTML = `<div><span>Price move of ${$("#sim-move-v").textContent}</span><span class="mono ${cls(moveOnly - now.price)}">${money((moveOnly - now.price) * 100, true)}</span></div><div><span>${wait} minutes of time decay</span><span class="mono ${cls(timeOnly)}">${money(timeOnly * 100, true)}</span></div><div><span>Total per contract</span><span class="mono ${cls(pl)}">${money(pl, true)}</span></div>`;
+    const ofm = type === "call" ? S0 < K : S0 > K;
+    $("#sim-why").textContent = pl < 0 && (type === "call" ? move > 0 : move < 0)
+      ? "The price moved your way, but not fast enough to beat time decay. That's what happened on Sep 29."
+      : Math.abs(timeOnly) > Math.abs(moveOnly - now.price) ? "Time decay is the bigger force here. Try a bigger move, a shorter wait, or more minutes left in the day."
+      : ofm ? "This option is out of the money, so it's all time value. It needs the move to arrive quickly."
+      : "The move is doing most of the work. Try a 0 wait with fewer minutes left to see how fast decay speeds up near the close.";
+    // chart: option value vs SPY price, now vs after the wait
+    const W = 560, H = 210, L = 46, R = 12, T = 14, B = 28, lo = S0 - Math.max(3, Math.abs(move) + 1), hi = S0 + Math.max(3, Math.abs(move) + 1), n = 60;
+    const xs = Array.from({ length: n + 1 }, (_, i) => lo + (i * (hi - lo)) / n);
+    const a = xs.map((s) => bs0(type, s, K, iv, mins)), b = xs.map((s) => bs0(type, s, K, iv, Math.max(mins - wait, 0.01)));
+    const ymax = Math.max(...a, ...b, 0.5), ticks = niceTicks(0, ymax);
+    const X = (s) => L + ((s - lo) / (hi - lo)) * (W - L - R), Y = (v) => T + (1 - v / ticks[ticks.length - 1]) * (H - T - B);
+    const path = (arr) => arr.map((v, i) => `${i ? "L" : "M"}${X(xs[i]).toFixed(1)},${Y(v).toFixed(1)}`).join("");
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Option value across ${U()} prices, now and after the wait">`;
+    ticks.forEach((t) => { svg += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${Y(t)}" y2="${Y(t)}"/><text x="${L - 6}" y="${Y(t) + 4}" text-anchor="end">$${t}</text>`; });
+    [lo, S0, hi].forEach((s, i) => { svg += `<text x="${X(s)}" y="${H - 8}" text-anchor="${["start", "middle", "end"][i]}">${s.toFixed(0)}</text>`; });
+    svg += `<line x1="${X(K)}" x2="${X(K)}" y1="${T}" y2="${H - B}" stroke="var(--faint)" stroke-dasharray="3 3"/><text x="${X(K) + 4}" y="${T + 10}">strike</text>`;
+    svg += `<path d="${path(a)}" fill="none" stroke="var(--gain)" stroke-width="2"/><path d="${path(b)}" fill="none" stroke="var(--later)" stroke-width="2"/>`;
+    svg += `<circle cx="${X(S0)}" cy="${Y(now.price)}" r="5" fill="var(--gain)" stroke="var(--panel)" stroke-width="2"/><circle cx="${X(S0 + move)}" cy="${Y(later.price)}" r="5" fill="var(--later)" stroke="var(--panel)" stroke-width="2"/>`;
+    svg += `<text x="${X(S0) + 8}" y="${Y(now.price) - 8}" style="fill:var(--ink)">${px(now.price)}</text><text x="${X(S0 + move) + 8}" y="${Y(later.price) + 16}" style="fill:var(--ink)">${px(later.price)}</text>`;
+    $("#sim-chart").innerHTML = svg + "</svg>";
+  }
+  const fmtClock = (m) => { const h = Math.floor(m / 60), mm = m % 60; return `${((h + 11) % 12) + 1}:${String(mm).padStart(2, "0")} ${h >= 12 ? "pm" : "am"}`; };
+  ["sim-type", "sim-s", "sim-k", "sim-iv", "sim-mins", "sim-move", "sim-wait"].forEach((id) => $("#" + id).addEventListener("input", renderSim));
+
+  // ---------- coach ----------
+  let coachCtl = null;
+  function journalBrief() {
+    const s = stats();
+    const trades = s.all.slice(-8).map((t) => { const c = calc(t), d = debrief(t); return `- ${t.date} ${uOf(t)} ${contractName(t)} ${t.version} ${t.status}: entry ${t.entryTime} @ ${c.entry}, exit ${t.exitTime || "open"} @ ${c.exit ?? "-"}, P/L ${c.pnl ?? "open"}, delta ${t.delta ?? "?"}${d ? `, underlying moved ${d.move.toFixed(2)}, delta explains ${d.deltaPart.toFixed(0)}, other ${d.other.toFixed(0)}` : ""}. Notes: ${(t.notes || "").slice(0, 400)}`; }).join("\n");
+    const rules = (S.cfg.rules || []).map((r) => `- ${r.name}: ${r.text}`).join("\n");
+    const sc = [...S.scout].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).slice(0, 3).map((r) => `- ${r.date} ${r.time} ${r.scout}: ${r.headline} | ${r.regime} | ${r.assessment}`).join("\n");
+    return `PAPER-TRADING JOURNAL (learning only, no real money)\nNow trading: ${U()} 0DTE options; earlier trades were XSP.\nBalance ${s.bal} from ${S.cfg.startBalance}; ${s.closed.length} closed official trades; win rate ${s.winRate != null ? (s.winRate * 100).toFixed(0) + "%" : "-"}; avg win ${s.avgWin ?? "-"}; avg loss ${s.avgLoss ?? "-"}.\nMissed setups: ${S.missed.map((m) => `${m.date} ${m.contract} hypothetical ${m.hypoPnl}`).join("; ") || "none"}\nRULES:\n${rules}\nRECENT TRADES:\n${trades}\nLATEST SCOUT REPORTS:\n${sc}`;
+  }
+  async function askCoach(q) {
+    q = (q || "").trim(); if (!q) return;
+    $("#coach-q").value = q;
+    const out = $("#coach-out");
+    if (!S.sample) { out.textContent = "The coach isn't available in this view. Open the journal on claude.ai while signed in."; return; }
+    coachCtl?.abort(); coachCtl = new AbortController();
+    out.textContent = "Thinking…"; $("#coach-ask").disabled = true; $("#coach-stop").hidden = false;
+    out.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    const prompt = `You are a patient options-trading teacher for a beginner who is paper trading (no real money) to learn. Explain simply, in plain words, short paragraphs or a few bullets, under 220 words. Define any jargon the first time you use it. Use their actual trades and numbers when relevant. Connect ideas (news → regime → levels → option Greeks → spread and exits → stats). Teach; do not tell them what to buy, and do not promise profits. If the journal lacks the data, say so.\n\n${journalBrief()}\n\nQUESTION: ${q}`;
+    try {
+      await S.sample(prompt, { signal: coachCtl.signal, cache: false, onText: ({ text }) => { out.textContent = text; } });
+    } catch (e) {
+      if (e.text) out.textContent = e.text;
+      const msg = { cancelled: "", not_granted: "The coach needs permission to use Claude. Allow it when asked, or from the page's permissions.", sampling_disabled: "Claude isn't available for this account.", rate_limited: "Too many questions in a short time. Try again in a minute.", session_expired: "Sign in to claude.ai again, then ask.", refused: "Claude couldn't answer that one. Try asking it differently." }[e.code];
+      if (msg !== "") out.textContent = (e.text ? e.text + "\n\n" : "") + (msg || "Something interrupted the answer. Ask again.");
+    } finally { $("#coach-ask").disabled = false; $("#coach-stop").hidden = true; }
+  }
+  $("#coach-ask").addEventListener("click", () => askCoach($("#coach-q").value));
+  $("#coach-q").addEventListener("keydown", (e) => { if (e.key === "Enter") askCoach($("#coach-q").value); });
+  $("#coach-stop").addEventListener("click", () => coachCtl?.abort());
+  $("#coach-chips").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (c) askCoach(c.textContent); });
 
   // ---------- forms ----------
   const F = {
     trades: [
       ["date", "Date", "date"], ["status", "Counts toward balance", "select", [["official", "Official"], ["pre-quarter", "No · pre-quarter / practice"]]],
-      ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2"]]], ["qual", "Rule check", "select", [["verified", "Verified"], ["pending", "Pending review"], ["not", "Not qualified"]]],
+      ["underlying", "Underlying", "select", [["SPY", "SPY"], ["XSP", "XSP"]]], ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2"]]], ["qual", "Rule check", "select", [["verified", "Verified"], ["pending", "Pending review"], ["not", "Not qualified"]]],
       ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["strike", "Strike", "number"], ["expiry", "Expiry", "text"], ["qty", "Contracts", "number"],
       ["level", "Important level / trigger", "text", null, "wide"],
       ["signalTime", "Signal (ET)", "time"], ["entryTime", "Entry (ET)", "time"], ["exitTime", "Exit (ET)", "time"], ["catalyst", "Catalyst class", "select", [["", "–"], ["BIG", "BIG"], ["MODERATE", "MODERATE"], ["SMALL", "SMALL"], ["NONE", "None"]]],
       ["entryBid", "Entry Bid", "number"], ["entryAsk", "Entry Ask", "number"], ["exitBid", "Exit Bid", "number"], ["exitAsk", "Exit Ask", "number"],
       ["entryPrice", "Entry fill (blank = Ask)", "number"], ["exitPrice", "Exit fill (blank = Bid)", "number"], ["delta", "Delta at entry", "number"],
+      ["entryUnderlying", "Underlying at entry", "number"], ["exitUnderlying", "Underlying at exit", "number"],
       ["m15", "Bid 15m after exit", "number"], ["m30", "Bid 30m after", "number"], ["m60", "Bid 60m after", "number"],
       ["notes", "Notes", "textarea", null, "wide"],
     ],
@@ -766,10 +1176,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["headline", "Headline / catalyst", "text", null, "wide"], ["assessment", "Rule check (e.g. WAIT, NO TRADE)", "text", null, "wide"],
       ["notes", "Full report text", "textarea", null, "wide"],
     ],
-    rules: null,
   };
   const TITLES = { trades: ["Add trade", "Edit trade"], missed: ["Add missed setup", "Edit missed setup"], scout: ["Add report", "Edit report"] };
-  const numericKeys = new Set(["strike", "qty", "entryBid", "entryAsk", "exitBid", "exitAsk", "entryPrice", "exitPrice", "delta", "m15", "m30", "m60", "hypoPnl"]);
+  const numericKeys = new Set(["strike", "qty", "entryBid", "entryAsk", "exitBid", "exitAsk", "entryPrice", "exitPrice", "delta", "entryUnderlying", "exitUnderlying", "m15", "m30", "m60", "hypoPnl"]);
 
   function fieldHtml([k, label, type, opts, wide], v) {
     const id = "f-" + k, val = v ?? "";
@@ -779,25 +1188,36 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     else input = `<input id="${id}" name="${k}" type="${type}"${type === "number" ? ' step="any" inputmode="decimal"' : ""} value="${esc(val)}">`;
     return `<div class="field${wide ? " wide" : ""}"><label for="${id}">${esc(label)}</label>${input}</div>`;
   }
+  function debriefHtml(t) {
+    const d = debrief(t);
+    if (!d) return calc(t).open ? "" : `<div class="yours"><div class="label">What moved your option</div>Add delta, and the underlying price at entry and exit, to see how much came from the price move and how much from time decay.</div>`;
+    const u = uOf(t);
+    return `<div class="yours"><div class="label">What moved your option <button class="q" type="button" data-learn="delta" aria-label="Explain">?</button></div>
+      <div class="breakdown" style="margin-top:6px"><div><span>${u} moved ${sgn(d.move)} × delta ${d.delta} × 100</span><span class="mono ${cls(d.deltaPart)}">${money(d.deltaPart, true)}</span></div>
+      <div><span>Time decay, volatility and gamma over ${d.mins} min</span><span class="mono ${cls(d.other)}">${money(d.other, true)}</span></div>
+      <div><span>Your actual result</span><span class="mono ${cls(d.pnl)}">${money(d.pnl, true)}</span></div></div>
+      <p class="small" style="margin-top:8px">${Math.abs(d.other) > Math.abs(d.deltaPart) ? `Most of this result came from time and volatility, not from ${u}'s move.` : `Most of this result came from ${u}'s move.`} Delta changes as price moves, so treat this as a rough split.</p></div>`;
+  }
   const dlg = $("#dlg"), form = $("#dlg-form");
   let formCtx = null;
   function openForm(coll, rec, preset) {
     const now = etParts();
-    const defaults = { trades: { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "XSP News Scout" } }[coll];
-    const data = rec ? { ...rec } : { ...defaults, ...(preset || {}) };
+    const defaults = { trades: { date: now.date, status: "official", underlying: U(), version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "XSP News Scout" } }[coll];
+    const data = rec ? { underlying: coll === "trades" ? uOf(rec) : undefined, ...rec } : { ...defaults, ...(preset || {}) };
     formCtx = { coll, id: rec?.id || null, base: rec ? stripId(rec) : {} };
     form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>${TITLES[coll][rec ? 1 : 0]}</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
+      ${coll === "trades" && rec ? debriefHtml(rec) + `<div class="row"><button class="btn sm" type="button" data-coach="trade" data-coach-q="${esc(`Walk me through my ${rec.date} ${uOf(rec)} ${contractName(rec)} trade: what went right, what went wrong, and what it teaches me.`)}">Ask the coach about this trade</button></div>` : ""}
       ${coll === "trades" ? '<div class="calc" id="f-calc"></div>' : ""}
       <div class="fields">${F[coll].map((f) => fieldHtml(f, data[f[0]])).join("")}</div>
       ${coll === "trades" && rec?.checkpoints?.length ? `<div><div class="label" style="margin-bottom:6px">Checkpoints</div><div class="cp">${rec.checkpoints.map((c) => `<span class="mono">${esc(c.t)}</span><span class="mono">${esc(c.xsp ?? "–")}</span><span class="mono">Bid ${px(num(c.bid))} / Ask ${px(num(c.ask))}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ""}</span>`).join("")}</div></div>` : ""}
       </div><div class="dlg-foot"><div>${rec ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
-    if (coll === "trades") { const upd = () => { const v = collect(); const c = calc(v); $("#f-calc").innerHTML = `<span>Cost <b>${money(c.cost)}</b></span><span>Proceeds <b>${money(c.proceeds)}</b></span><span>P/L <b class="${cls(c.pnl)}">${money(c.pnl, true)}</b></span><span>Return <b>${pct(c.ret)}</b></span><span>Entry spread <b>${num(v.entryAsk) != null && num(v.entryBid) != null ? money((v.entryAsk - v.entryBid) * 100) : "–"}</b></span>${c.open ? '<span class="pill info">open</span>' : ""}`; }; form.addEventListener("input", upd); upd(); }
+    if (coll === "trades") { const upd = () => { const v = collect(); const c = calc(v); $("#f-calc").innerHTML = `<span>Cost <b>${money(c.cost)}</b></span><span>Proceeds <b>${money(c.proceeds)}</b></span><span>P/L <b class="${cls(c.pnl)}">${money(c.pnl, true)}</b></span><span>Return <b>${pct(c.ret)}</b></span><span>Entry spread <b>${num(v.entryAsk) != null && num(v.entryBid) != null ? money((v.entryAsk - v.entryBid) * 100) : "–"}</b></span>${c.open ? '<span class="pill info">open</span>' : ""}`; }; form.oninput = upd; upd(); } else form.oninput = null;
     const del = $("#f-del");
     if (del) del.addEventListener("click", async () => {
       if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = "Click again to delete"; return; }
       if (await remove(formCtx.coll, formCtx.id)) { dlg.close(); toast("Deleted."); }
     });
-    dlg.showModal();
+    if (!dlg.open) dlg.showModal();
   }
   function collect() {
     const out = {};
@@ -806,29 +1226,27 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (e.submitter?.value !== "save") return dlg.close();
-    const v = collect();
-    const doc = { ...formCtx.base, ...v };
+    if (e.submitter?.value !== "save" || !["trades", "missed", "scout"].includes(formCtx?.coll)) return dlg.close();
+    const doc = { ...formCtx.base, ...collect() };
     if (!formCtx.id) doc.createdAt = Date.now();
     if (await save(formCtx.coll, formCtx.id, doc)) { dlg.close(); toast("Saved."); }
   });
   form.addEventListener("click", (e) => { if (e.target.value === "cancel") { e.preventDefault(); dlg.close(); } });
-  function openTrade(t) { if (t) openForm("trades", t); }
   $("#new-trade").addEventListener("click", () => openForm("trades"));
   $("#new-missed").addEventListener("click", () => openForm("missed"));
   $("#new-scout").addEventListener("click", () => openForm("scout"));
   $("#edit-rules").addEventListener("click", () => {
     const rules = S.cfg.rules || [];
-    formCtx = { coll: "rules" };
+    formCtx = { coll: "rules" }; form.oninput = null;
     form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>Edit rules</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
-      <div class="fields">${fieldHtml(["currentVersion", "Current rule version", "text"], S.cfg.currentVersion)}${fieldHtml(["startBalance", "Starting balance", "number"], S.cfg.startBalance)}${fieldHtml(["quarterStart", "Quarter start", "date"], S.cfg.quarterStart)}${fieldHtml(["quarterEnd", "Quarter end", "date"], S.cfg.quarterEnd)}</div>
+      <div class="fields">${fieldHtml(["currentVersion", "Current rule version", "text"], S.cfg.currentVersion)}${fieldHtml(["underlyingCfg", "Trading", "select", [["SPY", "SPY"], ["XSP", "XSP"]]], U())}${fieldHtml(["startBalance", "Starting balance", "number"], S.cfg.startBalance)}${fieldHtml(["quarterStart", "Quarter start", "date"], S.cfg.quarterStart)}${fieldHtml(["quarterEnd", "Quarter end", "date"], S.cfg.quarterEnd)}</div>
       ${fieldHtml(["rulesText", "One rule per line, written as Name: rule", "textarea", null, "wide"], rules.map((r) => `${r.name}: ${r.text}`).join("\n"))}
       </div><div class="dlg-foot"><span></span><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="button" id="rules-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
     $("#f-rulesText").style.minHeight = "260px";
     $("#rules-save").addEventListener("click", async () => {
       const rulesOut = $("#f-rulesText").value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(":"); return i > 0 ? { name: l.slice(0, i).trim(), text: l.slice(i + 1).trim() } : { name: "Rule", text: l }; });
-      const cfg = { ...S.cfg, currentVersion: $("#f-currentVersion").value || "V2", startBalance: num($("#f-startBalance").value) ?? 100, quarterStart: $("#f-quarterStart").value, quarterEnd: $("#f-quarterEnd").value, rules: rulesOut };
-      if (await save("config", "main", cfg)) { dlg.close(); toast("Rules saved."); }
+      const cfg = { ...S.cfg, currentVersion: $("#f-currentVersion").value || "V2", underlying: $("#f-underlyingCfg").value, startBalance: num($("#f-startBalance").value) ?? 100, quarterStart: $("#f-quarterStart").value, quarterEnd: $("#f-quarterEnd").value, rules: rulesOut };
+      if (await save("config", "main", cfg)) { dlg.close(); toast("Rules saved."); LIVE.bars = []; schedulePoll(0); }
     });
     dlg.showModal();
   });
@@ -853,22 +1271,30 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
 
   // ---------- boot ----------
-  setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (LC.breakAt && view === "live") renderLive(); }, 500);
+  showView(["dash", "live", "journal", "news", "learn"].includes(view) ? view : "dash");
+  setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
+  const use = (n) => (window.claude?.use ? window.claude.use(n).catch(() => null) : Promise.resolve(null));
   (async () => {
-    const db = await (window.claude?.use ? window.claude.use("db") : null);
+    const db = await use("db");
     if (!db) {
       const b = $("#banner"); b.hidden = false;
       b.textContent = "Your journal data isn't available in this view. Open the journal from claude.ai while signed in to see and save your trades.";
       renderAll(); return;
     }
     S.db = db;
-    try { const user = await window.claude.use("user"); const w = user && (await user.can?.("data.write")); if (w === false) S.canWrite = false; } catch {}
+    try { const user = await use("user"); const w = user && (await user.can?.("data.write")); if (w === false) S.canWrite = false; } catch {}
     const onErr = () => { const b = $("#banner"); b.hidden = false; b.textContent = "Live updates stopped. Reload the page to reconnect."; };
     const listen = (coll, key) => db.collection(coll).onSnapshot((snap) => { S[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderAll(); }, onErr);
     listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout");
-    db.doc("config/main").onSnapshot((d) => { S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; renderAll(); }, onErr);
+    db.doc("config/main").onSnapshot((d) => { const prevU = U(); S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; if (U() !== prevU) { LIVE.bars = []; LIVE.snap = null; schedulePoll(0); } renderAll(); }, onErr);
+  })();
+  (async () => { S.sample = await use("sample"); })();
+  (async () => {
+    const mcp = await use("mcp");
+    if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); return; }
+    S.mcp = mcp; schedulePoll(0);
   })();
 })();
 </script>
