@@ -231,7 +231,7 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .breakdown div:last-child { border-bottom: 0; font-weight: 600; }
 
 /* Practice: coach + broker panel */
-.coach { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 100px); z-index: 2; box-shadow: 0 4px 14px rgba(0,0,0,.06); border-radius: 10px; padding: 14px 16px; background: var(--info-bg); border: 1px solid var(--accent); display: grid; gap: 8px; }
+.coach { border-radius: 10px; padding: 14px 16px; background: var(--info-bg); border: 1px solid var(--accent); display: grid; gap: 8px; }
 .coach.go { background: var(--good-bg); border-color: var(--good); }
 .coach.warn { background: var(--warn-bg); border-color: var(--warn); }
 .coach.win { background: var(--good-bg); border-color: var(--good); }
@@ -253,6 +253,7 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .chain { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 12.5px; }
 .chain th { font-family: var(--body); font-size: 11px; text-transform: none; letter-spacing: 0; padding: 4px; text-align: center; }
 .chain td { padding: 3px 4px; text-align: center; border-bottom: 1px solid var(--line); }
+@media (max-width: 480px) { .chain .dl { display: none; } .chain th.cs { text-align: center; } }
 .chain td.k { font-weight: 700; background: var(--panel-2); }
 .chain tr.atm td.k { background: var(--accent); color: var(--accent-ink); }
 .chain td.itm { background: color-mix(in srgb, var(--accent) 7%, transparent); }
@@ -265,6 +266,16 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .ticket .ba { display: flex; gap: 12px; font-family: var(--mono); font-size: 12.5px; }
 .ticket .preview { border: 1px solid var(--line); border-radius: 6px; padding: 10px; background: var(--panel-2); display: grid; gap: 4px; }
 .b-pos td, .b-pos th { padding: 6px 4px; }
+
+@media (min-width: 861px) { .coach { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 100px); z-index: 2; box-shadow: 0 4px 14px rgba(0,0,0,.06); } }
+.rp-mini { display: none; }
+@media (max-width: 860px) {
+  .top { position: static; }
+  .rp-mini:not([hidden]) { display: flex; position: fixed; left: 8px; right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); z-index: 15; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 10px; background: var(--ink); color: var(--bg); font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+  .rp-mini span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .rp-mini button { border: 0; border-radius: 6px; padding: 6px 10px; background: var(--accent); color: var(--accent-ink); font-weight: 600; white-space: nowrap; }
+  #view-practice { padding-bottom: 70px; }
+}
 
 /* Practice */
 .rp-steps { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0 0 14px; counter-reset: s; }
@@ -695,6 +706,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
 <input type="file" id="shot-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
 <div class="toast" id="toast" hidden></div>
+<div class="rp-mini" id="rp-mini" hidden><span id="rp-mini-text"></span><button type="button" id="rp-mini-go">Steps ↑</button></div>
 <div class="alertbar" id="alertbar" role="alert" hidden></div>
 
 <script>
@@ -795,6 +807,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (v === "practice" && !$("#rp-date").options.length) rpInitDates();
     if (v === "news") { gFlag("news", 1); gFlag("newsAt", +etParts().hm.replace(":", "")); }
     if (v !== "practice" && RP.playing) rpPause();
+    if (v !== "practice") $("#rp-mini").hidden = true;
     renderSugg();
     schedulePoll(0);
   }
@@ -1931,6 +1944,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function coachSteps(list) { let now = false; return `<ol>${list.map(([txt, done]) => { const c = done ? "done" : !now ? ((now = true), "now") : ""; return `<li class="${c}">${txt}</li>`; }).join("")}</ol>`; }
   function renderCoach() {
     const m = coachModel(), el = $("#rp-coach");
+    // phone: a one-line reminder at the bottom while the full coach is scrolled out of view
+    const mini = $("#rp-mini"), r = el.getBoundingClientRect();
+    mini.hidden = !(view === "practice" && RP.bars.length && (r.bottom < 0 || r.top > window.innerHeight));
+    if (!mini.hidden) $("#rp-mini-text").textContent = m.title.replace(/<[^>]+>/g, "");
     if (m.key !== RP.coachKey) {
       RP.coachKey = m.key; el.className = "coach " + (m.cls || "");
       el.innerHTML = `<div class="c-title">${m.title}</div>${m.body}${m.buttons ? `<div class="row">${m.buttons.map(([a, l, primary]) => `<button class="btn sm${primary ? " primary" : ""}" type="button" data-coach-act="${a}">${esc(l)}</button>`).join("")}</div>` : ""}`;
@@ -1942,6 +1959,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (p) { const q = rpQuote(p.dir, p.strike), pl = (q.bid - p.avg) * 100 * p.qty; const e1 = $("#c-pl"); if (e1) { e1.textContent = money(Math.round(pl * 100) / 100, true); e1.className = "pl " + cls_(pl); } const e2 = $("#c-bid"); if (e2) e2.textContent = px(q.bid); const e3 = $("#c-left"); if (e3) e3.textContent = `${Math.max(0, Math.ceil(p.timeStop - rpMinute()))} min`; }
     const wb = RP.orders.find((o) => o.status === "working" && o.action === "BTO"), ca = $("#c-ask"); if (ca && wb) ca.textContent = px(rpQuote(wb.dir, wb.strike).ask);
   }
+  $("#rp-mini-go").addEventListener("click", () => $("#rp-coach").scrollIntoView({ block: "start", behavior: "smooth" }));
+  window.addEventListener("scroll", () => { if (view === "practice" && RP.bars.length) renderCoach(); }, { passive: true });
   $("#rp-coach").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-coach-act]"); if (!b) return;
     const a = b.dataset.coachAct;
@@ -1972,10 +1991,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (RP.tab === "chain") {
       const ks = Array.from({ length: 11 }, (_, i) => center - 5 + i), sg = RP.signal;
       return `<div class="row" style="justify-content:space-between;margin-bottom:6px"><span class="small"><b>Expiration:</b> ${esc(dayName(RP.date))} (0 days)</span><span class="small muted">Click an Ask to buy, a Bid to sell</span></div>
-        <div class="tbl-wrap"><table class="chain"><thead><tr><th colspan="3">Calls</th><th></th><th colspan="3">Puts</th></tr><tr><th>Bid</th><th>Ask</th><th>Delta</th><th>Strike</th><th>Bid</th><th>Ask</th><th>Delta</th></tr></thead><tbody>${ks.map((k) => `<tr data-k="${k}"${k === center ? ' class="atm"' : ""}${sg && sg.strike === k ? ' style="outline:2px solid var(--good)"' : ""}>
-          <td data-c="call-bid-${k}"><button class="px bid" type="button" data-o="STC:call:${k}">–</button></td><td><button class="px ask" type="button" data-o="BTO:call:${k}" data-c="call-ask-${k}">–</button></td><td data-c="call-d-${k}">–</td>
+        <div class="tbl-wrap"><table class="chain"><thead><tr><th colspan="3" class="cs">Calls</th><th></th><th colspan="3" class="cs">Puts</th></tr><tr><th>Bid</th><th>Ask</th><th class="dl">Delta</th><th>Strike</th><th>Bid</th><th>Ask</th><th class="dl">Delta</th></tr></thead><tbody>${ks.map((k) => `<tr data-k="${k}"${k === center ? ' class="atm"' : ""}${sg && sg.strike === k ? ' style="outline:2px solid var(--good)"' : ""}>
+          <td data-c="call-bid-${k}"><button class="px bid" type="button" data-o="STC:call:${k}">–</button></td><td><button class="px ask" type="button" data-o="BTO:call:${k}" data-c="call-ask-${k}">–</button></td><td class="dl" data-c="call-d-${k}">–</td>
           <td class="k">${k}</td>
-          <td><button class="px bid" type="button" data-o="STC:put:${k}" data-c="put-bid-${k}">–</button></td><td><button class="px ask" type="button" data-o="BTO:put:${k}" data-c="put-ask-${k}">–</button></td><td data-c="put-d-${k}">–</td></tr>`).join("")}</tbody></table></div>`;
+          <td><button class="px bid" type="button" data-o="STC:put:${k}" data-c="put-bid-${k}">–</button></td><td><button class="px ask" type="button" data-o="BTO:put:${k}" data-c="put-ask-${k}">–</button></td><td class="dl" data-c="put-d-${k}">–</td></tr>`).join("")}</tbody></table></div>`;
     }
     if (RP.tab === "trade") {
       const t = RP.ticket;
