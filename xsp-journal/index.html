@@ -1,0 +1,874 @@
+<title>XSP Quarter Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a trading-desk journal. A sticky tab bar over four working views; summary first, detail below. */
+:root {
+  --bg: #f3f5f8;
+  --panel: #ffffff;
+  --panel-2: #eef2f6;
+  --ink: #131d28;
+  --muted: #5a6776;
+  --faint: #8a96a3;
+  --line: #dbe2ea;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --gain: #2a78d6;
+  --loss: #d64545;
+  --good: #0c8a0c;
+  --warn: #b77d00;
+  --bad: #c43535;
+  --good-bg: #e3f3e3;
+  --warn-bg: #fbf0d6;
+  --bad-bg: #f9e1e1;
+  --info-bg: #e2edfa;
+  --grid: #e7ecf1;
+  --display: "Barlow Condensed", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --panel: #171f28; --panel-2: #1d2731; --ink: #e6ecf2; --muted: #9eabb8; --faint: #6f7c89;
+    --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767;
+    --good: #3fbf3f; --warn: #e8a92c; --bad: #ec6b6b; --good-bg: #183019; --warn-bg: #33290f; --bad-bg: #3a1b1b; --info-bg: #182a40;
+    --grid: #222c37; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --panel: #171f28; --panel-2: #1d2731; --ink: #e6ecf2; --muted: #9eabb8; --faint: #6f7c89;
+  --line: #2a3541; --accent: #3987e5; --accent-ink: #ffffff; --gain: #4a93ea; --loss: #e66767;
+  --good: #3fbf3f; --warn: #e8a92c; --bad: #ec6b6b; --good-bg: #183019; --warn-bg: #33290f; --bad-bg: #3a1b1b; --info-bg: #182a40;
+  --grid: #222c37; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
+.num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; text-wrap: balance; }
+h2 { font-size: 22px; }
+h3 { font-size: 17px; }
+.label { font-family: var(--display); text-transform: uppercase; letter-spacing: .08em; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Top bar */
+.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; padding-block: 12px 0; }
+.brand { display: flex; align-items: baseline; gap: 10px; flex: 1 1 auto; min-width: 0; }
+.brand h1 { font-size: 26px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.brand .tick { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; width: 100%; }
+.tab { border: 0; background: none; padding: 10px 14px 9px; cursor: pointer; font-family: var(--display); font-size: 16px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
+.tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 6px; vertical-align: 2px; }
+
+.banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; background: var(--warn-bg); color: var(--ink); font-size: 13px; }
+.view { display: grid; gap: 18px; padding-top: 18px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; margin-bottom: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+
+/* KPI strip */
+.kpis { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+.kpi { padding: 14px 16px; border-left: 1px solid var(--line); min-width: 0; }
+.kpi:first-child { border-left: 0; }
+.kpi .v { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 22px; font-weight: 500; margin-top: 4px; }
+.kpi.hero .v { font-family: var(--display); font-size: 44px; font-weight: 700; line-height: 1; letter-spacing: .01em; }
+.kpi .s { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
+.up { color: var(--gain); } .down { color: var(--loss); }
+@media (max-width: 820px) { .kpis { grid-template-columns: 1fr 1fr; } .kpi { border-left: 0; border-top: 1px solid var(--line); } .kpi.hero { grid-column: 1 / -1; border-top: 0; } .kpi:nth-child(odd):not(.hero) { border-left: 1px solid var(--line); } }
+
+.meter { height: 8px; border-radius: 4px; background: var(--panel-2); overflow: hidden; margin-top: 8px; display: flex; gap: 2px; }
+.meter i { display: block; flex: 1; background: var(--grid); }
+.meter i.on { background: var(--good); }
+.meter i.pend { background: var(--warn); }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; background: var(--panel-2); color: var(--muted); }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.info { background: var(--info-bg); color: var(--accent); }
+.pill.plain::before { display: none; }
+
+/* Charts */
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.chart text { fill: var(--muted); font-family: var(--mono); font-size: 11px; }
+.chart .gridline { stroke: var(--grid); stroke-width: 1; }
+.chart .zero { stroke: var(--faint); stroke-width: 1; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--bg); padding: 7px 9px; border-radius: 6px; font-size: 12px; line-height: 1.35; white-space: nowrap; transform: translate(-50%, calc(-100% - 10px)); z-index: 3; }
+.tip b { font-family: var(--mono); font-weight: 500; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; background: var(--c); }
+
+/* Tables */
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-family: var(--display); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; font-size: 12px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+td.n, th.n { text-align: right; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--panel-2); }
+tr.faded td { color: var(--faint); }
+.bar-cell { width: 120px; }
+.hbar { position: relative; height: 10px; }
+.hbar::before { content: ""; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--faint); }
+.hbar i { position: absolute; top: 0; height: 10px; border-radius: 2px; }
+
+/* Buttons and forms */
+.btn { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--panel); padding: 8px 14px; border-radius: 6px; cursor: pointer; font-weight: 500; }
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.danger { color: var(--bad); }
+.btn.danger.armed { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.big { padding: 12px 18px; font-size: 15px; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.field { display: grid; gap: 4px; min-width: 0; }
+.field.wide { grid-column: 1 / -1; }
+.field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+input, select, textarea { width: 100%; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 8px 10px; min-width: 0; }
+input[type="number"], input[type="time"] { font-family: var(--mono); }
+textarea { min-height: 90px; resize: vertical; }
+fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 10px; }
+legend { padding: 0; margin-bottom: 4px; }
+.calc { display: flex; flex-wrap: wrap; gap: 6px 22px; padding: 10px 12px; background: var(--panel-2); border-radius: 6px; font-size: 13px; }
+.calc b { font-family: var(--mono); font-weight: 500; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: var(--panel); padding: 8px 14px; cursor: pointer; border-left: 1px solid var(--line); }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* Live check */
+.steps { display: grid; gap: 0; }
+.step { display: grid; grid-template-columns: 34px 1fr; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+.step:first-child { border-top: 0; padding-top: 0; }
+.step .no { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 15px; background: var(--panel-2); color: var(--muted); }
+.step.done .no { background: var(--good); color: #fff; }
+.step.stop .no { background: var(--bad); color: #fff; }
+.step-body { display: grid; gap: 8px; min-width: 0; }
+.timer { font-family: var(--display); font-size: 54px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.ring { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.decision { border-radius: 8px; padding: 16px; display: grid; gap: 6px; }
+.decision .verdict { font-family: var(--display); font-size: 30px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase; }
+.decision.wait { background: var(--panel-2); }
+.decision.go { background: var(--good-bg); }
+.decision.go .verdict { color: var(--good); }
+.decision.stop { background: var(--bad-bg); }
+.decision.stop .verdict { color: var(--bad); }
+.card-line { display: grid; grid-template-columns: 120px 1fr; gap: 4px 10px; font-size: 13px; }
+.card-line dt { font-family: var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; font-size: 12px; padding-top: 1px; }
+.card-line dd { margin: 0; min-width: 0; }
+
+/* Open position */
+.pos { border: 1px solid var(--accent); border-radius: 8px; padding: 14px 16px; display: grid; gap: 10px; background: var(--panel); }
+.pos-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; }
+.pos .big { font-family: var(--display); font-size: 34px; font-weight: 700; line-height: 1; }
+
+/* News timeline */
+.day { display: grid; gap: 10px; }
+.day-h { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; }
+.tl { display: grid; gap: 8px; border-left: 2px solid var(--line); margin-left: 6px; padding-left: 16px; }
+.ev { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.ev::before { content: ""; position: absolute; left: -23px; top: 16px; width: 10px; height: 10px; border-radius: 50%; background: var(--panel); border: 2px solid var(--faint); }
+.ev.trade::before { background: var(--accent); border-color: var(--accent); }
+.ev.trade { border-color: var(--accent); }
+.ev.obs { background: transparent; }
+.ev-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.ev-time { font-family: var(--mono); font-size: 13px; font-weight: 500; }
+.ev h3 { font-family: var(--body); font-size: 14px; font-weight: 600; }
+details summary { cursor: pointer; color: var(--accent); font-size: 12.5px; }
+details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-size: 13px; }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+/* Dialog */
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--ink); width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+dialog::backdrop { background: rgba(10, 16, 24, .45); }
+.dlg { display: grid; gap: 14px; padding: 18px; }
+.dlg-foot { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; position: sticky; bottom: 0; background: var(--panel); padding: 12px 18px; border-top: 1px solid var(--line); }
+.notes-box { white-space: pre-wrap; font-size: 13px; background: var(--panel-2); border-radius: 6px; padding: 10px 12px; max-height: 240px; overflow: auto; overflow-wrap: anywhere; }
+.cp { display: grid; grid-template-columns: 64px 80px 1fr; gap: 6px 10px; font-size: 13px; }
+.empty { padding: 26px 16px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 8px; }
+.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 18px); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 6px; font-size: 13px; z-index: 20; }
+@media (prefers-reduced-motion: no-preference) { .tab, .btn, .chip { transition: background-color .15s, color .15s, border-color .15s; } }
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><h1>XSP Quarter Journal</h1><span class="tick" id="clock">ET --:--:--</span></div>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button class="tab" role="tab" id="tab-dash" aria-selected="true" data-view="dash">Dashboard</button>
+      <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live">Live check<span class="dot" id="open-dot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-journal" aria-selected="false" data-view="journal">Journal</button>
+      <button class="tab" role="tab" id="tab-news" aria-selected="false" data-view="news">News</button>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+
+  <!-- DASHBOARD -->
+  <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
+    <div class="kpis" id="kpis"></div>
+    <div id="dash-open"></div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h2>Official balance</h2><span class="small muted" id="eq-sub"></span></div>
+        <div class="chart" id="eq-chart"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>P/L per trade</h2><span class="small muted">Official trades, realized</span></div>
+        <div class="chart" id="pl-chart"></div>
+        <div class="legend"><span style="--c: var(--gain)">Gain</span><span style="--c: var(--loss)">Loss</span></div>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="panel">
+        <div class="panel-head"><h2>Time of day</h2><span class="small muted">By entry time, official trades</span></div>
+        <div class="tbl-wrap" id="tod"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h2>Rule versions</h2><span class="small muted">Results kept separate per version</span></div>
+        <div class="tbl-wrap" id="versions"></div>
+      </div>
+    </div>
+    <div class="panel" id="edge"></div>
+  </section>
+
+  <!-- LIVE CHECK -->
+  <section class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live" hidden>
+    <div id="live-open"></div>
+    <div class="grid2" style="align-items: start;">
+      <div class="panel">
+        <div class="panel-head"><h2>V2 entry check</h2><button class="btn" id="lc-reset" type="button">Start over</button></div>
+        <div class="steps">
+          <div class="step" id="st1">
+            <div class="no">1</div>
+            <div class="step-body">
+              <h3>Pick the level and direction</h3>
+              <div class="row">
+                <div class="seg" role="group" aria-label="Direction">
+                  <button type="button" data-dir="call" aria-pressed="false">Call · break up</button>
+                  <button type="button" data-dir="put" aria-pressed="false">Put · break down</button>
+                </div>
+              </div>
+              <div class="fields">
+                <div class="field"><label for="lc-level">Important level (XSP)</label><input id="lc-level" type="number" step="0.01" inputmode="decimal" placeholder="780.51"></div>
+                <div class="field"><label for="lc-why">Why it matters</label><input id="lc-why" type="text" placeholder="Prior intraday high"></div>
+              </div>
+            </div>
+          </div>
+          <div class="step" id="st2">
+            <div class="no">2</div>
+            <div class="step-body">
+              <h3>Break, then hold 60 seconds</h3>
+              <p class="small muted" style="margin:0">Tap when a candle closes beyond the level. If price comes back across, tap Reset and the clock starts over.</p>
+              <div class="ring">
+                <div class="timer" id="lc-timer">0:60</div>
+                <div class="row">
+                  <button class="btn primary" type="button" id="lc-break">Level broke</button>
+                  <button class="btn" type="button" id="lc-back">Back across · reset</button>
+                </div>
+              </div>
+              <div class="small muted" id="lc-break-info"></div>
+            </div>
+          </div>
+          <div class="step" id="st3">
+            <div class="no">3</div>
+            <div class="step-body">
+              <h3>Scout context</h3>
+              <div id="lc-scout" class="small"></div>
+              <div class="seg" role="group" aria-label="Known opposing signal">
+                <button type="button" data-opp="no" aria-pressed="false">Nothing opposing</button>
+                <button type="button" data-opp="unknown" aria-pressed="false">Some data stale</button>
+                <button type="button" data-opp="yes" aria-pressed="false">Opposing signal</button>
+              </div>
+              <p class="small muted" style="margin:0">Stale or missing data does not block an entry. A known opposing signal does.</p>
+            </div>
+          </div>
+          <div class="step" id="st4">
+            <div class="no">4</div>
+            <div class="step-body">
+              <h3>Fresh option chain</h3>
+              <div class="fields">
+                <div class="field"><label for="lc-strike">Strike</label><input id="lc-strike" type="number" step="1" inputmode="decimal"></div>
+                <div class="field"><label for="lc-xsp">XSP now</label><input id="lc-xsp" type="number" step="0.01" inputmode="decimal"></div>
+                <div class="field"><label for="lc-bid">Sell Bid</label><input id="lc-bid" type="number" step="0.01" inputmode="decimal"></div>
+                <div class="field"><label for="lc-ask">Buy Ask</label><input id="lc-ask" type="number" step="0.01" inputmode="decimal"></div>
+                <div class="field"><label for="lc-delta">Delta (optional)</label><input id="lc-delta" type="number" step="0.0001" inputmode="decimal"></div>
+              </div>
+              <div class="calc" id="lc-calc"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid; gap:18px;">
+        <div class="decision wait" id="lc-decision"></div>
+        <div class="panel">
+          <h3 style="margin-bottom:8px">Decision card</h3>
+          <dl class="card-line" id="lc-card"></dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JOURNAL -->
+  <section class="view" id="view-journal" role="tabpanel" aria-labelledby="tab-journal" hidden>
+    <div class="panel">
+      <div class="panel-head"><h2>Paper trades</h2><button class="btn primary" type="button" id="new-trade">Add trade</button></div>
+      <div class="tbl-wrap" id="trades-tbl"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><div><h2>Missed setups</h2><div class="small muted">Hypothetical results. Never added to the balance.</div></div><button class="btn" type="button" id="new-missed">Add missed setup</button></div>
+      <div class="tbl-wrap" id="missed-tbl"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-head"><h2>Rules in force</h2><button class="btn" type="button" id="edit-rules">Edit</button></div>
+      <div id="rules"></div>
+    </div>
+  </section>
+
+  <!-- NEWS -->
+  <section class="view" id="view-news" role="tabpanel" aria-labelledby="tab-news" hidden>
+    <div class="row" style="justify-content: space-between;">
+      <div class="chips" id="news-filter">
+        <button class="chip" type="button" data-f="all" aria-pressed="true">Everything</button>
+        <button class="chip" type="button" data-f="scout" aria-pressed="false">Scout reports</button>
+        <button class="chip" type="button" data-f="obs" aria-pressed="false">Chart and chain notes</button>
+        <button class="chip" type="button" data-f="trade" aria-pressed="false">Trades</button>
+      </div>
+      <button class="btn primary" type="button" id="new-scout">Add report</button>
+    </div>
+    <div id="news" class="view" style="padding-top:0"></div>
+  </section>
+</main>
+
+<dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+  // ---------- helpers ----------
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (v) => (v === "" || v === null || v === undefined || isNaN(+v) ? null : +v);
+  const money = (v, sign = false) => v == null ? "–" : (sign && v > 0 ? "+" : v < 0 ? "−" : "") + "$" + Math.abs(v).toFixed(Math.abs(v) % 1 ? 2 : 0);
+  const pct = (v, sign = true) => v == null ? "–" : (sign && v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v * 100).toFixed(1) + "%";
+  const px = (v) => v == null ? "–" : "$" + v.toFixed(2);
+  const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
+  const ls = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
+
+  function etParts(d = new Date()) {
+    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(d).map((x) => [x.type, x.value]));
+    return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}:${p.minute}:${p.second}` };
+  }
+  const dayName = (iso) => { const d = new Date(iso + "T12:00:00Z"); return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }); };
+  const toMin = (hm) => { if (!hm) return null; const m = /^(\d{1,2}):(\d{2})/.exec(hm); return m ? +m[1] * 60 + +m[2] : null; };
+  function weekdays(a, b) { let n = 0; const d = new Date(a + "T12:00:00Z"), e = new Date(b + "T12:00:00Z"); while (d <= e) { const w = d.getUTCDay(); if (w && w < 6) n++; d.setUTCDate(d.getUTCDate() + 1); } return n; }
+  function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2600); }
+
+  // ---------- state ----------
+  const DEFAULT_CFG = { startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", rules: [] };
+  const S = { trades: [], missed: [], scout: [], cfg: DEFAULT_CFG, loaded: false, db: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all") };
+
+  // Trade math: buy at Ask and sell at Bid unless a specific fill was declared.
+  function calc(t) {
+    const qty = num(t.qty) || 1;
+    const entry = num(t.entryPrice) ?? num(t.entryAsk);
+    const exit = num(t.exitPrice) ?? num(t.exitBid);
+    const open = !t.exitTime || exit == null;
+    const cost = entry != null ? entry * 100 * qty : null;
+    const proceeds = !open ? exit * 100 * qty : null;
+    const pnl = !open && cost != null ? Math.round((proceeds - cost) * 100) / 100 : null;
+    const ret = pnl != null && cost ? pnl / cost : null;
+    const cps = t.checkpoints || [];
+    const last = cps.length ? cps[cps.length - 1] : null;
+    const mark = open && last && num(last.bid) != null && cost != null ? num(last.bid) * 100 * qty - cost : null;
+    return { qty, entry, exit, open, cost, proceeds, pnl, ret, last, mark };
+  }
+  const sortKey = (t) => `${t.date || ""} ${(t.entryTime || "99:99").padStart(5, "0")}`;
+  const bucket = (hm) => { const m = toMin(hm); if (m == null) return "Unknown"; return m < 660 ? "Opening" : m < 780 ? "Midday" : "Afternoon"; };
+
+  function stats() {
+    const all = [...S.trades].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    const official = all.filter((t) => t.status === "official");
+    const closed = official.map((t) => ({ t, c: calc(t) })).filter((x) => !x.c.open);
+    const open = official.filter((t) => calc(t).open);
+    let bal = num(S.cfg.startBalance) ?? 100;
+    const curve = [{ label: "Start", date: S.cfg.quarterStart, value: bal }];
+    for (const x of closed) { bal += x.c.pnl; curve.push({ label: `${dayName(x.t.date)} · ${contractName(x.t)}`, date: x.t.date, value: bal, pnl: x.c.pnl, t: x.t }); }
+    const wins = closed.filter((x) => x.c.pnl > 0), losses = closed.filter((x) => x.c.pnl <= 0);
+    const avg = (a) => a.length ? a.reduce((s, x) => s + x.c.pnl, 0) / a.length : null;
+    const net = closed.reduce((s, x) => s + x.c.pnl, 0);
+    return { all, official, closed, open, bal, curve, wins, losses, net, avgWin: avg(wins), avgLoss: avg(losses), winRate: closed.length ? wins.length / closed.length : null };
+  }
+  const contractName = (t) => `${t.strike ?? "?"}${t.dir === "put" ? "P" : "C"}`;
+
+  // ---------- tabs ----------
+  let view = ls.get("xsp.view", "dash");
+  function showView(v) {
+    view = v; ls.set("xsp.view", v);
+    $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+    $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
+  }
+  $$(".tab").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
+  showView(["dash", "live", "journal", "news"].includes(view) ? view : "dash");
+
+  // ---------- rendering ----------
+  function renderAll() {
+    const st = stats();
+    renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
+    renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive();
+    $("#open-dot").hidden = !st.open.length;
+  }
+
+  function renderKpis(st) {
+    const start = num(S.cfg.startBalance) ?? 100;
+    const today = etParts().date;
+    const total = weekdays(S.cfg.quarterStart, S.cfg.quarterEnd);
+    const done = today < S.cfg.quarterStart ? 0 : weekdays(S.cfg.quarterStart, today > S.cfg.quarterEnd ? S.cfg.quarterEnd : today);
+    const cur = S.cfg.currentVersion || "V2";
+    const target = (S.cfg.targets || {})[cur] || 10;
+    const verified = st.official.filter((t) => t.version === cur && t.qual === "verified").length;
+    const pending = st.official.filter((t) => t.version === cur && t.qual === "pending").length;
+    const cells = Array.from({ length: target }, (_, i) => `<i class="${i < verified ? "on" : i < verified + pending ? "pend" : ""}"></i>`).join("");
+    const pay = st.avgWin != null && st.avgLoss ? st.avgWin / Math.abs(st.avgLoss) : null;
+    $("#kpis").innerHTML = `
+      <div class="kpi hero"><div class="label">Official balance</div><div class="v">${money(st.bal)}</div>
+        <div class="s"><span class="${cls(st.net)} num">${money(st.net, true)}</span> from ${money(start)} start · ${st.closed.length} closed${st.open.length ? ` · ${st.open.length} open` : ""}</div></div>
+      <div class="kpi"><div class="label">Win rate</div><div class="v">${pct(st.winRate, false)}</div><div class="s">${st.wins.length} W · ${st.losses.length} L</div></div>
+      <div class="kpi"><div class="label">Avg win / loss</div><div class="v"><span class="up">${money(st.avgWin)}</span> <span class="muted">/</span> <span class="down">${money(st.avgLoss)}</span></div><div class="s">${pay != null ? `Wins are ${pay.toFixed(2)}× losses` : "Need a win and a loss"}</div></div>
+      <div class="kpi"><div class="label">${esc(cur)} setups</div><div class="v">${verified} <span class="muted small">of ${target}</span></div><div class="meter" aria-label="${verified} verified, ${pending} pending">${cells}</div><div class="s">${pending ? `${pending} pending review` : "Verified qualifying entries"}</div></div>
+      <div class="kpi"><div class="label">Quarter</div><div class="v">${done} <span class="muted small">of ${total} days</span></div><div class="meter"><i class="on" style="flex:${done}"></i><i style="flex:${Math.max(total - done, 0.001)}"></i></div><div class="s">${dayName(S.cfg.quarterStart)} – ${dayName(S.cfg.quarterEnd)}</div></div>`;
+  }
+
+  // Shared tooltip wiring for SVG charts.
+  function wireTip(host) {
+    const tip = document.createElement("div"); tip.className = "tip"; tip.hidden = true; host.appendChild(tip);
+    $$("[data-tip]", host).forEach((el) => {
+      const show = () => {
+        const r = host.getBoundingClientRect(), b = el.getBoundingClientRect();
+        tip.innerHTML = el.dataset.tip; tip.hidden = false;
+        tip.style.left = Math.min(Math.max(b.left + b.width / 2 - r.left, 80), r.width - 80) + "px";
+        tip.style.top = (b.top - r.top + (+el.dataset.ty || 0)) + "px";
+      };
+      el.addEventListener("mouseenter", show); el.addEventListener("focus", show);
+      el.addEventListener("mouseleave", () => (tip.hidden = true)); el.addEventListener("blur", () => (tip.hidden = true));
+    });
+  }
+  function niceTicks(lo, hi, n = 4) {
+    const span = hi - lo || 1, raw = span / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+    const a = Math.floor(lo / step) * step, b = Math.ceil(hi / step) * step, out = [];
+    for (let v = a; v <= b + step / 2; v += step) out.push(Math.round(v * 100) / 100);
+    return out;
+  }
+
+  function renderEquity(st) {
+    const host = $("#eq-chart"), pts = st.curve;
+    $("#eq-sub").textContent = st.closed.length ? `${st.closed.length} closed trades` : "";
+    if (pts.length < 2) { host.innerHTML = `<div class="empty">The balance line appears after your first closed official trade.</div>`; return; }
+    const W = 560, H = 230, L = 44, R = 16, T = 18, B = 30;
+    const vals = pts.map((p) => p.value), ticks = niceTicks(Math.min(...vals, st.curve[0].value), Math.max(...vals));
+    const lo = ticks[0], hi = ticks[ticks.length - 1];
+    const x = (i) => L + (i * (W - L - R)) / (pts.length - 1), y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - T - B);
+    const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join("");
+    const area = `${line}L${x(pts.length - 1)},${H - B}L${x(0)},${H - B}Z`;
+    const startY = y(pts[0].value);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Official balance after each closed trade">`;
+    s += `<defs><linearGradient id="eqg" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="var(--gain)" stop-opacity=".22"/><stop offset="1" stop-color="var(--gain)" stop-opacity="0"/></linearGradient></defs>`;
+    ticks.forEach((t) => { s += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">$${t}</text>`; });
+    s += `<line class="zero" x1="${L}" x2="${W - R}" y1="${startY}" y2="${startY}" stroke-dasharray="3 3"/>`;
+    s += `<path d="${area}" fill="url(#eqg)"/><path d="${line}" fill="none" stroke="var(--gain)" stroke-width="2" stroke-linejoin="round"/>`;
+    pts.forEach((p, i) => {
+      const last = i === pts.length - 1;
+      s += `<circle cx="${x(i)}" cy="${y(p.value)}" r="${last ? 5 : 3.5}" fill="${last ? "var(--gain)" : "var(--panel)"}" stroke="var(--gain)" stroke-width="2"/>`;
+      if (i === 0 || last || pts.length <= 8) s += `<text x="${x(i)}" y="${H - 10}" text-anchor="${i === 0 ? "start" : last ? "end" : "middle"}">${esc(i === 0 ? "Start" : dayName(p.date).replace(/^\w+, /, ""))}</text>`;
+    });
+    const lp = pts[pts.length - 1];
+    s += `<text x="${x(pts.length - 1) - 8}" y="${y(lp.value) - 10}" text-anchor="end" style="fill:var(--ink);font-weight:500">${money(lp.value)}</text>`;
+    const bw = (W - L - R) / Math.max(pts.length - 1, 1);
+    pts.forEach((p, i) => {
+      const tipTxt = i === 0 ? `Start<br><b>${money(p.value)}</b>` : `${esc(p.label)}<br>P/L <b>${money(p.pnl, true)}</b> · Balance <b>${money(p.value)}</b>`;
+      s += `<rect x="${x(i) - bw / 2}" y="${T}" width="${bw}" height="${H - T - B}" fill="transparent" tabindex="0" data-tip="${esc(tipTxt)}" data-ty="${y(p.value) - T}"/>`;
+    });
+    host.innerHTML = s + "</svg>"; wireTip(host);
+  }
+
+  function renderPL(st) {
+    const host = $("#pl-chart"), rows = st.closed;
+    if (!rows.length) { host.innerHTML = `<div class="empty">Closed official trades show up here as gain and loss bars.</div>`; return; }
+    const W = 560, H = 230, L = 44, R = 12, T = 22, B = 30;
+    const vals = rows.map((r) => r.c.pnl), ticks = niceTicks(Math.min(0, ...vals), Math.max(0, ...vals));
+    const lo = ticks[0], hi = ticks[ticks.length - 1], y = (v) => T + (1 - (v - lo) / (hi - lo || 1)) * (H - T - B);
+    const slot = (W - L - R) / rows.length, bw = Math.min(46, slot * 0.62);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Realized profit or loss per official trade">`;
+    ticks.forEach((t) => { s += `<line class="gridline" x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 8}" y="${y(t) + 4}" text-anchor="end">${t < 0 ? "−$" + -t : "$" + t}</text>`; });
+    s += `<line class="zero" x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}"/>`;
+    rows.forEach((r, i) => {
+      const v = r.c.pnl, cx = L + slot * i + slot / 2, y0 = y(0), y1 = y(v), top = Math.min(y0, y1), h = Math.max(Math.abs(y1 - y0), 1);
+      const col = v > 0 ? "var(--gain)" : "var(--loss)", rad = Math.min(4, h / 2);
+      // rounded data end, square at the zero line
+      const path = v > 0
+        ? `M${cx - bw / 2},${y0}V${top + rad}Q${cx - bw / 2},${top} ${cx - bw / 2 + rad},${top}H${cx + bw / 2 - rad}Q${cx + bw / 2},${top} ${cx + bw / 2},${top + rad}V${y0}Z`
+        : `M${cx - bw / 2},${y0}V${y1 - rad}Q${cx - bw / 2},${y1} ${cx - bw / 2 + rad},${y1}H${cx + bw / 2 - rad}Q${cx + bw / 2},${y1} ${cx + bw / 2},${y1 - rad}V${y0}Z`;
+      s += `<path d="${path}" fill="${col}"/>`;
+      s += `<text x="${cx}" y="${v > 0 ? y1 - 6 : y1 + 14}" text-anchor="middle" style="fill:var(--ink)">${money(v, true)}</text>`;
+      s += `<text x="${cx}" y="${H - 10}" text-anchor="middle">${esc(dayName(r.t.date).replace(/^\w+, /, ""))}</text>`;
+      const tipTxt = `${esc(dayName(r.t.date))} · XSP ${esc(contractName(r.t))} · ${esc(r.t.version || "")}<br>${px(r.c.entry)} → ${px(r.c.exit)} · <b>${money(v, true)}</b> (${pct(r.c.ret)})`;
+      s += `<rect x="${cx - slot / 2}" y="${T}" width="${slot}" height="${H - T - B}" fill="transparent" tabindex="0" data-tip="${esc(tipTxt)}" data-ty="${top - T}"/>`;
+    });
+    host.innerHTML = s + "</svg>"; wireTip(host);
+  }
+
+  function hbar(v, max) {
+    if (!max) return "";
+    const w = Math.min(Math.abs(v) / max, 1) * 50;
+    return `<div class="hbar"><i style="${v >= 0 ? `left:50%;width:${w}%;background:var(--gain)` : `right:50%;width:${w}%;background:var(--loss)`}"></i></div>`;
+  }
+  function renderTod(st) {
+    const groups = ["Opening", "Midday", "Afternoon"].map((k) => {
+      const xs = st.closed.filter((x) => bucket(x.t.entryTime) === k);
+      return { k, n: xs.length, w: xs.filter((x) => x.c.pnl > 0).length, net: xs.reduce((s, x) => s + x.c.pnl, 0) };
+    });
+    const max = Math.max(...groups.map((g) => Math.abs(g.net)), 0);
+    const range = { Opening: "9:30–11:00", Midday: "11:00–1:00", Afternoon: "1:00–4:00" };
+    $("#tod").innerHTML = `<table><thead><tr><th>Window (ET)</th><th class="n">Trades</th><th class="n">W–L</th><th class="n">Net P/L</th><th class="bar-cell" aria-label="Net P/L bar"></th></tr></thead><tbody>${groups.map((g) =>
+      `<tr${g.n ? "" : ' class="faded"'}><td>${g.k} <span class="muted small">${range[g.k]}</span></td><td class="n">${g.n}</td><td class="n">${g.w}–${g.n - g.w}</td><td class="n ${cls(g.net)}">${g.n ? money(g.net, true) : "–"}</td><td class="bar-cell">${g.n ? hbar(g.net, max) : ""}</td></tr>`).join("")}</tbody></table>
+      <p class="small muted" style="margin:10px 0 0">Tests the early-session hypothesis. Missed setups are not included.</p>`;
+  }
+
+  function renderVersions(st) {
+    const vs = [...new Set(["V1", "V2", ...st.official.map((t) => t.version).filter(Boolean)])];
+    const rows = vs.map((v) => {
+      const ts = st.official.filter((t) => t.version === v), cl = ts.map((t) => ({ t, c: calc(t) })).filter((x) => !x.c.open);
+      const net = cl.reduce((s, x) => s + x.c.pnl, 0);
+      return `<tr${ts.length ? "" : ' class="faded"'}><td><b>${esc(v)}</b>${v === S.cfg.currentVersion ? ' <span class="pill info plain">current</span>' : ""}</td><td class="n">${ts.length}</td><td class="n">${ts.filter((t) => t.qual === "verified").length} / ${(S.cfg.targets || {})[v] ?? "–"}</td><td class="n">${cl.filter((x) => x.c.pnl > 0).length}–${cl.filter((x) => x.c.pnl <= 0).length}</td><td class="n ${cls(net)}">${cl.length ? money(net, true) : "–"}</td></tr>`;
+    }).join("");
+    $("#versions").innerHTML = `<table><thead><tr><th>Version</th><th class="n">Entries</th><th class="n">Verified / goal</th><th class="n">W–L</th><th class="n">Net P/L</th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="small muted" style="margin:10px 0 0">V2 is never applied to earlier trades. Its first ${(S.cfg.targets || {}).V2 ?? 5} entries are reviewed on their own.</p>`;
+  }
+
+  function renderEdge(st) {
+    const el = $("#edge");
+    const be = st.avgWin != null && st.avgLoss ? Math.abs(st.avgLoss) / (st.avgWin + Math.abs(st.avgLoss)) : null;
+    const exp = st.closed.length ? st.net / st.closed.length : null;
+    const hypo = S.missed.reduce((s, m) => s + (num(m.hypoPnl) || 0), 0);
+    const spreads = st.official.map((t) => { const a = num(t.entryAsk), b = num(t.entryBid); return a != null && b != null ? (a - b) * 100 : null; }).filter((v) => v != null);
+    const avgSpread = spreads.length ? spreads.reduce((a, b) => a + b, 0) / spreads.length : null;
+    const needStudy = st.closed.filter((x) => num(x.t.m15) == null && num(x.t.m30) == null && num(x.t.m60) == null).length;
+    el.innerHTML = `<div class="panel-head"><h2>What the numbers say so far</h2><span class="small muted">${st.closed.length} closed official trades. Too few to change rules yet.</span></div>
+      <div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px">
+        <div><div class="label">Break-even win rate</div><div class="num" style="font-size:20px">${be != null ? pct(be, false) : "–"}</div><div class="small muted">${be != null ? `With these average wins and losses you need to win ${pct(be, false)} of trades to break even. You are at ${pct(st.winRate, false)}.` : "Needs at least one win and one loss."}</div></div>
+        <div><div class="label">Average per trade</div><div class="num ${cls(exp)}" style="font-size:20px">${money(exp, true)}</div><div class="small muted">Net realized P/L divided by closed trades.</div></div>
+        <div><div class="label">Average entry spread</div><div class="num" style="font-size:20px">${avgSpread != null ? money(avgSpread) : "–"}</div><div class="small muted">Ask minus Bid per contract at entry. You pay this on every round trip.</div></div>
+        <div><div class="label">Missed setups</div><div class="num" style="font-size:20px">${S.missed.length}</div><div class="small muted">${S.missed.length ? `${money(hypo, true)} hypothetical, not counted.` : "None logged."} ${needStudy ? `${needStudy} closed trade${needStudy > 1 ? "s" : ""} still need exit-study prices.` : ""}</div></div>
+      </div>`;
+  }
+
+  // ---------- open positions ----------
+  function openCard(t, where) {
+    const c = calc(t), last = c.last;
+    const id = esc(t.id);
+    return `<div class="pos" data-id="${id}">
+      <div class="pos-head"><div><div class="label">Open paper position · ${esc(t.version || "")}</div><h2>XSP ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
+        <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
+        <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · XSP ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div></div></div>
+      <div class="fields">
+        <div class="field"><label for="${where}-cx-${id}">XSP now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label for="${where}-cb-${id}">Sell Bid</label><input id="${where}-cb-${id}" data-k="bid" type="number" step="0.01" inputmode="decimal"></div>
+        <div class="field"><label for="${where}-ca-${id}">Buy Ask</label><input id="${where}-ca-${id}" data-k="ask" type="number" step="0.01" inputmode="decimal"></div>
+      </div>
+      <div class="row"><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
+    </div>`;
+  }
+  function renderOpen(st) {
+    for (const [sel, where] of [["#dash-open", "d"], ["#live-open", "l"]]) {
+      const host = $(sel);
+      if (host.contains(document.activeElement) && host.querySelector("input:focus")) continue; // don't wipe typing
+      host.innerHTML = st.open.length ? `<div style="display:grid;gap:12px">${st.open.map((t) => openCard(t, where)).join("")}</div>` : "";
+    }
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest(".pos [data-act]"); if (!b) return;
+    const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
+    if (b.dataset.act === "open") return openTrade(t);
+    const v = Object.fromEntries($$("input", card).map((i) => [i.dataset.k, num(i.value)]));
+    if (v.bid == null) return toast("Enter the Sell Bid first.");
+    const now = etParts();
+    const cp = { t: now.hm, xsp: v.xsp, bid: v.bid, ask: v.ask };
+    const next = { ...stripId(t), checkpoints: [...(t.checkpoints || []), cp] };
+    if (b.dataset.act === "exit") Object.assign(next, { exitTime: now.hm, exitBid: v.bid, exitAsk: v.ask, exitPrice: null });
+    if (await save("trades", t.id, next)) toast(b.dataset.act === "exit" ? `Closed at Bid ${px(v.bid)}.` : "Checkpoint saved.");
+  });
+
+  // ---------- journal tables ----------
+  const qualPill = (q) => q === "verified" ? '<span class="pill good">Verified</span>' : q === "pending" ? '<span class="pill warn">Pending</span>' : q === "not" ? '<span class="pill bad">Not qualified</span>' : '<span class="pill">–</span>';
+  function renderTrades(st) {
+    const rows = [...st.all].reverse();
+    if (!rows.length) { $("#trades-tbl").innerHTML = `<div class="empty">No trades yet. Log one from Live check, or add it here.</div>`; return; }
+    const bal = new Map(st.curve.filter((p) => p.t).map((p) => [p.t.id, p.value]));
+    $("#trades-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Contract</th><th>Ver.</th><th>Entry → exit (ET)</th><th class="n">Cost</th><th class="n">P/L</th><th class="n">Return</th><th class="n">Balance</th><th>Rule check</th></tr></thead><tbody>${rows.map((t) => {
+      const c = calc(t), pre = t.status !== "official";
+      return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td>${esc(t.version || "–")}</td>
+        <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="n">${money(c.cost)}</td><td class="n ${pre ? "" : cls(c.pnl)}">${money(c.pnl, true)}</td><td class="n">${pct(c.ret)}</td><td class="n">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
+  $("#trades-tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data-id]"); if (r) openTrade(S.trades.find((t) => t.id === r.dataset.id)); });
+  $("#trades-tbl").addEventListener("keydown", (e) => { if (e.key === "Enter") { const r = e.target.closest("tr[data-id]"); if (r) openTrade(S.trades.find((t) => t.id === r.dataset.id)); } });
+
+  function renderMissed() {
+    const rows = [...S.missed].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    if (!rows.length) { $("#missed-tbl").innerHTML = `<div class="empty">No missed setups logged.</div>`; return; }
+    $("#missed-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Setup</th><th>Signal</th><th class="n">Entry</th><th class="n">15m</th><th class="n">30m</th><th class="n">60m</th><th class="n">Hypothetical</th></tr></thead><tbody>${rows.map((m) =>
+      `<tr class="click" data-id="${esc(m.id)}" tabindex="0"><td>${esc(dayName(m.date))}</td><td>${esc(m.contract || "")}<div class="small muted">${esc(m.trigger || "")}</div></td><td class="mono">${esc(m.signalTime || "–")}</td><td class="n">${px(num(m.entryPrice))}</td><td class="n">${px(num(m.m15))}</td><td class="n">${px(num(m.m30))}</td><td class="n">${px(num(m.m60))}</td><td class="n ${cls(num(m.hypoPnl))}">${money(num(m.hypoPnl), true)}</td></tr>`).join("")}</tbody></table>`;
+  }
+  $("#missed-tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data-id]"); if (r) openForm("missed", S.missed.find((m) => m.id === r.dataset.id)); });
+
+  function renderRules() {
+    const rules = S.cfg.rules || [];
+    $("#rules").innerHTML = rules.length ? `<div class="tbl-wrap"><table><tbody>${rules.map((r) => `<tr><td style="width:180px;vertical-align:top"><b>${esc(r.name)}</b></td><td>${esc(r.text)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No rules saved yet.</div>`;
+  }
+
+  // ---------- news timeline ----------
+  function renderNews() {
+    $$("#news-filter .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.f === S.newsFilter)));
+    const items = [];
+    for (const r of S.scout) items.push({ kind: r.kind === "obs" ? "obs" : "scout", date: r.date, time: r.time, r });
+    for (const t of S.trades) {
+      const c = calc(t);
+      if (t.entryTime) items.push({ kind: "trade", date: t.date, time: t.entryTime, html: `<b>Paper entry</b> · XSP ${esc(contractName(t))} at Ask ${px(c.entry)} (${money(c.cost)}) · ${esc(t.version || "")} ${qualPill(t.qual)}`, t });
+      if (!c.open) items.push({ kind: "trade", date: t.date, time: t.exitTime, html: `<b>Paper exit</b> · XSP ${esc(contractName(t))} at ${px(c.exit)} · <span class="${cls(c.pnl)} num">${money(c.pnl, true)}</span> (${pct(c.ret)})`, t });
+    }
+    const f = S.newsFilter, shown = items.filter((i) => f === "all" || i.kind === f);
+    if (!shown.length) { $("#news").innerHTML = `<div class="empty">${S.scout.length ? "Nothing matches this filter." : "Add a scout report to start the timeline. Paste the report text and pick its catalyst class."}</div>`; return; }
+    const days = new Map();
+    shown.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).forEach((i) => { if (!days.has(i.date)) days.set(i.date, []); days.get(i.date).push(i); });
+    const catPill = (c) => !c ? "" : /^BIG/i.test(c) ? `<span class="pill bad">${esc(c.split(/[ —-]/)[0])}</span>` : /^MOD/i.test(c) ? `<span class="pill warn">MODERATE</span>` : `<span class="pill">${esc(c.split(/[ —-]/)[0])}</span>`;
+    const verdict = (a) => !a ? "" : /NO (NEW )?TRADE/i.test(a) ? `<span class="pill bad plain">${esc(a.match(/NO (NEW )?TRADE/i)[0].toUpperCase())}</span>` : /WAIT/i.test(a) ? `<span class="pill plain">WAIT</span>` : "";
+    $("#news").innerHTML = [...days].map(([d, list]) => `<div class="day"><div class="day-h"><h2>${esc(dayName(d))}</h2><span class="small muted">${list.filter((i) => i.kind === "scout").length} reports · ${list.filter((i) => i.kind === "trade").length} trade events</span></div><div class="tl">${list.map((i) => {
+      if (i.kind === "trade") return `<div class="ev trade"><div class="ev-top"><span class="ev-time">${esc(i.time)}</span><span>${i.html}</span></div></div>`;
+      const r = i.r;
+      return `<div class="ev ${i.kind}" data-id="${esc(r.id)}"><div class="ev-top"><span class="ev-time">${esc(r.time || "")}</span><span class="label">${esc(r.scout || (i.kind === "obs" ? "Chart / chain note" : "Scout"))}</span>${catPill(r.catalyst)}${r.regime ? `<span class="pill info plain">${esc(r.regime)}</span>` : ""}${verdict(r.assessment)}</div>
+        ${r.headline ? `<h3>${esc(r.headline)}</h3>` : ""}${r.assessment ? `<div class="small"><span class="muted">Rule check:</span> ${esc(r.assessment)}</div>` : ""}
+        <div class="row" style="justify-content:space-between">${r.notes ? `<details><summary>Full notes</summary><p>${esc(r.notes)}</p></details>` : "<span></span>"}<button class="btn small" type="button" data-edit-scout="${esc(r.id)}" style="padding:4px 10px">Edit</button></div></div>`;
+    }).join("")}</div></div>`).join("");
+  }
+  $("#news-filter").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (!c) return; S.newsFilter = c.dataset.f; ls.set("xsp.newsFilter", S.newsFilter); renderNews(); });
+  $("#news").addEventListener("click", (e) => { const b = e.target.closest("[data-edit-scout]"); if (b) openForm("scout", S.scout.find((r) => r.id === b.dataset.editScout)); });
+
+  // ---------- live V2 check ----------
+  const LC0 = { dir: null, level: "", why: "", breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", xsp: "", bid: "", ask: "", delta: "" };
+  let LC = { ...LC0, ...ls.get("xsp.live", {}) };
+  const saveLC = () => ls.set("xsp.live", LC);
+  const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-xsp": "xsp", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta" };
+  for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; saveLC(); renderLive(); }); }
+  $$("[data-dir]").forEach((b) => b.addEventListener("click", () => { LC.dir = b.dataset.dir; saveLC(); renderLive(); }));
+  $$("[data-opp]").forEach((b) => b.addEventListener("click", () => { LC.opp = b.dataset.opp; saveLC(); renderLive(); }));
+  $("#lc-break").addEventListener("click", () => { LC.breakAt = Date.now(); LC.breakET = etParts().hms; LC.holdET = null; saveLC(); renderLive(); });
+  $("#lc-back").addEventListener("click", () => { if (LC.breakAt) LC.resets++; LC.breakAt = null; LC.breakET = null; LC.holdET = null; saveLC(); renderLive(); });
+  $("#lc-reset").addEventListener("click", () => { LC = { ...LC0 }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); });
+
+  function lcState() {
+    const elapsed = LC.breakAt ? (Date.now() - LC.breakAt) / 1000 : 0;
+    const held = !!LC.breakAt && elapsed >= 60;
+    if (held && !LC.holdET) { LC.holdET = etParts(new Date(LC.breakAt + 60000)).hms; saveLC(); }
+    const bid = num(LC.bid), ask = num(LC.ask);
+    const s1 = !!LC.dir && num(LC.level) != null, s2 = held, s3 = LC.opp === "no" || LC.opp === "unknown", s4 = bid != null && ask != null && ask >= bid && num(LC.strike) != null;
+    return { elapsed, held, bid, ask, s1, s2, s3, s4, stop: LC.opp === "yes" };
+  }
+  function renderLive() {
+    const s = lcState();
+    $$("[data-dir]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.dir === LC.dir)));
+    $$("[data-opp]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.opp === LC.opp)));
+    $("#st1").className = "step" + (s.s1 ? " done" : ""); $("#st2").className = "step" + (s.s2 ? " done" : "");
+    $("#st3").className = "step" + (s.stop ? " stop" : s.s3 ? " done" : ""); $("#st4").className = "step" + (s.s4 ? " done" : "");
+    const left = Math.max(0, 60 - Math.floor(s.elapsed));
+    $("#lc-timer").textContent = !LC.breakAt ? "0:60" : s.held ? "HELD" : `0:${String(left).padStart(2, "0")}`;
+    $("#lc-timer").style.color = s.held ? "var(--good)" : LC.breakAt ? "var(--ink)" : "var(--faint)";
+    $("#lc-break-info").textContent = (LC.breakET ? `Break at ${LC.breakET} ET.` + (LC.holdET ? ` Hold confirmed ${LC.holdET} ET.` : "") : "Waiting for a break.") + (LC.resets ? ` ${LC.resets} false break${LC.resets > 1 ? "s" : ""} this setup.` : "");
+    // latest scout
+    const today = etParts().date, sc = [...S.scout].filter((r) => r.kind !== "obs").sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`))[0];
+    $("#lc-scout").innerHTML = sc ? `<div class="notes-box" style="max-height:none"><b>${esc(sc.scout || "Scout")} · ${esc(sc.date === today ? "today" : dayName(sc.date))} ${esc(sc.time || "")}</b>${sc.regime ? ` · ${esc(sc.regime)}` : ""}<br>${esc(sc.headline || "")}${sc.assessment ? `<br><span class="muted">Rule check: ${esc(sc.assessment)}</span>` : ""}</div>${sc.date !== today ? '<div class="small" style="color:var(--warn);margin-top:4px">This is not from today. Treat it as stale.</div>' : ""}` : `<span class="muted">No scout reports yet. Add them in the News tab.</span>`;
+    // chain math
+    const spread = s.bid != null && s.ask != null ? (s.ask - s.bid) * 100 : null;
+    const pref = s.ask != null ? (s.ask >= 0.8 && s.ask <= 1.2 ? '<span class="pill good">Near the $1.00 preference</span>' : `<span class="pill warn">Ask is ${s.ask < 0.8 ? "below" : "above"} the ~$1.00 preference</span>`) : "";
+    $("#lc-calc").innerHTML = s.ask != null ? `<span>Cost at Ask <b>${money(s.ask * 100)}</b></span><span>Spread <b>${spread != null ? money(spread) : "–"}</b></span><span>Instant mark to Bid <b class="${cls(spread != null ? -spread : 0)}">${spread != null ? money(-spread, true) : "–"}</b></span>${pref}` : `<span class="muted">Enter Bid and Ask from the Fidelity chain. Fills use the Ask to buy and the Bid to sell.</span>`;
+    // decision
+    const d = $("#lc-decision");
+    let cls2 = "wait", verdict = "Wait", why = "", btns = "";
+    if (s.stop) { cls2 = "stop"; verdict = "No trade"; why = "A known opposing signal blocks this entry."; btns = `<button class="btn" type="button" id="lc-missed">Log as missed setup instead</button>`; }
+    else if (!s.s1) why = "Pick a direction and the level you are watching.";
+    else if (!LC.breakAt) why = `Watching ${LC.dir === "put" ? "below" : "above"} ${esc(LC.level)}. Tap Level broke when a candle closes past it.`;
+    else if (!s.held) why = `Holding for ${Math.max(0, 60 - Math.floor(s.elapsed))} more seconds. Reset if price returns across ${esc(LC.level)}.`;
+    else if (!s.s3) why = "Hold confirmed. Check the latest scout context.";
+    else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
+    else { cls2 = "go"; verdict = "Qualified · V2"; why = `Buy 1× XSP ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is labeled in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
+    d.className = "decision " + cls2;
+    d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}`;
+    $("#lc-card").innerHTML = [
+      ["Level", s.s1 ? `${esc(LC.level)} ${LC.dir === "put" ? "↓ put" : "↑ call"}${LC.why ? ` · ${esc(LC.why)}` : ""}` : "–"],
+      ["Break", LC.breakET ? `${esc(LC.breakET)} ET` : "–"],
+      ["Hold 60s", s.held ? `Yes · ${esc(LC.holdET)} ET` : LC.breakAt ? "In progress" : "–"],
+      ["False breaks", String(LC.resets)],
+      ["Context", { no: "Nothing opposing", unknown: "No known opposition, some data stale", yes: "Opposing signal" }[LC.opp] || "–"],
+      ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.xsp) != null ? ` · XSP ${esc(LC.xsp)}` : ""}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
+    ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
+  }
+  document.addEventListener("click", async (e) => {
+    if (e.target.id === "lc-log") {
+      const s = lcState(), now = etParts();
+      const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
+        level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (LC.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
+        entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
+        checkpoints: [{ t: now.hm, xsp: num(LC.xsp), bid: s.bid, ask: s.ask }],
+        notes: `Logged from Live check. Break ${LC.breakET} ET, 60s hold confirmed ${LC.holdET} ET, ${LC.resets} false break(s). Context: ${LC.opp === "unknown" ? "no known opposition, some data stale" : "nothing opposing"}.`, createdAt: Date.now() };
+      if (await save("trades", null, doc)) { toast("Paper entry logged."); LC = { ...LC0 }; saveLC(); for (const id of Object.keys(lcInputs)) $("#" + id).value = ""; renderLive(); }
+    }
+    if (e.target.id === "lc-missed") {
+      const s = lcState(), now = etParts();
+      openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held ? " + 60s hold" : ""}`.trim(), signalTime: (LC.breakET || "").slice(0, 5), contract: LC.strike ? `XSP ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: S.cfg.currentVersion || "V2" });
+    }
+  });
+
+  // ---------- forms ----------
+  const F = {
+    trades: [
+      ["date", "Date", "date"], ["status", "Counts toward balance", "select", [["official", "Official"], ["pre-quarter", "No · pre-quarter / practice"]]],
+      ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2"]]], ["qual", "Rule check", "select", [["verified", "Verified"], ["pending", "Pending review"], ["not", "Not qualified"]]],
+      ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["strike", "Strike", "number"], ["expiry", "Expiry", "text"], ["qty", "Contracts", "number"],
+      ["level", "Important level / trigger", "text", null, "wide"],
+      ["signalTime", "Signal (ET)", "time"], ["entryTime", "Entry (ET)", "time"], ["exitTime", "Exit (ET)", "time"], ["catalyst", "Catalyst class", "select", [["", "–"], ["BIG", "BIG"], ["MODERATE", "MODERATE"], ["SMALL", "SMALL"], ["NONE", "None"]]],
+      ["entryBid", "Entry Bid", "number"], ["entryAsk", "Entry Ask", "number"], ["exitBid", "Exit Bid", "number"], ["exitAsk", "Exit Ask", "number"],
+      ["entryPrice", "Entry fill (blank = Ask)", "number"], ["exitPrice", "Exit fill (blank = Bid)", "number"], ["delta", "Delta at entry", "number"],
+      ["m15", "Bid 15m after exit", "number"], ["m30", "Bid 30m after", "number"], ["m60", "Bid 60m after", "number"],
+      ["notes", "Notes", "textarea", null, "wide"],
+    ],
+    missed: [
+      ["date", "Date", "date"], ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2"], ["pre", "Pre-quarter"]]], ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["signalTime", "Signal (ET)", "time"],
+      ["contract", "Contract", "text"], ["trigger", "Trigger / level", "text", null, "wide"],
+      ["entryPrice", "Entry-window Ask", "number"], ["m15", "15m after", "number"], ["m30", "30m after", "number"], ["m60", "60m after", "number"], ["hypoPnl", "Hypothetical P/L $", "number"],
+      ["lesson", "Lesson", "textarea", null, "wide"],
+    ],
+    scout: [
+      ["date", "Date", "date"], ["time", "Report time (ET)", "time"], ["kind", "Type", "select", [["scout", "Scout report"], ["obs", "Chart / chain note"]]], ["scout", "Source", "text"],
+      ["catalyst", "Catalyst class", "select", [["", "–"], ["BIG", "BIG"], ["MODERATE", "MODERATE"], ["SMALL", "SMALL"], ["NONE", "None"]]], ["regime", "Observed regime", "text"],
+      ["headline", "Headline / catalyst", "text", null, "wide"], ["assessment", "Rule check (e.g. WAIT, NO TRADE)", "text", null, "wide"],
+      ["notes", "Full report text", "textarea", null, "wide"],
+    ],
+    rules: null,
+  };
+  const TITLES = { trades: ["Add trade", "Edit trade"], missed: ["Add missed setup", "Edit missed setup"], scout: ["Add report", "Edit report"] };
+  const numericKeys = new Set(["strike", "qty", "entryBid", "entryAsk", "exitBid", "exitAsk", "entryPrice", "exitPrice", "delta", "m15", "m30", "m60", "hypoPnl"]);
+
+  function fieldHtml([k, label, type, opts, wide], v) {
+    const id = "f-" + k, val = v ?? "";
+    let input;
+    if (type === "select") input = `<select id="${id}" name="${k}">${opts.map(([o, l]) => `<option value="${esc(o)}"${String(val) === o ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
+    else if (type === "textarea") input = `<textarea id="${id}" name="${k}">${esc(val)}</textarea>`;
+    else input = `<input id="${id}" name="${k}" type="${type}"${type === "number" ? ' step="any" inputmode="decimal"' : ""} value="${esc(val)}">`;
+    return `<div class="field${wide ? " wide" : ""}"><label for="${id}">${esc(label)}</label>${input}</div>`;
+  }
+  const dlg = $("#dlg"), form = $("#dlg-form");
+  let formCtx = null;
+  function openForm(coll, rec, preset) {
+    const now = etParts();
+    const defaults = { trades: { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "XSP News Scout" } }[coll];
+    const data = rec ? { ...rec } : { ...defaults, ...(preset || {}) };
+    formCtx = { coll, id: rec?.id || null, base: rec ? stripId(rec) : {} };
+    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>${TITLES[coll][rec ? 1 : 0]}</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
+      ${coll === "trades" ? '<div class="calc" id="f-calc"></div>' : ""}
+      <div class="fields">${F[coll].map((f) => fieldHtml(f, data[f[0]])).join("")}</div>
+      ${coll === "trades" && rec?.checkpoints?.length ? `<div><div class="label" style="margin-bottom:6px">Checkpoints</div><div class="cp">${rec.checkpoints.map((c) => `<span class="mono">${esc(c.t)}</span><span class="mono">${esc(c.xsp ?? "–")}</span><span class="mono">Bid ${px(num(c.bid))} / Ask ${px(num(c.ask))}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ""}</span>`).join("")}</div></div>` : ""}
+      </div><div class="dlg-foot"><div>${rec ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
+    if (coll === "trades") { const upd = () => { const v = collect(); const c = calc(v); $("#f-calc").innerHTML = `<span>Cost <b>${money(c.cost)}</b></span><span>Proceeds <b>${money(c.proceeds)}</b></span><span>P/L <b class="${cls(c.pnl)}">${money(c.pnl, true)}</b></span><span>Return <b>${pct(c.ret)}</b></span><span>Entry spread <b>${num(v.entryAsk) != null && num(v.entryBid) != null ? money((v.entryAsk - v.entryBid) * 100) : "–"}</b></span>${c.open ? '<span class="pill info">open</span>' : ""}`; }; form.addEventListener("input", upd); upd(); }
+    const del = $("#f-del");
+    if (del) del.addEventListener("click", async () => {
+      if (!del.classList.contains("armed")) { del.classList.add("armed"); del.textContent = "Click again to delete"; return; }
+      if (await remove(formCtx.coll, formCtx.id)) { dlg.close(); toast("Deleted."); }
+    });
+    dlg.showModal();
+  }
+  function collect() {
+    const out = {};
+    for (const el of form.elements) { if (!el.name) continue; out[el.name] = numericKeys.has(el.name) ? num(el.value) : el.value || (el.type === "time" ? null : ""); }
+    return out;
+  }
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (e.submitter?.value !== "save") return dlg.close();
+    const v = collect();
+    const doc = { ...formCtx.base, ...v };
+    if (!formCtx.id) doc.createdAt = Date.now();
+    if (await save(formCtx.coll, formCtx.id, doc)) { dlg.close(); toast("Saved."); }
+  });
+  form.addEventListener("click", (e) => { if (e.target.value === "cancel") { e.preventDefault(); dlg.close(); } });
+  function openTrade(t) { if (t) openForm("trades", t); }
+  $("#new-trade").addEventListener("click", () => openForm("trades"));
+  $("#new-missed").addEventListener("click", () => openForm("missed"));
+  $("#new-scout").addEventListener("click", () => openForm("scout"));
+  $("#edit-rules").addEventListener("click", () => {
+    const rules = S.cfg.rules || [];
+    formCtx = { coll: "rules" };
+    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>Edit rules</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
+      <div class="fields">${fieldHtml(["currentVersion", "Current rule version", "text"], S.cfg.currentVersion)}${fieldHtml(["startBalance", "Starting balance", "number"], S.cfg.startBalance)}${fieldHtml(["quarterStart", "Quarter start", "date"], S.cfg.quarterStart)}${fieldHtml(["quarterEnd", "Quarter end", "date"], S.cfg.quarterEnd)}</div>
+      ${fieldHtml(["rulesText", "One rule per line, written as Name: rule", "textarea", null, "wide"], rules.map((r) => `${r.name}: ${r.text}`).join("\n"))}
+      </div><div class="dlg-foot"><span></span><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="button" id="rules-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
+    $("#f-rulesText").style.minHeight = "260px";
+    $("#rules-save").addEventListener("click", async () => {
+      const rulesOut = $("#f-rulesText").value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(":"); return i > 0 ? { name: l.slice(0, i).trim(), text: l.slice(i + 1).trim() } : { name: "Rule", text: l }; });
+      const cfg = { ...S.cfg, currentVersion: $("#f-currentVersion").value || "V2", startBalance: num($("#f-startBalance").value) ?? 100, quarterStart: $("#f-quarterStart").value, quarterEnd: $("#f-quarterEnd").value, rules: rulesOut };
+      if (await save("config", "main", cfg)) { dlg.close(); toast("Rules saved."); }
+    });
+    dlg.showModal();
+  });
+
+  // ---------- storage ----------
+  const stripId = (o) => { const { id, ...rest } = o; return rest; };
+  async function save(coll, id, data) {
+    if (!S.db) { toast("Saving is not available in this view."); return false; }
+    try {
+      const ref = id ? S.db.collection(coll).doc(id) : S.db.collection(coll).doc();
+      await ref.set(JSON.parse(JSON.stringify(stripId(data))));
+      return true;
+    } catch (err) {
+      if (err?.code === "invalid_argument") { S.canWrite = false; toast("You can view this journal but not change it."); }
+      else if (err?.code === "quota_exceeded") toast("The journal is full. Delete old entries to add more.");
+      else toast("Could not save. Try again in a moment.");
+      return false;
+    }
+  }
+  async function remove(coll, id) {
+    try { await S.db.collection(coll).doc(id).delete(); return true; } catch { toast("Could not delete. Try again."); return false; }
+  }
+
+  // ---------- boot ----------
+  setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (LC.breakAt && view === "live") renderLive(); }, 500);
+  renderAll();
+
+  (async () => {
+    const db = await (window.claude?.use ? window.claude.use("db") : null);
+    if (!db) {
+      const b = $("#banner"); b.hidden = false;
+      b.textContent = "Your journal data isn't available in this view. Open the journal from claude.ai while signed in to see and save your trades.";
+      renderAll(); return;
+    }
+    S.db = db;
+    try { const user = await window.claude.use("user"); const w = user && (await user.can?.("data.write")); if (w === false) S.canWrite = false; } catch {}
+    const onErr = () => { const b = $("#banner"); b.hidden = false; b.textContent = "Live updates stopped. Reload the page to reconnect."; };
+    const listen = (coll, key) => db.collection(coll).onSnapshot((snap) => { S[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderAll(); }, onErr);
+    listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout");
+    db.doc("config/main").onSnapshot((d) => { S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; renderAll(); }, onErr);
+  })();
+})();
+</script>
