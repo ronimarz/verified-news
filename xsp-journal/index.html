@@ -261,6 +261,23 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .cmd-help { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 4px 20px; font-size: 13px; width: 100%; }
 .cmd-help code { font-family: var(--mono); font-size: 12.5px; color: var(--accent); }
 
+/* Alerts */
+.alertbar { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 10px); left: 50%; transform: translateX(-50%); z-index: 30; display: flex; gap: 12px; align-items: center; padding: 12px 18px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); font-weight: 600; font-size: 15px; box-shadow: 0 6px 24px rgba(0,0,0,.25); max-width: calc(100vw - 32px); }
+.alertbar.plan, .alertbar.warn { background: var(--warn); color: #1c1400; }
+.alertbar.hold { background: var(--good); }
+.alertbar button { background: rgba(255,255,255,.2); border: 0; color: inherit; border-radius: 5px; padding: 4px 10px; cursor: pointer; font-weight: 600; }
+.hbar.plainbar::before { display: none; }
+.lvl { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; }
+@media (max-width: 760px) { .lvl { grid-template-columns: 1fr; } }
+.lvl > div { border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: grid; gap: 6px; align-content: start; }
+.lvl > div.cur { border-color: var(--accent); background: var(--info-bg); }
+.lvl .req { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; font-size: 12.5px; }
+.lvl .bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: var(--panel-2); overflow: hidden; }
+.lvl .bar i { display: block; height: 100%; background: var(--good); }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 12px; }
+.checks label { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink); }
+.checks input { width: auto; }
+
 /* Guide */
 .guide:empty { display: none; }
 .guide { margin-top: 14px; display: grid; grid-template-columns: auto 1fr auto; gap: 6px 16px; align-items: center; padding: 12px 16px; border-radius: 8px; background: var(--info-bg); border: 1px solid var(--accent); }
@@ -301,7 +318,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><h1>Quarter Trading Journal</h1><span class="ticker" id="ticker"></span><span class="tick" id="clock">ET --:--:--</span></div>
+    <div class="brand"><h1>Quarter Trading Journal</h1><span class="ticker" id="ticker"></span><span class="tick" id="clock">ET --:--:--</span><button class="btn sm" type="button" id="alerts-btn" style="margin-left:auto"></button></div>
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-dash" aria-selected="true" data-view="dash">Dashboard</button>
       <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live">Live check<span class="dot" id="open-dot" hidden></span></button>
@@ -354,6 +371,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       </div>
     </div>
     <div class="panel" id="edge"></div>
+    <div class="panel" id="mistakes"></div>
   </section>
 
   <!-- LIVE CHECK -->
@@ -516,6 +534,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         </div>
       </div>
     </div>
+    <div class="panel" id="drill">
+      <div class="panel-head"><div><h2>Quick drill: follow-through or fail?</h2><p class="small muted" style="margin-top:4px">Real SPY candles from a random past day, with the date and prices hidden. Price just closed past the dashed level. Will it move $0.50 further your way before $0.50 against you, within 15 minutes?</p></div><span class="small muted" id="dr-score"></span></div>
+      <div class="chart" id="dr-chart"><div class="empty">Press Start drill. Each question takes about 10 seconds.</div></div>
+      <div class="row" style="margin-top:10px"><button class="btn primary" type="button" id="dr-start">Start drill</button><button class="btn" type="button" data-dr="win" disabled>Follows through</button><button class="btn" type="button" data-dr="fail" disabled>Fails</button><span class="small" id="dr-msg"></span></div>
+    </div>
     <div class="grid2" style="align-items:start">
       <div class="panel"><div class="panel-head"><h2>Practice results</h2><span class="small muted">Separate from your official balance</span></div><div id="rp-stats"></div></div>
       <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
@@ -565,6 +588,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   <!-- LEARN -->
   <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
+    <div class="panel" id="progress"></div>
     <div class="panel">
       <div class="panel-head"><div><h2>How a trade fits together</h2><p class="small muted" style="margin-top:4px">Read left to right. Each stage feeds the next. Tap any idea for a short lesson.</p></div><span class="small muted" id="learn-progress"></span></div>
       <div class="flow" id="flow"></div>
@@ -625,6 +649,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
 <input type="file" id="shot-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
 <div class="toast" id="toast" hidden></div>
+<div class="alertbar" id="alertbar" role="alert" hidden></div>
 
 <script>
 (() => {
@@ -667,7 +692,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   // ---------- state ----------
   const DEFAULT_CFG = { planDefaults: { target: 50, stop: 40, time: 30 }, startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", underlying: "SPY", rules: [] };
-  const S = { trades: [], missed: [], scout: [], practice: [], reviews: [], bt: null, quiz: null, cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
+  const S = { trades: [], missed: [], scout: [], practice: [], reviews: [], bt: null, quiz: null, drill: null, cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
   const LIVE = { snap: null, bars: [], status: "connecting", msg: "", at: null, stopped: false };
   const U = () => S.cfg.underlying || "SPY";
   const uOf = (t) => t.underlying || "XSP";
@@ -734,7 +759,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const st = stats();
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
     renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
-    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest(); renderGuide(); renderRoutine(); renderSugg();
+    renderPracticeStats(); renderReviews(); renderQuizScore(); renderBacktest(); renderGuide(); renderRoutine(); renderSugg(); renderMistakes(); renderProgress(); renderAlertsBtn(); renderDrillScore();
     $("#open-dot").hidden = !st.open.length;
   }
 
@@ -1192,7 +1217,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
     ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
     renderPlanCalc(s); renderSpread(s);
-    renderTeach(s); renderGuide(); if (document.activeElement?.id !== "cmd") renderSugg();
+    renderTeach(s); liveAlerts(s); renderGuide(); if (document.activeElement?.id !== "cmd") renderSugg();
   }
 
   // A short "what to learn from this moment" note beside the decision.
@@ -1381,7 +1406,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const trades = s.all.slice(-8).map((t) => { const c = calc(t), d = debrief(t); return `- ${t.date} ${uOf(t)} ${contractName(t)} ${t.version} ${t.status}: entry ${t.entryTime} @ ${c.entry}, exit ${t.exitTime || "open"} @ ${c.exit ?? "-"}, P/L ${c.pnl ?? "open"}, delta ${t.delta ?? "?"}${d ? `, underlying moved ${d.move.toFixed(2)}, delta explains ${d.deltaPart.toFixed(0)}, other ${d.other.toFixed(0)}` : ""}. Notes: ${(t.notes || "").slice(0, 400)}`; }).join("\n");
     const rules = (S.cfg.rules || []).map((r) => `- ${r.name}: ${r.text}`).join("\n");
     const sc = [...S.scout].sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).slice(0, 3).map((r) => `- ${r.date} ${r.time} ${r.scout}: ${r.headline} | ${r.regime} | ${r.assessment}`).join("\n");
-    return `PAPER-TRADING JOURNAL (learning only, no real money)\nNow trading: ${U()} 0DTE options; earlier trades were XSP.\nBalance ${s.bal} from ${S.cfg.startBalance}; ${s.closed.length} closed official trades; win rate ${s.winRate != null ? (s.winRate * 100).toFixed(0) + "%" : "-"}; avg win ${s.avgWin ?? "-"}; avg loss ${s.avgLoss ?? "-"}.\nMissed setups: ${S.missed.map((m) => `${m.date} ${m.contract} hypothetical ${m.hypoPnl}`).join("; ") || "none"}\nRULES:\n${rules}\nRECENT TRADES:\n${trades}\nLATEST SCOUT REPORTS:\n${sc}`;
+    const mc = new Map(); for (const r of allMistakes()) mc.set(r.k, (mc.get(r.k) || 0) + 1);
+    const mistakesTxt = [...mc].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${mName[k] || k} ×${n}`).join(", ") || "none tagged";
+    return `Repeat mistakes: ${mistakesTxt}. Drill score: ${S.drill ? `${S.drill.right}/${S.drill.n}` : "none"}. Training level: ${LEVELS[guideLevel() - 1].name}.\nPAPER-TRADING JOURNAL (learning only, no real money)\nNow trading: ${U()} 0DTE options; earlier trades were XSP.\nBalance ${s.bal} from ${S.cfg.startBalance}; ${s.closed.length} closed official trades; win rate ${s.winRate != null ? (s.winRate * 100).toFixed(0) + "%" : "-"}; avg win ${s.avgWin ?? "-"}; avg loss ${s.avgLoss ?? "-"}.\nMissed setups: ${S.missed.map((m) => `${m.date} ${m.contract} hypothetical ${m.hypoPnl}`).join("; ") || "none"}\nRULES:\n${rules}\nRECENT TRADES:\n${trades}\nLATEST SCOUT REPORTS:\n${sc}`;
   }
   async function askCoach(q) {
     q = (q || "").trim(); if (!q) return;
@@ -1410,6 +1437,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     ["reviewFollowed", "Did you follow your plan?", "select", [["", "–"], ["yes", "Yes"], ["partly", "Partly"], ["no", "No"]]],
     ["reviewExitReason", "Why did you exit?", "select", [["", "–"], ["target", "Hit take-profit"], ["stop", "Hit stop"], ["time", "Time stop"], ["momentum", "Momentum stalled"], ["feeling", "Gut feeling"], ["close", "End of day"], ["other", "Other"]]],
     ["reviewFeeling", "How did you feel?", "select", [["", "–"], ["calm", "Calm"], ["anxious", "Anxious"], ["fomo", "Fear of missing out"], ["greedy", "Greedy"], ["fearful", "Fearful"], ["unsure", "Unsure"]]],
+    ["reviewMistakes", "Any mistakes? (tick all that apply)", "checks", null, "wide"],
     ["reviewNote", "What would you do differently?", "textarea", null, "wide"],
   ];
   const F = {
@@ -1449,6 +1477,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function fieldHtml([k, label, type, opts, wide], v) {
     const id = "f-" + k, val = v ?? "";
     let input;
+    if (type === "checks") { const have = new Set(Array.isArray(val) ? val : []); return `<fieldset class="field wide"><legend class="small muted" style="font-weight:500">${esc(label)}</legend><div class="checks">${MISTAKES.map(([mk, mn]) => `<label><input type="checkbox" name="${k}" value="${mk}"${have.has(mk) ? " checked" : ""}> ${esc(mn)}</label>`).join("")}</div></fieldset>`; }
     if (type === "select") input = `<select id="${id}" name="${k}">${opts.map(([o, l]) => `<option value="${esc(o)}"${String(val) === o ? " selected" : ""}>${esc(l)}</option>`).join("")}</select>`;
     else if (type === "textarea") input = `<textarea id="${id}" name="${k}">${esc(val)}</textarea>`;
     else input = `<input id="${id}" name="${k}" type="${type}"${type === "number" ? ' step="any" inputmode="decimal"' : ""} value="${esc(val)}">`;
@@ -1545,7 +1574,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   function collect() {
     const out = {};
-    for (const el of form.elements) { if (!el.name) continue; out[el.name] = numericKeys.has(el.name) ? num(el.value) : el.value || (el.type === "time" ? null : ""); }
+    for (const el of form.elements) { if (!el.name) continue; if (el.type === "checkbox") { out[el.name] = out[el.name] || []; if (el.checked) out[el.name].push(el.value); continue; } out[el.name] = numericKeys.has(el.name) ? num(el.value) : el.value || (el.type === "time" ? null : ""); }
     return out;
   }
   form.addEventListener("submit", async (e) => {
@@ -1662,6 +1691,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   function rpStep(n = 1) {
     for (let i = 0; i < n; i++) {
+      if (RP.pos?.alerted && RP.pos.alertAt != null && RP.idx > RP.pos.alertAt + 1) RP.pos.ignored = true;
       if (RP.idx >= RP.bars.length - 1) { rpPause(); if (RP.pos) rpExit("close"); RP.note = "That's the 4:00 pm close. Load another day to keep practicing."; break; }
       RP.idx++;
       const det = rpDetect();
@@ -1682,7 +1712,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (RP.pos.plan.t != null && chg * 100 >= RP.pos.plan.t) why = "target"; else if (RP.pos.plan.s != null && -chg * 100 >= RP.pos.plan.s) why = "stop"; else if (RP.pos.plan.m != null && held >= RP.pos.plan.m) why = "time";
     if (!why || RP.pos.alerted === why) return false;
     if ($("#rp-auto").value === "auto") { rpExit(why); RP.note = `Auto-exit: your ${why === "target" ? "take-profit" : why === "stop" ? "stop loss" : "time stop"} was hit.`; rpPause(); return true; }
-    RP.pos.alerted = why; RP.note = `Your plan says exit now (${why === "target" ? "take-profit hit" : why === "stop" ? "stop hit" : "time is up"}). Sell, or note why you're staying in.`; rpPause(); return true;
+    RP.pos.alerted = why; RP.pos.alertAt = RP.idx; RP.note = `Your plan says exit now (${why === "target" ? "take-profit hit" : why === "stop" ? "stop hit" : "time is up"}). Sell, or note why you're staying in.`; rpPause(); return true;
   }
   function rpPlay() { if (!RP.bars.length) return; RP.playing = true; $("#rp-play").textContent = "Pause"; clearInterval(RP.timer); RP.timer = setInterval(() => rpStep(1), RP.ff ? 60 : +$("#rp-speed").value); }
   function rpPause() { RP.playing = false; clearInterval(RP.timer); $("#rp-play").textContent = "Play"; }
@@ -1709,7 +1739,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, p.iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
     const doc = { replayDate: RP.date, at: Date.now(), dir: p.dir, strike: p.strike, level: p.level, levelName: p.levelName, followed: p.followed, falseBreaks: p.falseBreaks,
       entryTime: fmtHM(p.entryMin), exitTime: fmtHM(exitMin), entryU: +p.entryU.toFixed(2), exitU: +q.S.toFixed(2), entryAsk: p.entryAsk, exitBid: +q.bid.toFixed(2), iv: p.iv,
-      pnl, pct: +(pnl / (p.entryAsk * 100)).toFixed(4), minsHeld: exitMin - p.entryMin, plan: p.plan, exitReason: reason, after30 };
+      pnl, pct: +(pnl / (p.entryAsk * 100)).toFixed(4), minsHeld: exitMin - p.entryMin, plan: p.plan, exitReason: reason, after30,
+      mistakes: [!p.followed && "early", p.ignored && "ignored", p.entryMin >= 900 && "late", p.plan.t == null && p.plan.s == null && "noplan"].filter(Boolean) };
     RP.note = `Closed at ${px(q.bid)}: ${money(pnl, true)}.${after30 != null ? ` Thirty minutes later it would have been worth ${px(after30)}.` : ""}`;
     rpRender();
     if (S.db) await save("practice", null, doc);
@@ -2078,8 +2109,10 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   function renderGuide() {
     const el = $("#guide"); if (!el) return;
     if (!guideOn) { el.className = "guide off"; el.innerHTML = `<span class="small muted">Guided mode is off.</span><button class="btn sm" type="button" id="g-on">Turn on step-by-step guide</button>`; return; }
-    const m = guideModel(), c = m.cur;
+    const m = guideModel(), c = m.cur, lvl = guideLevel();
+    if (lvl === 3 && !m.warn) { el.className = "guide off"; el.innerHTML = `<span class="small muted">Alerts-only mode: the app beeps for breaks, holds and plan exits. ${c ? "Next: " + esc(c.title) + "." : ""}</span><button class="btn sm" type="button" data-setlevel="1">Show the full guide</button>`; return; }
     el.className = "guide" + (m.warn ? " warn" : "");
+    if (lvl === 2 && c && !m.warn) { el.innerHTML = `<div class="g-no">${m.idx + 1}</div><div style="min-width:0"><div class="g-meta">Hint · ${esc(m.label)}</div><div class="g-title">${esc(c.title)}</div></div><div class="row">${c.action ? `<button class="btn primary sm" type="button" id="g-act">Do it</button>` : `<button class="btn primary sm" type="button" id="g-show">Show me</button>`}${!m.loop && c.manual ? `<button class="btn sm" type="button" id="g-done">Done</button>` : ""}<button class="btn sm" type="button" data-setlevel="1">More detail</button></div>`; el._cur = c; return; }
     if (!c) { el.innerHTML = `<div class="g-no">✓</div><div><div class="g-meta">${esc(m.label)}</div><div class="g-title">All done for now.</div><div class="g-detail">${m.ph === "pre" ? "Next: the market opens at 9:30 am ET. The guide switches to the trade loop then." : m.ph === "after" ? "Nice work. Tomorrow starts with the morning scout report." : "Enjoy the rest of the weekend."}</div></div><div class="row"><button class="btn sm" type="button" data-gview="dash">See the whole day</button><button class="btn sm" type="button" id="g-off">Hide guide</button></div>`; return; }
     const total = m.loop ? 10 : m.list.length;
     el.innerHTML = `<div class="g-no">${m.idx + 1}</div>
@@ -2102,14 +2135,15 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     else if (id === "g-done" && c) gSet((g) => { g.done[c.id] = 1; });
     else if (id === "g-skip" && c) gSet((g) => { g.skip[c.id] = 1; });
     else if (id === "g-skiprev") { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed); if (t) gSet((g) => { g.skip["rev-" + t.id] = 1; }); }
-    else if (e.target.dataset.gview) { showView(e.target.dataset.gview); spotlight("#routine"); }
+    else if (e.target.dataset.gview) { ROUTINE_FORCE = true; showView(e.target.dataset.gview); renderRoutine(); spotlight("#routine"); }
     renderRoutine();
   });
 
   // The whole day's routine, on the Dashboard.
+  let ROUTINE_FORCE = false;
   function renderRoutine() {
     const el = $("#routine"); if (!el) return;
-    if (!guideOn) { el.hidden = true; return; } el.hidden = false;
+    if (!guideOn || (guideLevel() >= 2 && !ROUTINE_FORCE)) { el.hidden = true; return; } el.hidden = false;
     const ph = phaseNow(), li = (x) => `<li class="${x.status === "cur" ? "cur" : x.status === "done" ? "done" : x.status === "skip" ? "skip" : ""}"><span>${esc(x.title)}</span></li>`;
     const head = `<div class="panel-head"><div><h2>Your routine today</h2><p class="small muted" style="margin-top:4px">Follow the steps in order. The blue bar at the top always shows the next one.</p></div><button class="btn sm" type="button" id="r-off">Hide guide</button></div>`;
     if (ph === "weekend") {
@@ -2374,6 +2408,175 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   $("#cmd-sugg").addEventListener("click", (e) => { const b = e.target.closest("[data-cmd]"); if (!b) return; const c = b.dataset.cmd; if (/\d/.test(c) && !/^(step|replay)/.test(c)) { $("#cmd").value = c; $("#cmd").focus(); } else runCommand(c).then(renderSugg); });
 
+  // ---------- alerts: sound + banner + tab title ----------
+  const AL = { on: ls.get("alerts.on", true), ctx: null, seen: new Set(ls.get("alerts.seen." + etParts().date, [])), title: document.title, flashT: null };
+  function renderAlertsBtn() { const b = $("#alerts-btn"); if (b) b.textContent = AL.on ? "Alerts on" : "Alerts off"; if (b) b.setAttribute("aria-pressed", String(AL.on)); }
+  $("#alerts-btn").addEventListener("click", () => { AL.on = !AL.on; ls.set("alerts.on", AL.on); renderAlertsBtn(); if (AL.on) beep("break"); toast(AL.on ? "Alerts on. You'll hear a sound for breaks, holds and plan exits while this page is open." : "Alerts off."); });
+  document.addEventListener("pointerdown", () => { try { AL.ctx = AL.ctx || new (window.AudioContext || window.webkitAudioContext)(); AL.ctx.resume?.(); } catch {} }, { once: false, passive: true });
+  function beep(kind) {
+    try {
+      AL.ctx = AL.ctx || new (window.AudioContext || window.webkitAudioContext)();
+      const tones = { break: [660], hold: [660, 880], plan: [880, 660, 880], warn: [440, 440] }[kind] || [660];
+      let t = AL.ctx.currentTime;
+      for (const f of tones) { const o = AL.ctx.createOscillator(), g = AL.ctx.createGain(); o.frequency.value = f; o.connect(g); g.connect(AL.ctx.destination); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22); o.start(t); o.stop(t + 0.25); t += 0.28; }
+    } catch {}
+  }
+  function alertUser(key, kind, text) {
+    if (AL.seen.has(key)) return; AL.seen.add(key); ls.set("alerts.seen." + etParts().date, [...AL.seen].slice(-200));
+    if (!AL.on) return;
+    beep(kind);
+    const bar = $("#alertbar"); bar.className = "alertbar " + kind; bar.hidden = false;
+    bar.innerHTML = `<span>${esc(text)}</span><button type="button" id="al-go">Show me</button><button type="button" id="al-x">Dismiss</button>`;
+    clearInterval(AL.flashT); let on = false;
+    AL.flashT = setInterval(() => { on = !on; document.title = on ? "● " + text.slice(0, 40) : AL.title; }, 900);
+    clearTimeout(alertUser.t); alertUser.t = setTimeout(stopAlert, 20000);
+  }
+  function stopAlert() { $("#alertbar").hidden = true; clearInterval(AL.flashT); document.title = AL.title; }
+  $("#alertbar").addEventListener("click", (e) => { if (e.target.id === "al-go") { showView("live"); setTimeout(() => spotlight(openPos() ? "#live-open" : "#lc-decision"), 60); } if (e.target.id === "al-go" || e.target.id === "al-x") stopAlert(); });
+  // Called after every live render: fire each alert once.
+  function liveAlerts(s) {
+    if (!marketOpen()) return;
+    const day = etParts().date, lvl = LC.level;
+    if (levelArmedToday() && s.auto) {
+      if (s.breakET) alertUser(`brk:${day}:${lvl}:${s.breakET}`, "break", `Break: SPY closed ${LC.dir === "put" ? "below" : "above"} ${lvl} at ${s.breakET}. Wait for the hold.`);
+      if (s.held) alertUser(`hold:${day}:${lvl}:${s.holdET}`, "hold", `Hold confirmed at ${s.holdET}. Check context and the option chain.`);
+      if (s.resets) alertUser(`fb:${day}:${lvl}:${s.resets}`, "warn", `False break at ${lvl}: price came back across. Keep watching.`);
+    }
+    for (const t of stats().open) {
+      const last = calc(t).last, a = planStatus(t, last ? num(last.bid) : null);
+      a.forEach((x) => alertUser(`plan:${t.id}:${x}`, "plan", "Your plan says get out: " + x));
+      // soft alert from the delta estimate (not a quote)
+      const S0 = num(t.entryUnderlying), d = num(t.delta), Sn = LIVE.snap && uOf(t) === U() ? num(LIVE.snap.price) : null;
+      if (S0 != null && d != null && Sn != null && num(t.entryBid) != null) {
+        const est = num(t.entryBid) + d * (Sn - S0);
+        if (num(t.planTargetPrice) != null && est >= t.planTargetPrice) alertUser(`est:${t.id}:t`, "plan", `SPY moved enough that your option may be near take-profit (${px(t.planTargetPrice)}). Check the real Bid.`);
+        if (num(t.planStopPrice) != null && est <= t.planStopPrice) alertUser(`est:${t.id}:s`, "plan", `SPY moved against you: your option may be near your stop (${px(t.planStopPrice)}). Check the real Bid.`);
+      }
+    }
+  }
+  setInterval(() => { if (marketOpen() && stats().open.length && etParts().min >= 945) alertUser(`close:${etParts().date}`, "warn", "15 minutes to the close. Close your SPY position before 4:00 pm."); }, 30000);
+
+  // ---------- training levels: the guide steps back as you earn it ----------
+  const LEVELS = [
+    { n: 1, name: "Guided", what: "Full step-by-step guide and the whole-day routine." },
+    { n: 2, name: "Hints", what: "A one-line hint instead of the full guide. Routine on request." },
+    { n: 3, name: "Alerts only", what: "No guide. Sounds and banners for breaks, holds and plan exits." },
+  ];
+  function progressReqs() {
+    const P = S.practice, byPlan = P.filter((p) => p.followed && ["target", "stop", "time", "plan", "close"].includes(p.exitReason)).length;
+    const live = S.trades.filter((t) => t.status === "official" && t.version === "V2" && !calc(t).open), liveOk = live.filter((t) => t.reviewFollowed === "yes").length;
+    return {
+      2: [{ label: "Practice trades", have: P.length, need: 20 }, { label: "Practice on a V2 signal and closed by your plan", have: P.length ? Math.round((byPlan / P.length) * 100) : 0, need: 80, unit: "%" }, { label: "Quiz answers right", have: S.quiz?.correct || 0, need: 10 }],
+      3: [{ label: "Practice trades", have: P.length, need: 30 }, { label: "Closed V2 live trades", have: live.length, need: 5 }, { label: "Live trades where you followed your plan", have: live.length ? Math.round((liveOk / live.length) * 100) : 0, need: 80, unit: "%" }, { label: "Drill answers right", have: S.drill?.right || 0, need: 20 }],
+    };
+  }
+  const met = (list) => list.every((r) => r.have >= r.need);
+  function earnedLevel() { const r = progressReqs(); return met(r[2]) ? (met(r[3]) ? 3 : 2) : 1; }
+  const guideLevel = () => ls.get("guide.level", null) ?? earnedLevel();
+  function renderProgress() {
+    const el = $("#progress"); if (!el) return;
+    const r = progressReqs(), earned = earnedLevel(), cur = guideLevel();
+    const req = (x) => `<div class="req"><span>${esc(x.label)}</span><span class="mono">${x.have}${x.unit || ""} / ${x.need}${x.unit || ""}</span><div class="bar"><i style="width:${Math.min(100, (x.have / x.need) * 100)}%"></i></div></div>`;
+    el.innerHTML = `<div class="panel-head"><div><h2>Your training level</h2><p class="small muted" style="margin-top:4px">The guide steps back as you show you've got it. You can switch any time.</p></div><span class="small muted">Earned: ${esc(LEVELS[earned - 1].name)}</span></div>
+      <div class="lvl">${LEVELS.map((L) => `<div class="${L.n === cur ? "cur" : ""}"><div class="label">Level ${L.n}${L.n <= earned ? " · unlocked" : ""}</div><h3>${esc(L.name)}</h3><p class="small muted">${esc(L.what)}</p>${L.n > 1 ? r[L.n].map(req).join("") : `<p class="small">Where everyone starts.</p>`}<div>${L.n === cur ? '<span class="pill info plain">Current</span>' : `<button class="btn sm" type="button" data-setlevel="${L.n}">${L.n <= earned ? "Switch to this" : "Try it early"}</button>`}</div></div>`).join("")}</div>`;
+    const prev = ls.get("guide.earned", 1);
+    if (earned > prev) { ls.set("guide.earned", earned); cmdOut(`You've unlocked level ${earned}: ${LEVELS[earned - 1].name}. The guide can step back now.`, "ok", `<button class="btn primary sm" type="button" data-setlevel="${earned}">Switch</button><button class="btn sm" type="button" data-setlevel="${cur}">Stay at ${esc(LEVELS[cur - 1].name)}</button>`); }
+  }
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-setlevel]"); if (!b) return; const n = +b.dataset.setlevel; ls.set("guide.level", n); if (n === 3) { AL.on = true; ls.set("alerts.on", true); renderAlertsBtn(); } if (!guideOn) { guideOn = true; ls.set("guide.on", true); } renderProgress(); renderGuide(); renderRoutine(); toast(`Training level: ${LEVELS[n - 1].name}.`); if (e.target.closest("#cmd-out")) $("#cmd-out").hidden = true; });
+
+  // ---------- mistakes ----------
+  const MISTAKES = [["early", "Entered before the hold", "breakhold"], ["chase", "Chased a move that already ran", "spread"], ["noplan", "No plan before entering", "exit"], ["ignored", "Ignored my plan's exit", "exit"], ["late", "Entered late in the day", "theta"], ["fearexit", "Exited early out of fear", "exit"], ["context", "Ignored the news context", "regime"], ["revenge", "Revenge trade after a loss", "size"], ["size", "Position too big", "size"]];
+  const mName = Object.fromEntries(MISTAKES.map(([k, n]) => [k, n]));
+  function autoMistakes(t) {
+    const out = [];
+    if (t.date >= "2026-10-12" && num(t.planTargetPrice) == null && num(t.planStopPrice) == null) out.push("noplan");
+    if (toMin(t.entryTime) >= 900) out.push("late");
+    if (t.qual === "not") out.push("early");
+    if (!calc(t).open && t.exitTime && t.planTimeStop && t.exitTime > t.planTimeStop && t.reviewExitReason !== "time") out.push("ignored");
+    return out;
+  }
+  function allMistakes() {
+    const rows = [];
+    for (const t of S.trades.filter((x) => x.status === "official")) for (const k of new Set([...(t.reviewMistakes || []), ...autoMistakes(t)])) rows.push({ k, src: "live", date: t.date });
+    for (const p of S.practice) for (const k of p.mistakes || []) rows.push({ k, src: "practice", date: p.replayDate });
+    return rows;
+  }
+  function renderMistakes() {
+    const el = $("#mistakes"); if (!el) return;
+    const rows = allMistakes(), cnt = new Map();
+    for (const r of rows) { const c = cnt.get(r.k) || { live: 0, practice: 0 }; c[r.src]++; cnt.set(r.k, c); }
+    const top = [...cnt].sort((a, b) => b[1].live + b[1].practice - (a[1].live + a[1].practice)), max = top.length ? top[0][1].live + top[0][1].practice : 1;
+    el.innerHTML = `<div class="panel-head"><div><h2>Repeat mistakes</h2><p class="small muted" style="margin-top:4px">From your trade reviews and what the app spots automatically. Fix the top one first.</p></div></div>` + (top.length ? `<div class="tbl-wrap"><table><thead><tr><th>Mistake</th><th class="n">Live</th><th class="n">Practice</th><th class="bar-cell" aria-label="Count bar"></th><th></th></tr></thead><tbody>${top.slice(0, 6).map(([k, c], i) => `<tr${i === 0 ? ' style="font-weight:600"' : ""}><td>${esc(mName[k] || k)}</td><td class="n">${c.live}</td><td class="n">${c.practice}</td><td class="bar-cell"><div class="hbar" style="--x:0"><i style="left:0;width:${((c.live + c.practice) / max) * 100}%;background:var(--loss)"></i></div></td><td><button class="learn-link" type="button" data-learn="${MISTAKES.find((m) => m[0] === k)?.[2] || "exit"}">Lesson</button></td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No mistakes tagged yet. Tick them in each trade's review, and the app adds the ones it can spot (no plan, late entry, entering without the hold).</div>`);
+    $$("#mistakes .hbar").forEach((h) => h.classList.add("plainbar"));
+  }
+
+  // ---------- drill: follow-through or fail ----------
+  const DR = { pool: [], cur: null, answered: false };
+  async function drillPool() {
+    await loadDaily(90);
+    const ds = pastDates().slice(-45), pick = [];
+    while (pick.length < 6 && ds.length) pick.push(ds.splice(Math.floor(Math.random() * ds.length), 1)[0]);
+    pick.sort();
+    const days = await manyDays(pick);
+    for (const d of pick) {
+      const bars = days.get(d), p = prevDay(d); if (!bars?.length || !p) continue;
+      const or = bars.slice(0, 15), lv = [["yesterday's high", p.h, "call"], ["yesterday's low", p.l, "put"], ["yesterday's close", p.c, "call"], ["yesterday's close", p.c, "put"], ["the opening-range high", Math.max(...or.map((b) => b.h)), "call"], ["the opening-range low", Math.min(...or.map((b) => b.l)), "put"]];
+      for (const [name, L, dir] of lv) {
+        let armed = false;
+        for (let i = 15; i < bars.length - 16; i++) {
+          const b = bars[i], beyond = dir === "call" ? b.c > L : b.c < L;
+          if (barMin(b) >= 915) break;
+          if (!armed) { if (!beyond) armed = true; continue; }
+          if (beyond) { DR.pool.push({ date: d, bars, i, L, dir, name }); break; }
+        }
+      }
+    }
+    DR.pool.sort(() => Math.random() - 0.5);
+  }
+  function drillOutcome(q) {
+    const e = q.bars[q.i].c;
+    for (let k = q.i + 1; k <= q.i + 15; k++) { const x = q.bars[k], fav = q.dir === "call" ? x.h - e : e - x.l, adv = q.dir === "call" ? e - x.l : x.h - e; if (adv >= 0.5) return { r: "fail", k, why: "It went $0.50 against first" }; if (fav >= 0.5) return { r: "win", k, why: "It went $0.50 further first" }; }
+    return { r: "fail", k: q.i + 15, why: "It went nowhere for 15 minutes (no follow-through)" };
+  }
+  function drillChart(q, reveal) {
+    const from = Math.max(0, q.i - 29), shown = q.bars.slice(from, reveal ? q.i + 16 : q.i + 1), e = q.bars[q.i].c, sg = q.dir === "call" ? 1 : -1;
+    const W = 720, H = 220, L = 8, R = 70, T = 10, B = 10, slots = 45, cw = (W - L - R) / slots;
+    let lo = Math.min(...shown.map((b) => b.l), q.L), hi = Math.max(...shown.map((b) => b.h), q.L);
+    if (reveal) { lo = Math.min(lo, e - 0.5, e + 0.5); hi = Math.max(hi, e + 0.5, e - 0.5); }
+    const pad = (hi - lo) * 0.08 || 0.1; lo -= pad; hi += pad;
+    const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+    let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Drill candles">`;
+    s += `<line x1="${L}" x2="${W - R}" y1="${y(q.L)}" y2="${y(q.L)}" stroke="var(--warn)" stroke-dasharray="5 3" stroke-width="1.5"/><text x="${W - R + 6}" y="${y(q.L) + 4}" style="fill:var(--warn)">level</text>`;
+    if (reveal) for (const [v, n, c] of [[e + 0.5 * sg, "+$0.50", "var(--good)"], [e - 0.5 * sg, "−$0.50", "var(--bad)"]]) s += `<line x1="${L + (q.i - from) * cw}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c}" stroke-dasharray="3 3"/><text x="${W - R + 6}" y="${y(v) + 4}" style="fill:${c}">${n}</text>`;
+    shown.forEach((b, j) => {
+      const idx = from + j, cx = L + j * cw + cw / 2, up = b.c >= b.o, after = idx > q.i;
+      const col = idx === q.i ? "var(--accent)" : after ? "var(--later)" : up ? "var(--muted)" : "var(--faint)";
+      s += `<line x1="${cx}" x2="${cx}" y1="${y(b.h)}" y2="${y(b.l)}" stroke="${col}"/><rect x="${cx - cw * 0.32}" y="${Math.min(y(b.o), y(b.c))}" width="${cw * 0.64}" height="${Math.max(Math.abs(y(b.o) - y(b.c)), 1)}" fill="${up && !after ? "var(--panel)" : col}" stroke="${col}"/>`;
+    });
+    return s + "</svg>";
+  }
+  async function nextDrill() {
+    if (!S.mcp) { $("#dr-msg").textContent = "Drills need Webull, which isn't available in this view."; return; }
+    $$("[data-dr]").forEach((b) => (b.disabled = true));
+    if (!DR.pool.length) { $("#dr-chart").innerHTML = `<div class="empty">Loading a few random past days…</div>`; try { await drillPool(); } catch (e) { $("#dr-chart").innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; return; } }
+    DR.cur = DR.pool.pop(); DR.answered = false;
+    if (!DR.cur) { $("#dr-chart").innerHTML = `<div class="empty">No clean breaks found on those days. Press Next to load more.</div>`; return; }
+    $("#dr-chart").innerHTML = drillChart(DR.cur, false);
+    $("#dr-msg").textContent = `It just closed ${DR.cur.dir === "call" ? "above" : "below"} ${DR.cur.name} (blue candle). Your call?`;
+    $$("[data-dr]").forEach((b) => (b.disabled = false)); $("#dr-start").textContent = "Next";
+  }
+  $("#dr-start").addEventListener("click", nextDrill);
+  $$("[data-dr]").forEach((b) => b.addEventListener("click", () => {
+    if (!DR.cur || DR.answered) return; DR.answered = true;
+    const o = drillOutcome(DR.cur), ok = b.dataset.dr === o.r;
+    $("#dr-chart").innerHTML = drillChart(DR.cur, true);
+    $("#dr-msg").innerHTML = `<b style="color:${ok ? "var(--good)" : "var(--bad)"}">${ok ? "Right." : "Not this time."}</b> ${esc(o.why)}. That was ${esc(dayName(DR.cur.date))} at ${esc(fmtClock(barMin(DR.cur.bars[DR.cur.i]) + 1))}. <button class="learn-link" type="button" data-learn="breakhold">Why breaks fail</button>`;
+    $$("[data-dr]").forEach((x) => (x.disabled = true));
+    const p = { n: 0, right: 0, recent: [], ...(S.drill || {}) }; p.n++; if (ok) p.right++; p.recent = [...(p.recent || []), ok ? 1 : 0].slice(-20);
+    S.drill = p; renderDrillScore(); if (S.db) S.db.doc("drill/progress").set(p).catch(() => {});
+  }));
+  function renderDrillScore() { const p = S.drill; const r = p?.recent || []; $("#dr-score").textContent = p ? `${p.right} of ${p.n} right${r.length >= 5 ? ` · last ${r.length}: ${Math.round((r.reduce((a, b) => a + b, 0) / r.length) * 100)}%` : ""}` : ""; }
+
   // ---------- storage ----------
   const stripId = (o) => { const { id, ...rest } = o; return rest; };
   async function save(coll, id, data) {
@@ -2414,7 +2617,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const listen = (coll, key) => db.collection(coll).onSnapshot((snap) => { S[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderAll(); }, onErr);
     listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout"); listen("practice", "practice"); listen("reviews", "reviews");
     db.doc("backtest/latest").onSnapshot((d) => { S.bt = d.exists ? d.data() : null; renderBacktest(); }, () => {});
-    db.doc("quiz/progress").onSnapshot((d) => { S.quiz = d.exists ? d.data() : null; renderQuizScore(); }, () => {});
+    db.doc("quiz/progress").onSnapshot((d) => { S.quiz = d.exists ? d.data() : null; renderQuizScore(); renderProgress(); }, () => {});
+    db.doc("drill/progress").onSnapshot((d) => { S.drill = d.exists ? d.data() : null; renderDrillScore(); renderProgress(); }, () => {});
     db.doc("config/main").onSnapshot((d) => { const prevU = U(); S.cfg = d.exists ? { ...DEFAULT_CFG, ...d.data() } : DEFAULT_CFG; fillPlanDefaults(); if (U() !== prevU) { LIVE.bars = []; LIVE.snap = null; schedulePoll(0); } renderAll(); }, onErr);
   })();
   (async () => { S.sample = await use("sample"); })();
