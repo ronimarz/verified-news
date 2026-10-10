@@ -1920,7 +1920,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         return { key: "alert" + p.alert + !!wSell + (t ? t.step + t.type : ""), cls: "warn", title: "Your plan says sell now", body: `<p class="small">${why}</p>${coachSteps(steps)}`, buttons: [...(wSell ? [["cancelsells", "Cancel my sell order", false]] : []), ["show:positions", "Show me", false], ["fill:now", "Fill it in for me", true]] };
       }
       if (t && t.action === "STC") return ticketCoach(t);
-      if (!wSell) return { key: "settp" + RP.playing, cls: "go", title: "Filled! Now set your take-profit", body: `<p class="small">You own ${p.qty} × ${esc(contract)} at ${px(p.avg)}. Place a sell order now, so it fills by itself if the price rises to your target.</p>${coachSteps([["Go to <b>Positions</b> and press <b>Close</b> (Fidelity fills in Sell To Close for you).", false], [`Order Type: <b>Limit</b>. Limit Price: <b>${px(p.targetPx)}</b> (your +${p.plan.t}% target).`, false], ["Time in Force: <b>Day</b>. Press <b>Preview Order</b>, then <b>Place Order</b>.", false]])}<p class="small muted">Your stop (${px(p.stopPx)}) and time limit you watch yourself. I'll warn you.${RP.playing ? "" : " The replay continues once your sell order is placed (or press Play)."}</p>`, buttons: [["show:positions", "Show me", false], ["fill:tp", "Fill it in for me", true]] };
+      if (!wSell) return { key: "settp" + RP.playing, cls: "go", title: "Filled! Now set your take-profit", body: `<p class="small">You own ${p.qty} × ${esc(contract)} at ${px(p.avg)}. Place a sell order now, so it fills by itself if the price rises to your target.</p>${coachSteps([["Go to <b>Positions</b> and press <b>Close</b> (it fills in Sell To Close for you).", false], [`Change Order Type to <b>Limit</b> and set Limit Price to <b>${px(p.targetPx)}</b> (your +${p.plan.t}% target). Leaving it on Market would sell right now instead.`, false], ["Time in Force: <b>Day</b>. Press <b>Preview Order</b>, then <b>Place Order</b>.", false]])}<p class="small muted">Your stop (${px(p.stopPx)}) and time limit you watch yourself. I'll warn you.${RP.playing ? "" : " The replay continues once your sell order is placed (or press Play)."}</p>`, buttons: [["show:positions", "Show me", false], ["fill:tp", "Fill it in for me", true]] };
       return { key: "managing", cls: "", title: "Trade open · take-profit order working", body: `<div class="pl" id="c-pl">–</div><p class="small">Now Bid <b id="c-bid">–</b>. Sell order working at <b>${px(wSell.limit)}</b>. Stop: <b>${px(p.stopPx)}</b>. Time left: <b id="c-left">–</b>.</p><p class="small muted">Nothing to click. Let the plan work. Notice how the option moves faster than SPY (delta and gamma), and how time decay chips away.</p>` };
     }
     if (wBuy) return { key: "wbuy" + wBuy.id, cls: "", title: "Your buy order is waiting", body: `<p class="small">Limit ${px(wBuy.limit)}. The Ask is <b id="c-ask">–</b>. A limit buy only fills if the Ask drops to your price.</p><p class="small muted">If it hasn't filled within a minute, cancel it in Orders and decide again. Chasing a move with a higher price is a common mistake.</p>`, buttons: [["show:orders", "Show me", false]] };
@@ -1983,8 +1983,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const nW = RP.orders.filter((o) => o.status === "working").length; $("#b-ordcount").textContent = nW ? `(${nW})` : "";
     const body = $("#b-body");
     if (!has) { body.innerHTML = `<p class="small muted">Start a day to see the option chain.</p>`; RP.bodyKey = ""; return; }
-    const center = Math.round(S0), key = [RP.tab, center, RP.signal?.strike, RP.pos ? RP.pos.strike + RP.pos.dir + RP.pos.qty : "", RP.orders.map((o) => o.id + o.status).join(","), RP.ticket ? JSON.stringify(RP.ticket) : ""].join("|");
-    if (key !== RP.bodyKey) { RP.bodyKey = key; body.innerHTML = brokerHtml(center); }
+    const center = Math.round(S0), key = [RP.tab, RP.tab === "chain" ? center : "", RP.signal?.strike, RP.pos ? RP.pos.strike + RP.pos.dir + RP.pos.qty : "", RP.orders.map((o) => o.id + o.status).join(","), RP.ticket ? [RP.ticket.action, RP.ticket.dir, RP.ticket.strike, RP.ticket.type, RP.ticket.step, RP.ticket.err || ""].join(":") : ""].join("|");
+    const editing = RP.tab === "trade" && body.contains(document.activeElement) && /INPUT|SELECT/.test(document.activeElement.tagName);
+    if ((key !== RP.bodyKey && !editing) || RP.forceBody) { RP.bodyKey = key; RP.forceBody = false; body.innerHTML = brokerHtml(center); }
     brokerLive();
   }
   function brokerHtml(center) {
@@ -2003,7 +2004,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       if (t.step === "preview") {
         const q = rpQuote(t.dir, t.strike), est = (t.type === "market" ? (buy ? q.ask : q.bid) : t.limit) * 100 * t.qty;
         const warn = buy && t.type === "limit" && t.limit < q.bid ? "Your limit is below the Bid. It probably won't fill unless the price drops." : !buy && t.type === "limit" && t.limit > q.ask ? "Your limit is above the current price. It waits until the Bid rises to it." : t.type === "market" ? `Market orders fill right away at the ${buy ? "Ask" : "Bid"}, whatever it is at that moment.` : "";
-        return `<div class="ticket"><div class="label">Preview order</div><div class="preview"><div><b>${buy ? "Buy To Open" : "Sell To Close"}</b> ${t.qty} × ${esc(cName(t.dir, t.strike))}</div><div>${t.type === "market" ? "Market" : `Limit ${px(t.limit)}`} · Day</div><div>Estimated ${buy ? "cost" : "proceeds"}: <b>${money(Math.round(est * 100) / 100)}</b> <span class="muted small">(+ $${(0.65 * t.qty).toFixed(2)} fees in a real account)</span></div>${warn ? `<div class="small" style="color:var(--warn)">${esc(warn)}</div>` : ""}</div><div class="row"><button class="btn" type="button" data-t="edit">Edit</button><button class="btn primary" type="button" data-t="place">Place Order</button></div><div class="small" id="t-err" style="color:var(--bad)"></div></div>`;
+        return `<div class="ticket"><div class="label">Preview order</div><div class="preview"><div><b>${buy ? "Buy To Open" : "Sell To Close"}</b> ${t.qty} × ${esc(cName(t.dir, t.strike))}</div><div>${t.type === "market" ? "Market" : `Limit ${px(t.limit)}`} · Day</div><div>Estimated ${buy ? "cost" : "proceeds"}: <b>${money(Math.round(est * 100) / 100)}</b> <span class="muted small">(+ $${(0.65 * t.qty).toFixed(2)} fees in a real account)</span></div>${warn ? `<div class="small" style="color:var(--warn)">${esc(warn)}</div>` : ""}</div>${t.err ? `<div class="alert" style="background:var(--bad-bg)">${esc(t.err)}${/sell order working/.test(t.err) ? `<div class="row" style="margin-top:6px"><button class="btn sm primary" type="button" data-t="cancelplace">Cancel it and ${t.type === "market" ? "close now" : "place this order"}</button></div>` : ""}</div>` : ""}<div class="row"><button class="btn" type="button" data-t="edit">Edit</button><button class="btn primary" type="button" data-t="place">Place Order</button></div></div>`;
       }
       return `<div class="ticket">
         <div class="trow"><label>Account</label><span>Practice (paper)</span></div>
@@ -2050,17 +2051,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const readForm = () => { tk.qty = Math.max(1, Math.round(num($("#t-qty")?.value) || 1)); tk.type = $("#t-type")?.value || tk.type; tk.action = $("#t-action")?.value || tk.action; if (tk.type === "limit") tk.limit = num($("#t-limit")?.value) ?? tk.limit; };
       if (a === "setbid" || a === "setmid" || a === "setask") { $("#t-limit").value = (a === "setbid" ? q.bid : a === "setask" ? q.ask : Math.round(q.mid * 100) / 100).toFixed(2); readForm(); brokerLive(); return; }
       if (a === "preview") { readForm(); if (tk.type === "limit" && !(tk.limit > 0)) return toast("Enter a limit price."); tk.step = "preview"; }
-      if (a === "edit") tk.step = "edit";
+      if (a === "edit") { tk.step = "edit"; tk.err = null; }
       if (a === "clear") { RP.ticket = null; RP.tab = "chain"; }
-      if (a === "place") { const err = rpPlace(tk); if (err) { tk.step = "edit"; RP.bodyKey = ""; rpRender(); toast(err); return; } }
+      if (a === "place") { const err = rpPlace(tk); if (err) { tk.err = err; RP.bodyKey = ""; rpRender(); return; } }
+      if (a === "cancelplace") { rpCancelSells(); tk.err = null; const err = rpPlace(tk); if (err) { tk.err = err; RP.bodyKey = ""; rpRender(); return; } }
       RP.bodyKey = ""; RP.coachKey = ""; rpRender(); return;
     }
-    if (e.target.closest("[data-pos=close]") && RP.pos) { openTicket("STC", RP.pos.dir, RP.pos.strike, { type: RP.pos.alert ? "market" : "limit", limit: RP.pos.alert ? undefined : RP.pos.targetPx }); rpRender(); return; }
+    if (e.target.closest("[data-pos=close]") && RP.pos) { openTicket("STC", RP.pos.dir, RP.pos.strike, { type: "market" }); rpRender(); return; }
     const c = e.target.closest("[data-cancel]"); if (c) { const o2 = RP.orders.find((x) => x.id === +c.dataset.cancel); if (o2 && o2.status === "working") { o2.status = "cancelled"; RP.bodyKey = ""; RP.coachKey = ""; toast("Order cancelled."); rpRender(); } }
   });
   $("#b-body").addEventListener("change", (e) => {
     const tk = RP.ticket; if (!tk) return;
-    if (e.target.id === "t-type" || e.target.id === "t-action") { tk.type = $("#t-type").value; tk.action = $("#t-action").value; tk.qty = Math.max(1, Math.round(num($("#t-qty").value) || 1)); const q = rpQuote(tk.dir, tk.strike); tk.limit = tk.action === "BTO" ? q.ask : q.bid; RP.bodyKey = ""; RP.coachKey = ""; rpRender(); }
+    if (e.target.id === "t-type" || e.target.id === "t-action") { tk.type = $("#t-type").value; tk.action = $("#t-action").value; tk.qty = Math.max(1, Math.round(num($("#t-qty").value) || 1)); const q = rpQuote(tk.dir, tk.strike); tk.limit = tk.action === "BTO" ? q.ask : q.bid; RP.forceBody = true; RP.coachKey = ""; rpRender(); }
     if (e.target.id === "t-qty" || e.target.id === "t-limit") { tk.qty = Math.max(1, Math.round(num($("#t-qty").value) || 1)); if (tk.type === "limit") tk.limit = num($("#t-limit").value) ?? tk.limit; RP.coachKey = ""; brokerLive(); renderCoach(); }
   });
 
