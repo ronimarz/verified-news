@@ -596,6 +596,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <div class="rule-lv">
             <label><input type="checkbox" data-rl="ph" checked> Yesterday's high (call)</label>
             <label><input type="checkbox" data-rl="pl" checked> Yesterday's low (put)</label>
+            <label><input type="checkbox" data-rl="day" checked> Today's high and low so far</label>
             <label><input type="checkbox" data-rl="pc"> Yesterday's close (both ways)</label>
             <label><input type="checkbox" data-rl="or15" checked> First 15 minutes' high and low</label>
             <label><input type="checkbox" data-rl="or30"> First 30 minutes' high and low</label>
@@ -1826,13 +1827,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     v1: { name: "V1: wait 3 minutes", hold: 3 },
     now: { name: "Buy right on the break", hold: 0 },
   };
-  const RULE_BASE = { hold: 1, dirs: "both", until: 930, t: 50, s: 40, m: 30, lv: { ph: true, pl: true, pc: false, or15: true, or30: false } };
+  const RULE_BASE = { hold: 1, dirs: "both", until: 930, t: 50, s: 40, m: 30, lv: { ph: true, pl: true, day: true, pc: false, or15: true, or30: false } };
   let RULE = { ...RULE_BASE, ...ls.get("rp.rule", {}) }; RULE.lv = { ...RULE_BASE.lv, ...(RULE.lv || {}) };
   const ruleWait = (h) => h === 0 ? "buy on the break" : h === 1 ? "wait 1 minute" : `wait ${h} minutes`;
-  function rulePreset(r) { for (const [k, v] of Object.entries(RULE_PRESETS)) { if (r.hold === v.hold && r.dirs === "both" && r.until === 930 && r.t === 50 && r.s === 40 && r.m === 30 && r.lv.ph && r.lv.pl && !r.lv.pc && r.lv.or15 && !r.lv.or30) return k; } return "custom"; }
+  function rulePreset(r) { for (const [k, v] of Object.entries(RULE_PRESETS)) { if (r.hold === v.hold && r.dirs === "both" && r.until === 930 && r.t === 50 && r.s === 40 && r.m === 30 && Object.keys(RULE_BASE.lv).every((x) => !!r.lv[x] === RULE_BASE.lv[x])) return k; } return "custom"; }
   function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, +${r.t}% / −${r.s}% / ${r.m} min` : RULE_PRESETS[k].name; }
   function ruleSummary(r) {
-    const lv = [r.lv.ph && r.dirs !== "put" && "yesterday's high", r.lv.pl && r.dirs !== "call" && "yesterday's low", r.lv.pc && "yesterday's close", r.lv.or15 && "first-15-min range", r.lv.or30 && "first-30-min range"].filter(Boolean);
+    const lv = [r.lv.ph && r.dirs !== "put" && "yesterday's high", r.lv.pl && r.dirs !== "call" && "yesterday's low", r.lv.day && "today's high/low so far", r.lv.pc && "yesterday's close", r.lv.or15 && "first-15-min range", r.lv.or30 && "first-30-min range"].filter(Boolean);
     return `When SPY breaks ${lv.length ? lv.join(", ") : "(no lines picked)"}, ${ruleWait(r.hold)}${r.hold ? " with no touch back" : ""}. ${r.dirs === "both" ? "Calls and puts" : r.dirs === "call" ? "Calls only" : "Puts only"}, none after ${fmtClock(r.until)}. Sell at +${r.t}%, −${r.s}%, or after ${r.m} min.`;
   }
   function renderRule() {
@@ -1867,9 +1868,26 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (p && lv.pc) out.push({ key: "pcu", name: "yesterday's close", L: p.c, dir: "call", from: 570 }, { key: "pcd", name: "yesterday's close", L: p.c, dir: "put", from: 570 });
     if (lv.or15 && RP.idx >= 14) { const [h, l] = range(15); out.push({ key: "orh", name: "the first-15-minute high", L: h, dir: "call", from: 585 }, { key: "orl", name: "the first-15-minute low", L: l, dir: "put", from: 585 }); }
     if (lv.or30 && RP.idx >= 29) { const [h, l] = range(30); out.push({ key: "or30h", name: "the first-30-minute high", L: h, dir: "call", from: 600 }, { key: "or30l", name: "the first-30-minute low", L: l, dir: "put", from: 600 }); }
+    if (lv.day) out.push({ key: "dh", name: "today's high so far", dir: "call", from: 585, dyn: true }, { key: "dl", name: "today's low so far", dir: "put", from: 585, dyn: true });
     return out.filter((x) => RULE.dirs === "both" || x.dir === RULE.dirs);
   }
+  // A moving line: today's high (or low) so far. It freezes at the price that broke.
+  function dynState(lv) {
+    const H = RULE.hold, call = lv.dir === "call";
+    let ext = null, L = null, st = "watch", bi = -1, hi = -1, resets = 0, hc = 0;
+    for (let i = 0; i <= RP.idx; i++) {
+      const b = RP.bars[i];
+      if (ext != null && barMin(b) >= lv.from && b.t >= (RP.since[lv.key] || 0)) {
+        if (st === "watch") { if (call ? b.c > ext : b.c < ext) { L = ext; bi = i; hc = 0; if (H === 0) { st = "held"; hi = i; break; } st = "broke"; } }
+        else if (call ? b.l > L : b.h < L) { if (++hc >= H) { st = "held"; hi = i; break; } }
+        else { resets++; hc = 0; if (!(call ? b.c > L : b.c < L)) st = "watch"; else bi = i; }
+      }
+      ext = ext == null ? (call ? b.h : b.l) : call ? Math.max(ext, b.h) : Math.min(ext, b.l);
+    }
+    return { ...lv, L: st === "watch" ? ext : L, st, bi, hi, resets, hc };
+  }
   function crossState(lv) {
+    if (lv.dyn) return dynState(lv);
     const beyond = (b) => lv.dir === "call" ? b.c > lv.L : b.c < lv.L, clean = (b) => lv.dir === "call" ? b.l > lv.L : b.h < lv.L;
     const H = RULE.hold;
     let armed = false, st = "watch", bi = -1, hi = -1, resets = 0, hc = 0;
@@ -1881,7 +1899,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     }
     return { ...lv, st, bi, hi, resets, hc };
   }
-  const rpStates = () => rpLevels().map(crossState);
+  function rpStates() {
+    const all = rpLevels().map(crossState).filter((x) => x.L != null);
+    // today's high/low so far often sits on the same price as another line: show it once
+    return all.filter((x) => !(x.dyn && all.some((y) => !y.dyn && y.dir === x.dir && Math.abs(y.L - x.L) < 0.02)));
+  }
 
   async function rpInitDates() {
     const sel = $("#rp-date");
@@ -2080,7 +2102,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const sts = rpStates(), brk = sts.find((x) => x.st === "broke");
     if (brk) return { key: "break" + brk.key + brk.bi, cls: "", title: `Break! SPY closed ${brk.dir === "call" ? "above" : "below"} ${brk.name}`, body: `<p class="small">If ${RULE.hold === 1 ? "the next full minute stays" : `the next ${RULE.hold} full minutes stay`} ${brk.dir === "call" ? "above" : "below"} ${brk.L.toFixed(2)}, that's a signal. Don't buy yet.</p><div class="count" id="c-count"></div><div class="small" id="c-touch"></div>` };
     const lines = sts.map((x) => { const P = rpPrice(), dist = x.dir === "call" ? x.L - P : P - x.L; return `<li><span style="color:${x.dir === "call" ? "var(--good)" : "var(--bad)"}">${x.dir === "call" ? "Ceiling" : "Floor"}</span> ${esc(x.name)} ${x.L.toFixed(2)}: ${dist > 0 ? `$${dist.toFixed(2)} away` : `SPY is already ${x.dir === "call" ? "above" : "below"} it; it must cross back first`}</li>`; }).join("");
-    return { key: "watch" + sts.length + Math.round(rpPrice() * 4) + (RP.skipped?.note || "") + RP.playing, cls: "", title: "Watching. Nothing to click yet", body: `<p class="small">Most minutes, nothing happens. I'll tell you the moment a line breaks.${RULE.lv.or15 && RP.idx < 14 ? " Two more lines appear at 9:45 (the first 15 minutes' high and low)." : RULE.lv.or30 && RP.idx < 29 ? " Two more lines appear at 10:00 (the first 30 minutes' high and low)." : ""}${sts.length ? "" : " <b>Your rule has no lines to watch yet.</b> Tick some under Change the rule."}</p><ul class="small" style="margin:0;padding-left:18px">${lines}</ul>${RP.skipped?.note ? `<p class="small why">${esc(RP.skipped.note)}</p>` : ""}${RP.playing ? "" : `<p class="small muted">Paused. Press Play.</p>`}` };
+    return { key: "watch" + sts.length + sts.map((x) => Math.round(x.L * 4)).join(",") + RULE.dirs + Math.round(rpPrice() * 4) + (RP.skipped?.note || "") + RP.playing, cls: "", title: "Watching. Nothing to click yet", body: `<p class="small">Most minutes, nothing happens. I'll tell you the moment a line breaks.${RULE.lv.day && RP.idx < 14 ? ` Today's high and low so far start counting at 9:45${RULE.lv.or15 ? ", when the first 15 minutes' high and low appear too" : ""}.` : RULE.lv.or15 && RP.idx < 14 ? " Two more lines appear at 9:45 (the first 15 minutes' high and low)." : RULE.lv.or30 && RP.idx < 29 ? " Two more lines appear at 10:00 (the first 30 minutes' high and low)." : ""}${Object.values(RULE.lv).some(Boolean) ? "" : " <b>Your rule has no lines to watch.</b> Tick some under Change the rule."}</p>${RULE.dirs !== "both" ? `<p class="small" style="color:var(--warn)">Your rule trades <b>${RULE.dirs === "call" ? "calls only, so floor lines (for puts) are hidden" : "puts only, so ceiling lines (for calls) are hidden"}</b>.</p>` : ""}<ul class="small" style="margin:0;padding-left:18px">${lines}</ul>${RP.skipped?.note ? `<p class="small why">${esc(RP.skipped.note)}</p>` : ""}${RP.playing ? "" : `<p class="small muted">Paused. Press Play.</p>`}`, buttons: RULE.dirs !== "both" ? [["rule:both", "Watch both directions", false]] : null };
   }
   function ticketCoach(t) {
     const buy = t.action === "BTO", q = rpQuote(t.dir, t.strike);
@@ -2112,6 +2134,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#rp-coach").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-coach-act]"); if (!b) return;
     const a = b.dataset.coachAct;
+    if (a === "rule:both") { setRule({ dirs: "both" }); toast("Now watching ceilings and floors."); return; }
     if (a.startsWith("show:")) { RP.tab = a.slice(5); RP.bodyKey = ""; rpRender(); const tgt = RP.tab === "chain" && RP.signal ? `#b-body tr[data-k="${RP.signal.strike}"]` : "#broker"; setTimeout(() => spotlight(tgt), 30); return; }
     if (a.startsWith("fill:")) { fillFor(a.slice(5)); setTimeout(() => spotlight("#broker"), 30); return; }
     if (a === "skip") rpSkip();
