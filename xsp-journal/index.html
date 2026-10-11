@@ -815,9 +815,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     return { all, official, closed, open, bal, curve, wins, losses, net, avgWin: avg(wins), avgLoss: avg(losses), winRate: closed.length ? wins.length / closed.length : null };
   }
 
+  // Delta signed by direction, whether it was typed as 0.45 or -0.45 for a put.
+  const sDelta = (t) => { const d = num(t.delta); return d == null ? null : Math.abs(d) * (t.dir === "put" ? -1 : 1); };
   // What moved the option: split the result into the part the underlying move explains (delta) and the rest (time decay, volatility, gamma).
   function debrief(t) {
-    const c = calc(t), d = num(t.delta), e = num(t.entryUnderlying), x = num(t.exitUnderlying);
+    const c = calc(t), d = sDelta(t), e = num(t.entryUnderlying), x = num(t.exitUnderlying);
     if (c.open || d == null || e == null || x == null) return null;
     const move = x - e, deltaPart = d * move * 100 * c.qty, other = c.pnl - deltaPart;
     const mins = toMin(t.exitTime) - toMin(t.entryTime);
@@ -1040,7 +1042,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function openCard(t, where) {
     const c = calc(t), last = c.last, id = esc(t.id), u = uOf(t);
     // rough live estimate from the underlying, using delta (not a quote)
-    const S0 = num(t.entryUnderlying), d = num(t.delta), Sn = u === U() && LIVE.snap ? num(LIVE.snap.price) : null;
+    const S0 = num(t.entryUnderlying), d = sDelta(t), Sn = u === U() && LIVE.snap ? num(LIVE.snap.price) : null;
     const est = S0 != null && d != null && Sn != null && num(t.entryBid) != null ? Math.max(num(t.entryBid) + d * (Sn - S0), 0) : null;
     const alerts = planStatus(t, last ? num(last.bid) : null);
     const plan = t.planTargetPrice != null || t.planTimeStop ? `<div class="small">Plan: take profit at <b>${px(num(t.planTargetPrice))}</b> · stop at <b>${px(num(t.planStopPrice))}</b> · out by <b>${esc(t.planTimeStop || "–")}</b> ET${t.planWhy ? ` · <span class="muted">${esc(t.planWhy)}</span>` : ""}</div>` : `<div class="small muted">No plan saved with this trade.</div>`;
@@ -1062,7 +1064,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderOpen(st) {
     for (const [sel, where] of [["#dash-open", "d"], ["#live-open", "l"]]) {
       const host = $(sel);
-      if (host.querySelector("input:focus") || host.querySelector(".shot-out:not(:empty)")) continue;
+      const openIds = new Set(st.open.map((t) => t.id)), stale = [...host.querySelectorAll(".pos")].some((c) => !openIds.has(c.dataset.id));
+      if (!stale && (host.querySelector("input:focus") || host.querySelector(".shot-out:not(:empty)"))) continue;
       host.innerHTML = st.open.length ? `<div style="display:grid;gap:12px">${st.open.map((t) => openCard(t, where)).join("")}</div>` : "";
     }
   }
@@ -1071,10 +1074,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
     if (b.dataset.act === "open") return openForm("trades", t);
     const v = Object.fromEntries($$(".fields input", card).map((i) => [i.dataset.k, num(i.value)]));
+    if (!calc(t).open) { $(".shot-out", card).innerHTML = ""; renderAll(); return toast("This trade is already closed."); }
     if (v.bid == null) return toast("Enter the Sell Bid first.");
+    if (card.dataset.busy) return;
+    card.dataset.busy = "1"; $$("[data-act]", card).forEach((x) => (x.disabled = true));
     $(".shot-out", card).innerHTML = "";
-    const msg = await recordQuote(t, v, b.dataset.act === "exit");
-    if (msg) toast(msg);
+    try { const msg = await recordQuote(t, v, b.dataset.act === "exit"); if (msg) toast(msg); }
+    finally { delete card.dataset.busy; $$("[data-act]", card).forEach((x) => (x.disabled = false)); }
   });
   // Save a checkpoint, or close the position at the Bid. Returns a message, or null if saving failed.
   async function recordQuote(t, v, exiting) {
@@ -1131,7 +1137,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const f = S.newsFilter, shown = items.filter((i) => f === "all" || i.kind === f);
     if (!shown.length) { $("#news").innerHTML = `<div class="empty">${S.scout.length ? "Nothing matches this filter." : "Scout reports land here automatically at 8:47, 9:47, 12:47 and 8:12 pm ET on weekdays. You can also add one by hand."}</div>`; return; }
     const days = new Map();
-    shown.sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`)).forEach((i) => { if (!days.has(i.date)) days.set(i.date, []); days.get(i.date).push(i); });
+    shown.sort((a, b) => `${b.date} ${(b.time || "").padStart(5, "0")}`.localeCompare(`${a.date} ${(a.time || "").padStart(5, "0")}`)).forEach((i) => { if (!days.has(i.date)) days.set(i.date, []); days.get(i.date).push(i); });
     const catPill = (c) => !c ? "" : /^BIG/i.test(c) ? `<span class="pill bad">BIG</span>` : /^MOD/i.test(c) ? `<span class="pill warn">MODERATE</span>` : `<span class="pill">${esc(c.split(/[ —-]/)[0])}</span>`;
     const verdict = (a) => !a ? "" : /NO (NEW )?TRADE/i.test(a) ? `<span class="pill bad plain">${esc(a.match(/NO (NEW )?TRADE/i)[0].toUpperCase())}</span>` : /WAIT/i.test(a) ? `<span class="pill plain">WAIT</span>` : "";
     $("#news").innerHTML = [...days].map(([d, list]) => `<div class="day"><div class="day-h"><h2>${esc(dayName(d))}</h2><span class="small muted">${list.filter((i) => i.kind === "scout").length} reports · ${list.filter((i) => i.kind === "trade").length} trade events</span></div><div class="tl">${list.map((i) => {
@@ -1148,6 +1154,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   // ---------- live V2 check ----------
   const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "", iv: "", pt: "", ps: "", pm: "", pw: "", sk: "", sbid: "", sask: "" };
   let LC = { ...LC0, ...ls.get("spy.live", {}) };
+  // A setup from an earlier day never carries over: keep only the mode and plan settings.
+  { const at = LC.armedAt || LC.breakAt; if (at && etParts(new Date(at)).date !== etParts().date) LC = { ...LC0, mode: LC.mode, pt: LC.pt, ps: LC.ps, pm: LC.pm }; }
   const saveLC = () => ls.set("spy.live", LC);
   const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta", "lc-pt": "pt", "lc-ps": "ps", "lc-pm": "pm", "lc-pw": "pw", "lc-sk": "sk", "lc-sbid": "sbid", "lc-sask": "sask" };
   for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; if (k === "level") rearm(); saveLC(); renderLive(); }); }
@@ -1192,7 +1200,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const el = $("#lc-plan-calc"), ask = s.ask;
     if (ask == null) { el.innerHTML = `<span class="muted">Enter the Ask and this turns into exact exit prices.</span>`; return; }
     const p = planOf(ask, etParts().min);
-    el.innerHTML = `<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${money((p.planTargetPrice - ask) * 100, true)})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${money((p.planStopPrice - ask) * 100, true)})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
+    el.innerHTML = `<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${p.planTargetPrice != null ? money((p.planTargetPrice - ask) * 100, true) : "–"})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${p.planStopPrice != null ? money((p.planStopPrice - ask) * 100, true) : "–"})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
   }
   $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
 
@@ -1328,6 +1336,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   async function logEntry() {
       const s = lcState(), now = etParts(), uPrice = LIVE.snap ? num(LIVE.snap.price) : null;
       if (!(s.held && s.s3 && s.s4) || s.stop) return null;
+      if (!marketOpen()) { toast("The market is closed. Paper entries only count between 9:30 am and 4:00 pm ET."); return null; }
       const doc = { date: now.date, status: "official", version: S.cfg.currentVersion || "V2", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
         level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
         entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
@@ -1428,7 +1437,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     S.seen.add(id); ls.set("learn.seen", [...S.seen]);
     let yours = ""; try { yours = L.yours?.() || ""; } catch {}
     formCtx = { coll: "lesson" };
-    form.innerHTML = `<div class="dlg lesson"><div class="panel-head" style="margin:0"><div><div class="label">${esc(STAGES[L.stage][0])}</div><h2>${esc(L.title)}</h2></div><button class="btn" value="cancel" formnovalidate>Close</button></div>
+    form.innerHTML = `<div class="dlg lesson"><div class="panel-head" style="margin:0"><div><div class="label">${esc(STAGES[L.stage][0])}</div><h2>${esc(L.title)}</h2></div><button class="btn" type="button" value="cancel" formnovalidate>Close</button></div>
       <p class="one">${esc(L.one)}</p><ul>${L.body.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
       ${yours ? `<div class="yours"><div class="label">In your journal</div>${esc(yours)}</div>` : ""}
       <div class="row"><span class="small muted">Connects to:</span>${(L.next || []).map((n) => `<button class="btn sm" type="button" data-learn="${n}">${esc(LESSONS[n].title)}</button>`).join("")}<button class="btn sm" type="button" data-coach="${esc(L.title)}">Ask the coach about this</button></div></div>`;
@@ -1501,17 +1510,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#coach-q").value = q;
     const out = $("#coach-out");
     if (!S.sample) { out.textContent = "The coach isn't available in this view. Open the journal on claude.ai while signed in."; return; }
-    coachCtl?.abort(); coachCtl = new AbortController();
+    coachCtl?.abort(); const ctl = coachCtl = new AbortController();
     out.textContent = "Thinking…"; $("#coach-ask").disabled = true; $("#coach-stop").hidden = false;
     out.scrollIntoView({ block: "nearest", behavior: "smooth" });
     const prompt = `You are a patient options-trading teacher for a beginner who is paper trading (no real money) to learn. Explain simply, in plain words, short paragraphs or a few bullets, under 220 words. Define any jargon the first time you use it. Use their actual trades and numbers when relevant. Connect ideas (news → regime → levels → option Greeks → spread and exits → stats). Teach; do not tell them what to buy, and do not promise profits. If the journal lacks the data, say so.\n\n${journalBrief()}\n\nQUESTION: ${q}`;
     try {
-      await S.sample(prompt, { signal: coachCtl.signal, cache: false, onText: ({ text }) => { out.textContent = text; } });
+      await S.sample(prompt, { signal: ctl.signal, cache: false, onText: ({ text }) => { out.textContent = text; } });
     } catch (e) {
+      if (coachCtl !== ctl) return;  // a newer question replaced this one
       if (e.text) out.textContent = e.text;
       const msg = { cancelled: "", not_granted: "The coach needs permission to use Claude. Allow it when asked, or from the page's permissions.", sampling_disabled: "Claude isn't available for this account.", rate_limited: "Too many questions in a short time. Try again in a minute.", session_expired: "Sign in to claude.ai again, then ask.", refused: "Claude couldn't answer that one. Try asking it differently." }[e.code];
       if (msg !== "") out.textContent = (e.text ? e.text + "\n\n" : "") + (msg || "Something interrupted the answer. Ask again.");
-    } finally { $("#coach-ask").disabled = false; $("#coach-stop").hidden = true; }
+    } finally { if (coachCtl === ctl) { $("#coach-ask").disabled = false; $("#coach-stop").hidden = true; } }
   }
   $("#coach-ask").addEventListener("click", () => askCoach($("#coach-q").value));
   $("#coach-q").addEventListener("keydown", (e) => { if (e.key === "Enter") askCoach($("#coach-q").value); });
@@ -1589,13 +1599,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const isTrade = coll === "trades" && rec;
     const pending = isTrade && rec.qual === "pending" ? `<div class="alert" style="background:var(--warn-bg)"><div style="margin-bottom:6px">This trade's rule check is still pending. Did the entry follow the rule version it was taken under (${esc(rec.version || "?")})?</div><div class="row"><input id="f-qual-why" type="text" placeholder="Reason, in one line" style="flex:1;min-width:180px"><button class="btn sm" type="button" data-setqual="verified">Mark verified</button><button class="btn sm" type="button" data-setqual="not">Mark not qualified</button></div></div>` : "";
     const reviewIntro = coll === "review" ? `<p class="small muted">Thirty seconds now saves you repeating the same mistake. ${rec && rec.planTargetPrice != null ? `Your plan was: take profit at ${px(num(rec.planTargetPrice))}, stop at ${px(num(rec.planStopPrice))}, out by ${esc(rec.planTimeStop || "–")}. You exited at ${esc(rec.exitTime)} with Bid ${px(num(rec.exitBid))}.` : ""}</p>` : "";
-    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>${TITLES[coll][rec ? 1 : 0]}</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
+    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>${TITLES[coll][rec ? 1 : 0]}</h2><button class="btn" type="button" value="cancel" formnovalidate>Close</button></div>
       ${reviewIntro}${pending}
       ${isTrade ? debriefHtml(rec) + `<div id="f-exitstudy">${exitStudyHtml(rec)}</div>` + `<div class="row"><button class="btn sm" type="button" data-coach="trade" data-coach-q="${esc(`Walk me through my ${rec.date} ${uOf(rec)} ${contractName(rec)} trade: what went right, what went wrong, and what it teaches me.`)}">Ask the coach about this trade</button>${calc(rec).open ? "" : `<button class="btn sm" type="button" data-review="${esc(rec.id)}">Review this trade</button>`}</div>` : ""}
       ${coll === "trades" ? '<div class="calc" id="f-calc"></div>' : ""}
       <div class="fields">${F[coll].map((f) => fieldHtml(f, data[f[0]])).join("")}</div>
       ${isTrade && rec.checkpoints?.length ? `<div><div class="label" style="margin-bottom:6px">Checkpoints</div><div class="cp">${rec.checkpoints.map((c) => `<span class="mono">${esc(c.t)}</span><span class="mono">${esc(c.xsp ?? "–")}</span><span class="mono">Bid ${px(num(c.bid))} / Ask ${px(num(c.ask))}${c.note ? ` <span class="muted">${esc(c.note)}</span>` : ""}</span>`).join("")}</div></div>` : ""}
-      </div><div class="dlg-foot"><div>${rec && coll !== "review" ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" value="cancel" formnovalidate>${coll === "review" ? "Skip" : "Cancel"}</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
+      </div><div class="dlg-foot"><div>${rec && coll !== "review" ? '<button class="btn danger" type="button" id="f-del">Delete</button>' : ""}</div><div class="row"><button class="btn" type="button" value="cancel" formnovalidate>${coll === "review" ? "Skip" : "Cancel"}</button><button class="btn primary" type="submit" value="save" id="f-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
     if (coll === "trades") { const upd = () => { const v = collect(); const c = calc(v); $("#f-calc").innerHTML = `<span>Cost <b>${money(c.cost)}</b></span><span>Proceeds <b>${money(c.proceeds)}</b></span><span>P/L <b class="${cls(c.pnl)}">${money(c.pnl, true)}</b></span><span>Return <b>${pct(c.ret)}</b></span><span>Entry spread <b>${num(v.entryAsk) != null && num(v.entryBid) != null ? money((v.entryAsk - v.entryBid) * 100) : "–"}</b></span>${c.open ? '<span class="pill info">open</span>' : ""}`; }; form.oninput = upd; upd(); } else form.oninput = null;
     const del = $("#f-del");
     if (del) del.addEventListener("click", async () => {
@@ -1611,7 +1621,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const q = e.target.closest("[data-setqual]"); if (!q || formCtx?.coll !== "trades") return;
     e.preventDefault();
     const why = ($("#f-qual-why")?.value || "").trim(), stamp = `${etParts().date}: rule check set to ${q.dataset.setqual === "verified" ? "verified" : "not qualified"}${why ? ` (${why})` : ""}.`;
-    const doc = { ...formCtx.base, qual: q.dataset.setqual, notes: [formCtx.base.notes, stamp].filter(Boolean).join("\n") };
+    const typed = collect(), doc = { ...formCtx.base, ...typed, qual: q.dataset.setqual, notes: [typed.notes ?? formCtx.base.notes, stamp].filter(Boolean).join("\n") };
     if (await save("trades", formCtx.id, doc)) { dlg.close(); toast("Rule check updated."); }
   });
 
@@ -1637,7 +1647,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         const b = endBar(m); if (!b) continue;
         out["u" + k] = +b.c.toFixed(2); out["o" + k] = +Math.max(bs0(type, b.c, K, iv, Math.max(960 - m, 0.01)) - 0.01, 0).toFixed(2);
       }
-      const doc = { ...stripId(t), exitStudy: out };
+      const cur = S.trades.find((x) => x.id === t.id) ?? t;
+      if (cur.exitTime !== t.exitTime || num(cur.strike) !== num(t.strike)) return;  // the trade changed while loading
+      const doc = { ...stripId(cur), exitStudy: out };
       await save("trades", t.id, doc);
       if (dlg.open && formCtx?.id === t.id) { formCtx.base.exitStudy = out; const box = $("#f-exitstudy"); if (box) box.innerHTML = exitStudyHtml(doc); }
       if (!quiet) toast("Exit study filled in.");
@@ -1667,6 +1679,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     e.preventDefault();
     if (e.submitter?.value !== "save" || !["trades", "missed", "scout", "review"].includes(formCtx?.coll)) return dlg.close();
     const doc = { ...formCtx.base, ...collect() };
+    if (formCtx.coll === "trades" && doc.exitStudy && ["exitTime", "exitBid", "exitAsk", "strike", "dir", "date"].some((k) => String(doc[k] ?? "") !== String(formCtx.base[k] ?? ""))) delete doc.exitStudy;
     if (!formCtx.id) doc.createdAt = Date.now();
     if (await save(formCtx.store, formCtx.id, doc)) { dlg.close(); toast(formCtx.coll === "review" ? "Review saved. It feeds your weekly coach review." : "Saved."); }
   });
@@ -1677,10 +1690,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#edit-rules").addEventListener("click", () => {
     const rules = S.cfg.rules || [];
     formCtx = { coll: "rules" }; form.oninput = null;
-    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>Edit rules</h2><button class="btn" value="cancel" formnovalidate>Close</button></div>
+    form.innerHTML = `<div class="dlg"><div class="panel-head" style="margin:0"><h2>Edit rules</h2><button class="btn" type="button" value="cancel" formnovalidate>Close</button></div>
       <div class="fields">${fieldHtml(["currentVersion", "Current rule version", "text"], S.cfg.currentVersion)}${fieldHtml(["underlyingCfg", "Trading", "select", [["SPY", "SPY"], ["XSP", "XSP"]]], U())}${fieldHtml(["startBalance", "Starting balance", "number"], S.cfg.startBalance)}${fieldHtml(["quarterStart", "Quarter start", "date"], S.cfg.quarterStart)}${fieldHtml(["quarterEnd", "Quarter end", "date"], S.cfg.quarterEnd)}</div>
       ${fieldHtml(["rulesText", "One rule per line, written as Name: rule", "textarea", null, "wide"], rules.map((r) => `${r.name}: ${r.text}`).join("\n"))}
-      </div><div class="dlg-foot"><span></span><div class="row"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="button" id="rules-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
+      </div><div class="dlg-foot"><span></span><div class="row"><button class="btn" type="button" value="cancel" formnovalidate>Cancel</button><button class="btn primary" type="button" id="rules-save" ${S.db && S.canWrite ? "" : "disabled"}>Save</button></div></div>`;
     $("#f-rulesText").style.minHeight = "260px";
     $("#rules-save").addEventListener("click", async () => {
       const rulesOut = $("#f-rulesText").value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(":"); return i > 0 ? { name: l.slice(0, i).trim(), text: l.slice(i + 1).trim() } : { name: "Rule", text: l }; });
@@ -1821,7 +1834,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (RP.sub >= 1) { RP.sub = 0; rpFinishCandle(); }
     rpRender();
   }
-  function rpStep(n = 1) { for (let i = 0; i < n && RP.phase !== "dayend"; i++) { RP.sub = 0; rpFinishCandle(); rpWorkOrders(); } rpRender(); }
+  function rpStep(n = 1) {
+    for (let i = 0; i < n && RP.phase !== "dayend"; i++) {
+      RP.sub = 0; rpFinishCandle(); rpWorkOrders(); for (const p of [...RP.positions]) rpPlanCheck(p);
+      if (RP.signal || RP.positions.some((p) => p.alert) || RP.phase === "result") break;  // stop stepping when something needs you
+    }
+    rpRender();
+  }
   function rpFinishCandle() {
     RP.idx++;
     if (RP.idx >= RP.bars.length - 1) {
@@ -1850,6 +1869,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   // ----- orders, fills and the position -----
   function rpPlace(t) {
+    if (RP.phase === "dayend" || rpMinute() >= 960) return "The market is closed (4:00 pm). Orders can't be placed now.";
     if (t.action === "STC") {
       const own = posOf(t.dir, t.strike);
       if (!own) return "You don't own that contract, so there's nothing to sell to close.";
@@ -1878,9 +1898,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (AL.on) beep("break");
     if (o.action === "BTO") {
       const p = posOf(o.dir, o.strike);
-      if (p) { p.avg = (p.avg * p.qty + o.fillPx * o.qty) / (p.qty + o.qty); p.qty += o.qty; return; }
-      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pl = { t: num($("#rp-t").value), s: num($("#rp-s").value), m: num($("#rp-m").value) };
-      RP.positions.push({ dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl,
+      if (p) { p.costIn += o.fillPx * o.qty; p.bought += o.qty; p.qty += o.qty; p.avg = p.costIn / p.bought; p.targetPx = +(p.avg * (1 + (p.plan.t || 0) / 100)).toFixed(2); p.stopPx = +(p.avg * (1 - (p.plan.s || 0) / 100)).toFixed(2); return; }
+      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pd = S.cfg.planDefaults || DEFAULT_CFG.planDefaults, pl = { t: num($("#rp-t").value) || pd.target, s: num($("#rp-s").value) || pd.stop, m: num($("#rp-m").value) || pd.time };
+      RP.positions.push({ dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, costIn: o.fillPx * o.qty, bought: o.qty, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl,
         targetPx: +(o.fillPx * (1 + (pl.t || 0) / 100)).toFixed(2), stopPx: +(o.fillPx * (1 - (pl.s || 0) / 100)).toFixed(2), timeStop: rpMinute() + (pl.m || 0), alert: null, alertAt: null, chase: !!(sg && sg.ask0 && o.fillPx > sg.ask0 * 1.15), followedDir: sg?.dir });
       if (sg) RP.since[sg.key] = RP.bars[Math.max(RP.idx, 0)].t;
       RP.signal = null; RP.tab = "positions";
@@ -1890,7 +1910,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const p = posOf(o.dir, o.strike); if (!p) return;
     p.qty -= o.qty; p.closed = (p.closed || 0) + o.qty; p.proceeds = (p.proceeds || 0) + o.fillPx * o.qty;
     if (p.qty > 0) return;
-    const reason = why || (p.alert && p.alert !== "close" ? p.alert : o.type === "limit" && o.limit >= p.targetPx - 0.005 ? "target" : "manual");
+    const reason = why || (o.type === "limit" && o.limit >= p.targetPx - 0.005 ? "target" : p.alert && p.alert !== "close" ? p.alert : "manual");
     rpFinishTrade(p, reason, o);
   }
   async function rpFinishTrade(p, reason, o) {
@@ -1915,7 +1935,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     let a = null;
     const wSell = !!wSellFor(p);
     if (rpMinute() >= 945) a = "close"; else if (q.bid <= p.stopPx) a = "stop"; else if (rpMinute() >= p.timeStop) a = "time"; else if (!wSell && q.bid >= p.targetPx) a = "target";
-    if (!a || p.alert === a) return;
+    if (!a) { if (p.alert && p.alert !== "close") { p.alert = null; p.alertAt = null; RP.coachKey = ""; } return; }
+    if (p.alert === a) return;
     p.alert = a; p.alertAt = rpMinute(); RP.coachKey = "";
     if ($("#rp-autoexit").checked) { rpCancelSells(p); rpPlace({ action: "STC", dir: p.dir, strike: p.strike, qty: p.qty, type: "market" }); return; }
     if (AL.on) beep("plan");
@@ -2091,7 +2112,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       if (a === "edit") { tk.step = "edit"; tk.err = null; }
       if (a === "clear") { RP.ticket = null; RP.tab = "chain"; }
       if (a === "place") { const err = rpPlace(tk); if (err) { tk.err = err; RP.bodyKey = ""; rpRender(); return; } }
-      if (a === "cancelplace") { rpCancelSells(posOf(tk.dir, tk.strike)); tk.err = null; const err = rpPlace(tk); if (err) { tk.err = err; RP.bodyKey = ""; rpRender(); return; } }
+      if (a === "cancelplace") { const own = posOf(tk.dir, tk.strike); if (own) rpCancelSells(own); tk.err = null; const err = rpPlace(tk); if (err) { tk.err = err; RP.bodyKey = ""; rpRender(); return; } }
       RP.bodyKey = ""; RP.coachKey = ""; rpRender(); return;
     }
     const cb = e.target.closest("[data-pos=close]"); if (cb && posOf(cb.dataset.dir, +cb.dataset.k)) { openTicket("STC", cb.dataset.dir, +cb.dataset.k, { type: "market" }); rpRender(); return; }
@@ -2346,7 +2367,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     Q.push({ id: "iv1", lesson: "iv", q: "Right after a big scheduled report, SPY barely moves but your option gets cheaper. The most likely reason?", opts: ["Delta", "Volatility dropped (IV crush)", "The spread widened", "Dividends"], a: 1, why: "Before the event, options carry extra expected movement. Once it passes, implied volatility falls and so do prices." });
     Q.push({ id: "gamma1", lesson: "gamma", q: "Why can a 0DTE option double in a few minutes?", opts: ["High gamma near expiry", "Low volume", "Dividends", "The spread"], a: 0, why: "Near expiry, delta changes very fast (high gamma), so a small move can sharply raise or crush the option's price." });
     Q.push({ id: "sample1", lesson: "sample", q: "You've taken 3 trades with 2 wins. What can you conclude?", opts: ["The strategy works", "The strategy fails", "Not much yet: too few trades", "Win rate is 67%, so it's profitable"], a: 2, why: "Three trades is far too small a sample. You need many trades under the same rules." });
-    if (s.avgWin != null && s.avgLoss) { const be = Math.abs(s.avgLoss) / (s.avgWin + Math.abs(s.avgLoss)); const opts = [be * 100, 50, Math.min(be * 100 + 25, 90), Math.max(be * 100 - 15, 5)].map((v) => Math.round(v) + "%"); Q.push({ id: "be1", lesson: "stats", q: `Your average win is ${money(s.avgWin)} and average loss ${money(s.avgLoss)}. What win rate do you need to break even?`, opts, a: 0, why: `Average loss ÷ (average win + average loss) = ${Math.abs(s.avgLoss).toFixed(0)} ÷ ${(s.avgWin + Math.abs(s.avgLoss)).toFixed(0)} ≈ ${opts[0]}.` }); }
+    if (s.avgWin != null && s.avgLoss) { const be = Math.abs(s.avgLoss) / (s.avgWin + Math.abs(s.avgLoss)); const b0 = Math.round(be * 100), opts = [b0, Math.abs(b0 - 50) < 4 ? (b0 >= 50 ? b0 - 12 : b0 + 12) : 50, Math.min(b0 + 25, 90), Math.max(b0 - 20, 5)].map((v) => v + "%"); Q.push({ id: "be1", lesson: "stats", q: `Your average win is ${money(s.avgWin)} and average loss ${money(s.avgLoss)}. What win rate do you need to break even?`, opts, a: 0, why: `Average loss ÷ (average win + average loss) = ${Math.abs(s.avgLoss).toFixed(0)} ÷ ${(s.avgWin + Math.abs(s.avgLoss)).toFixed(0)} ≈ ${opts[0]}.` }); }
     const t29 = S.trades.find((t) => t.date === "2026-09-29");
     if (t29) Q.push({ id: "you29", lesson: "theta", q: "On Sep 29 your put lost 98% even though XSP first moved your way. The main reason?", opts: ["Wrong direction from the start", "Time decay in the afternoon with a slow move", "A wide spread", "The option was in the money"], a: 1, why: "The move was too slow. From 1:05 to 3:20 pm time decay ate the option's value." });
     const vt = { id: "vert1", lesson: "verticals", q: "Compared with buying a single call, a call debit spread…", opts: ["Costs more and has unlimited profit", "Costs less but caps profit", "Can't lose money", "Has no time decay"], a: 1, why: "Selling the higher strike pays for part of the call, but your gain stops at that strike." };
@@ -2428,7 +2449,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       { id: "study", title: "See what happened after you exited", detail: "Open each trade and read \"If you had held longer\". Did your exit leave money on the table, or save you?", tab: "journal", target: "#trades-tbl", lesson: "exit", auto: spy.every((t) => t.exitStudy || num(t.m15) != null), action: spy.find((t) => !t.exitStudy) ? () => openForm("trades", spy.find((t) => !t.exitStudy)) : null },
       { id: "replay", title: "Replay today in Practice", detail: "Load today's date once the day's candles are in. Watch for setups you missed or took too early.", tab: "practice", target: "#rp-load", lesson: "breakhold", auto: S.practice.some((p) => p.replayDate === etParts().date), manual: true },
       { id: "quiz", title: "Answer 3 quiz questions", detail: "Quick check of what stuck today.", tab: "learn", target: "#quiz", lesson: "sample", auto: (g.flags.quiz || 0) >= 3, manual: true },
-      { id: "overnight", title: "Read the overnight report (after 8:12 pm)", detail: "It compares what the scouts expected with what happened, and lists tomorrow's events.", tab: "news", target: "#news .ev", lesson: "regime", auto: (g.flags.newsAt || 0) >= 1212, manual: true },
+      { id: "overnight", title: "Read the overnight report (after 8:12 pm)", detail: "It compares what the scouts expected with what happened, and lists tomorrow's events.", tab: "news", target: "#news .ev", lesson: "regime", auto: (g.flags.newsAt || 0) >= 2012, manual: true },
     ];
   }
   function weekendSteps() {
@@ -2519,7 +2540,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     else if (id === "g-act" && c?.action) c.action();
     else if (id === "g-done" && c) gSet((g) => { g.done[c.id] = 1; });
     else if (id === "g-skip" && c) gSet((g) => { g.skip[c.id] = 1; });
-    else if (id === "g-skiprev") { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed); if (t) gSet((g) => { g.skip["rev-" + t.id] = 1; }); }
+    else if (id === "g-skiprev") { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed && !G().skip["rev-" + x.id]); if (t) gSet((g) => { g.skip["rev-" + t.id] = 1; }); }
     else if (e.target.dataset.gview) { ROUTINE_FORCE = true; showView(e.target.dataset.gview); renderRoutine(); spotlight("#routine"); }
     renderRoutine();
   });
@@ -2554,7 +2575,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   const TABS = { dashboard: "dash", dash: "dash", home: "dash", live: "live", "live check": "live", check: "live", practice: "practice", replay: "practice", journal: "journal", trades: "journal", news: "news", scout: "news", learn: "learn", lessons: "learn", coach: "learn" };
   // Actions shared by typed commands and by Claude's interpretation.
   const ACT = {
-    setDir(dir) { if (!["call", "put"].includes(dir)) return "Direction must be call or put."; if (view === "practice") return "In practice you don't pick a direction: the app watches ceilings (call) and floors (put) for you. Press Play or type skip to signal."; LC.dir = dir; rearm(); saveLC(); renderLive(); return `Direction set to ${dir === "call" ? "Call (break up)" : "Put (break down)"}.`; },
+    setDir(dir) { if (!["call", "put"].includes(dir)) return "Direction must be call or put."; if (view === "practice") return "In practice you don't pick a direction: the app watches ceilings (call) and floors (put) for you. Press Play or type skip to signal."; if (LC.dir !== dir) { LC.dir = dir; rearm(); } saveLC(); renderLive(); return `Direction set to ${dir === "call" ? "Call (break up)" : "Put (break down)"}.`; },
     setLevel(level, name, dir) {
       if (view === "practice") return "In practice the app watches the key lines for you (yesterday's high and low, and the first 15 minutes' high and low). Just press Play, or type skip to signal.";
       let L = level, why = "";
@@ -2659,11 +2680,11 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (/^skip( (it|this|step|signal|this one))?$/.test(s)) return () => { if (view === "practice" && RP.signal) { rpSkip(); rpRender(); return "Skipped. I'll tell you in 15 minutes how that signal turned out."; } return ACT.guide("skip"); };
     if (/^show( me)?$/.test(s)) return () => ACT.guide("show");
     if ((m = /^(?:go( to)?|open|show)?\s*(dashboard|dash|home|live check|live|check|practice|journal|trades|news|scout|learn|lessons)( tab)?$/.exec(s))) return () => ACT.tab(m[2]);
-    if (/^(undo|cancel)$/.test(s)) return () => ACT.undo();
+    if (/^(undo|cancel)$/.test(s)) return () => { if (PENDING.length) { PENDING = []; return "Cancelled. Nothing was changed."; } return ACT.undo(); };
     // practice controls
     if ((m = /^(?:replay|load)\s*(.*)$/.exec(s)) && !/^(rule|test)/.test(m[1])) { const d = parseDate(m[1]); if (!d) return () => `I couldn't read that date. Try: replay yesterday, replay oct 8, replay friday.`; return () => ACT.practice("load", d); }
-    if (/^(play|resume|go on)$/.test(s)) return () => ACT.practice("play");
-    if (/^(pause|stop|hold on|wait)$/.test(s)) return () => ACT.practice("pause");
+    if (/^(play|resume|go on)$/.test(s) && view === "practice") return () => ACT.practice("play");
+    if (/^(pause|stop|hold on|wait)$/.test(s) && view === "practice") return () => ACT.practice("pause");
     if ((m = /^(?:step|next|forward|\+)\s*(\d+)?\s*(min|mins|minutes?)?$/.exec(s)) && (view === "practice")) return () => ACT.practice("step", +(m[1] || 1));
     if (/^(skip to (next )?signal|fast forward|ff)$/.test(s)) return () => ACT.practice("ff");
     if (/^(run (the )?(rule )?test|backtest|test (the )?rule)$/.test(s)) return () => { showView("practice"); $("#bt-run").click(); return "Running the rule test on past days…"; };
@@ -2671,7 +2692,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if ((m = /^(exit|close|sell|get out|cash out)\b(.*)$/.exec(s))) {
       const n = nums(m[2]), extra = m[2].replace(/\b(my|the|it|position|trade|now|out|at|bid|ask|of|please|this)\b/g, "").replace(/[\d.\/\s,]/g, "");
       if (!n.length && extra && S.sample) return null;  // e.g. "at a dollar twenty": let Claude read it
-      return () => ACT.exit(n[0] ?? null, n[1] ?? null, n[2] ?? null);
+      const bid = /bid\s*(\d*\.?\d+)/.exec(s)?.[1], ask = /ask\s*(\d*\.?\d+)/.exec(s)?.[1], spy = /(spy|xsp|underlying)\s*(\d*\.?\d+)/.exec(s)?.[2], k = nums(m[2].replace(/(spy|xsp|underlying)\s*\d*\.?\d+/, "").replace(/(bid|ask)\s*\d*\.?\d+/g, ""));
+      return () => ACT.exit(num(bid) ?? k[0] ?? null, num(ask) ?? (bid ? k[0] ?? null : k[1] ?? null), num(spy) ?? (spy ? null : k[2] ?? null));
     }
     if ((m = /^(checkpoint|cp|update|quote|mark)\b(.*)$/.exec(s)) || (m = /^(bid)\b(.*)$/.exec(s))) {
       const r = m[2]; const bid = /bid\s*(\d*\.?\d+)/.exec(s)?.[1], ask = /ask\s*(\d*\.?\d+)/.exec(s)?.[1], spy = /(spy|xsp|underlying)\s*(\d*\.?\d+)/.exec(s)?.[2]; const n = nums(r.replace(/(spy|xsp|underlying)\s*\d*\.?\d+/, ""));
@@ -2680,7 +2702,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // entry
     if (/^(enter|buy|log( (the )?entry)?|take (it|the trade)|place( it)?|go long)$/.test(s)) return () => ACT.enter();
     if (/^(missed|log missed|skip trade|log (as )?missed)$/.test(s)) return () => { logMissed(); return "Opened the missed-setup form."; };
-    if (/^(reset|start over|clear)$/.test(s)) return () => { if (view === "practice") { $("#rp-load").click(); return "Restarting this practice day from 9:30."; } $("#lc-reset").click(); return "Live check cleared. Pick a new level."; };
+    if (/^(reset|start over)$/.test(s)) return () => { if (view === "practice") { $("#rp-load").click(); return "Restarting this practice day from 9:30."; } $("#lc-reset").click(); return "Live check cleared. Pick a new level."; };
     if (/^review( (it|the trade|last trade))?$/.test(s)) return () => { const t = todayTrades().find((x) => !calc(x).open && !x.reviewFollowed) || stats().closed.slice(-1)[0]?.t; if (!t) return "No closed trade to review."; openReview(t); return `Opened the review for ${uOf(t)} ${contractName(t)}.`; };
     // context
     if (/^(nothing opposing|no opposition|clear|context (ok|clear|fine)|all clear)$/.test(s)) return () => ACT.setContext("no");
@@ -2689,8 +2711,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // level and direction
     if ((m = /^(watch|level|set level|track)\b(.*)$/.exec(s))) {
       const r = m[2], dir = dirOf(r), n = nums(r);
-      const name = /(opening range|or) high/.test(r) ? "opening range high" : /(opening range|or) low/.test(r) ? "opening range low" : /(yesterday|prev|prior)[a-z' ]*high/.test(r) ? (view === "practice" ? "yesterday's high" : null) : /(yesterday|prev|prior)[a-z' ]*low/.test(r) ? (view === "practice" ? "yesterday's low" : null) : /close/.test(r) ? (view === "practice" ? "yesterday's close" : "close") : /high/.test(r) ? (view === "practice" ? "high so far" : "high") : /low/.test(r) ? (view === "practice" ? "low so far" : "low") : /open/.test(r) ? "open" : null;
-      if (!n.length && !name) return () => "Which level? e.g. watch high call, watch 779.42 put, watch close.";
+      const name = /(opening range|\bor) high/.test(r) ? "opening range high" : /(opening range|\bor) low/.test(r) ? "opening range low" : /(yesterday|prev|prior)[a-z' ]*high/.test(r) ? (view === "practice" ? "yesterday's high" : null) : /(yesterday|prev|prior)[a-z' ]*low/.test(r) ? (view === "practice" ? "yesterday's low" : null) : /close/.test(r) ? (view === "practice" ? "yesterday's close" : "close") : /high/.test(r) ? (view === "practice" ? "high so far" : "high") : /low/.test(r) ? (view === "practice" ? "low so far" : "low") : /open/.test(r) ? "open" : null;
+      if (!n.length && !name) return () => /(yesterday|prev|prior)/.test(r) ? "Live check doesn't load yesterday's high or low by name. Type the price instead, e.g. watch 779.42 call." : "Which level? e.g. watch high call, watch 779.42 put, watch close.";
       return () => ACT.setLevel(n.length ? n[0] : null, n.length ? null : name, dir);
     }
     if ((m = /^(call|calls|put|puts|up|down)$/.exec(s))) return () => ACT.setDir(dirOf(s));
@@ -2698,10 +2720,9 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if ((m = /^(chain|strike|option|contract)\b(.*)$/.exec(s)) || (m = /^(\d{3}(?:\.\d+)?)\s*([cp])\b(.*)$/.exec(s))) {
       const strike = num(/strike\s*(\d+(\.\d+)?)/.exec(s)?.[1]), bid = num(/bid\s*(\d*\.?\d+)/.exec(s)?.[1]), ask = num(/ask\s*(\d*\.?\d+)/.exec(s)?.[1]), delta = num(/(delta|Δ)\s*(-?\d*\.?\d+)/.exec(s)?.[2]);
       const n = nums(s.replace(/(delta|Δ)\s*-?\d*\.?\d+/, "")), cp = /^(\d{3}(?:\.\d+)?)\s*([cp])\b/.exec(s);
-      if (cp) ACT.setDir(cp[2] === "p" ? "put" : "call");
       const k = strike ?? n[0], b = bid ?? (strike ? n[1] : n[1]), a = ask ?? n[2];
       if (k == null) return () => "Try: chain 779 0.95 0.98 (strike, Bid, Ask), optionally delta 0.46.";
-      return () => ACT.fillChain(k, bid ?? b ?? null, ask ?? a ?? null, delta ?? n[3] ?? null);
+      return () => { if (cp && view !== "practice") ACT.setDir(cp[2] === "p" ? "put" : "call"); return ACT.fillChain(k, bid ?? b ?? null, ask ?? a ?? null, delta ?? n[3] ?? null); };
     }
     // plan
     if ((m = /^plan\b(.*)$/.exec(s))) { const n = nums(m[1]), why = /why\s+(.*)$/.exec(raw)?.[1]; return () => ACT.setPlan(n[0] ?? null, n[1] ?? null, n[2] ?? null, why ?? null); }
@@ -2765,7 +2786,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   $("#cmd-out").addEventListener("click", async (e) => {
     if (e.target.id === "cmd-undo") cmdOut(await ACT.undo(), "ok");
     if (e.target.id === "cmd-cancel") { PENDING = []; cmdOut("Cancelled. Nothing changed.", ""); }
-    if (e.target.id === "cmd-confirm") { const list = PENDING; PENDING = []; const out = []; for (const x of list) out.push(await x.fn()); const before = UNDO.length; cmdOut(out.join(" "), "ok", UNDO.length ? `<button class="btn sm" type="button" id="cmd-undo">Undo</button>` : ""); }
+    if (e.target.id === "cmd-confirm") { const list = PENDING; PENDING = []; const out = []; const before = UNDO.length; for (const x of list) out.push(await x.fn()); cmdOut(out.join(" "), "ok", UNDO.length > before ? `<button class="btn sm" type="button" id="cmd-undo">Undo</button>` : ""); }
   });
   const HIST_CMD = []; let histI = -1;
   $("#cmd").addEventListener("keydown", (e) => {
@@ -2826,7 +2847,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       const last = calc(t).last, a = planStatus(t, last ? num(last.bid) : null);
       a.forEach((x) => alertUser(`plan:${t.id}:${x}`, "plan", "Your plan says get out: " + x));
       // soft alert from the delta estimate (not a quote)
-      const S0 = num(t.entryUnderlying), d = num(t.delta), Sn = LIVE.snap && uOf(t) === U() ? num(LIVE.snap.price) : null;
+      const S0 = num(t.entryUnderlying), d = sDelta(t), Sn = LIVE.snap && uOf(t) === U() ? num(LIVE.snap.price) : null;
       if (S0 != null && d != null && Sn != null && num(t.entryBid) != null) {
         const est = num(t.entryBid) + d * (Sn - S0);
         if (num(t.planTargetPrice) != null && est >= t.planTargetPrice) alertUser(`est:${t.id}:t`, "plan", `SPY moved enough that your option may be near take-profit (${px(t.planTargetPrice)}). Check the real Bid.`);
