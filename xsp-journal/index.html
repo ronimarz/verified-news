@@ -197,6 +197,7 @@ textarea { min-height: 90px; resize: vertical; }
 .rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
 .rule-lv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; font-size: 13px; margin-top: 4px; }
 .rule-lv label { display: flex; gap: 6px; align-items: center; } .rule-lv input { width: auto; }
+.be-box { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: var(--info-bg); }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -1815,6 +1816,21 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const r = bs(type, S, K, num($("#rp-iv").value) || 15, rpMinsLeft()), hs = r.price < 3 ? 0.01 : 0.02;
     return { mid: r.price, bid: Math.max(Math.floor((r.price - hs) * 100) / 100, 0), ask: Math.max(Math.ceil((r.price + hs) * 100) / 100, 0.01), delta: r.delta, S };
   }
+  // How many SPY points the option needs so its Bid reaches `price`, from the current price and time.
+  function beMove(dir, K, price) {
+    const S0 = rpPrice(), sg = dir === "call" ? 1 : -1, bidAt = (m) => rpQuote(dir, K, S0 + sg * m).bid;
+    if (S0 == null) return null; if (bidAt(0) >= price) return 0;
+    let lo = 0, hi = 25; if (bidAt(hi) < price) return null;
+    for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (bidAt(mid) >= price) hi = mid; else lo = mid; }
+    return hi;
+  }
+  // Plain-English break-even for a contract bought at `cost`, with an optional take-profit price.
+  function beHtml(dir, K, cost, target) {
+    const S0 = rpPrice(), sg = dir === "call" ? 1 : -1, way = dir === "call" ? "up" : "down", pts = (m) => `<b>${sg > 0 ? "+" : "−"}${m.toFixed(2)}</b> point${Math.abs(m - 1) < 0.005 ? "" : "s"} (SPY ${(S0 + sg * m).toFixed(2)})`;
+    const be = beMove(dir, K, cost), tp = target ? beMove(dir, K, target) : null, exp = K + sg * cost;
+    const now = be == null ? "SPY would need a very big move to break even right now" : be === 0 ? "<b>You're above break-even right now</b>" : `To break even right now, SPY needs to move ${way} ${pts(be)}. This grows a little every minute as time decay eats the option's value`;
+    return `${now}.${tp != null && tp > 0 ? ` To hit your take-profit (${px(target)}): ${pts(tp)}.` : ""} At 4:00 pm the option only pays if SPY is ${dir === "call" ? "above" : "below"} <b>${exp.toFixed(2)}</b> (strike ${dir === "call" ? "+" : "−"} what you paid).`;
+  }
   function rpBestStrike(type) {
     const S = rpPrice(); if (S == null) return null; let best = null;
     for (let k = Math.floor(S) - 4; k <= Math.ceil(S) + 4; k++) { const q = rpQuote(type, k); if (q && (!best || Math.abs(q.ask - 1) < Math.abs(best.q.ask - 1))) best = { k, q }; }
@@ -2090,8 +2106,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         return { key: "alert" + p.strike + p.dir + p.alert + !!wSell + (t ? t.step + t.type : "") + others.length, cls: "warn", title: `Your plan says sell ${p.strike}${p.dir === "call" ? "C" : "P"} now`, body: `<p class="small">${why}</p>${coachSteps(steps)}${alsoNote}`, buttons: [...(wSell ? [["cancelsells", "Cancel my sell order", false]] : []), ["show:positions", "Show me", false], ["fill:now", "Fill it in for me", true]] };
       }
       if (t && t.action === "STC") return ticketCoach(t);
-      if (!wSell) return { key: "settp" + p.strike + p.dir + RP.playing + others.length, cls: "go", title: "Filled! Now set your take-profit", body: `<p class="small">You own ${p.qty} × ${esc(contract)} at ${px(p.avg)}. Place a sell order now, so it fills by itself if the price rises to your target.</p>${coachSteps([["Go to <b>Positions</b> and press <b>Close</b> (it fills in Sell To Close for you).", false], [`Change Order Type to <b>Limit</b> and set Limit Price to <b>${px(p.targetPx)}</b> (your +${p.plan.t}% target). Leaving it on Market would sell right now instead.`, false], ["Time in Force: <b>Day</b>. Press <b>Preview Order</b>, then <b>Place Order</b>.", false]])}<p class="small muted">Your stop (${px(p.stopPx)}) and time limit you watch yourself. I'll warn you.${RP.playing ? "" : " The replay continues once your sell order is placed (or press Play)."}</p>${alsoNote}`, buttons: [["show:positions", "Show me", false], ["fill:tp", "Fill it in for me", true]] };
-      return { key: "managing" + RP.positions.length, cls: "", title: "Trade open · take-profit order working", body: `<div class="pl" id="c-pl">–</div><p class="small">Now Bid <b id="c-bid">–</b>. Sell order working at <b>${px(wSell.limit)}</b>. Stop: <b>${px(p.stopPx)}</b>. Time left: <b id="c-left">–</b>.</p><p class="small muted">Nothing to click. Let the plan work. Notice how the option moves faster than SPY (delta and gamma), and how time decay chips away.</p>${alsoNote}` };
+      if (!wSell) return { key: "settp" + p.strike + p.dir + RP.playing + others.length, cls: "go", title: "Filled! Now set your take-profit", body: `<p class="small">You own ${p.qty} × ${esc(contract)} at ${px(p.avg)}. Place a sell order now, so it fills by itself if the price rises to your target.</p><p class="small be-box" id="c-be"></p>${coachSteps([["Go to <b>Positions</b> and press <b>Close</b> (it fills in Sell To Close for you).", false], [`Change Order Type to <b>Limit</b> and set Limit Price to <b>${px(p.targetPx)}</b> (your +${p.plan.t}% target). Leaving it on Market would sell right now instead.`, false], ["Time in Force: <b>Day</b>. Press <b>Preview Order</b>, then <b>Place Order</b>.", false]])}<p class="small muted">Your stop (${px(p.stopPx)}) and time limit you watch yourself. I'll warn you.${RP.playing ? "" : " The replay continues once your sell order is placed (or press Play)."}</p>${alsoNote}`, buttons: [["show:positions", "Show me", false], ["fill:tp", "Fill it in for me", true]] };
+      return { key: "managing" + RP.positions.length, cls: "", title: "Trade open · take-profit order working", body: `<div class="pl" id="c-pl">–</div><p class="small">Now Bid <b id="c-bid">–</b>. Sell order working at <b>${px(wSell.limit)}</b>. Stop: <b>${px(p.stopPx)}</b>. Time left: <b id="c-left">–</b>.</p><p class="small be-box" id="c-be"></p><p class="small muted">Nothing to click. Let the plan work. Notice how the option moves faster than SPY (delta and gamma), and how time decay chips away.</p>${alsoNote}` };
     }
     if (wBuy) return { key: "wbuy" + wBuy.id, cls: "", title: "Your buy order is waiting", body: `<p class="small">Limit ${px(wBuy.limit)}. The Ask is <b id="c-ask">–</b>. A limit buy only fills if the Ask drops to your price.</p><p class="small muted">If it hasn't filled within a minute, cancel it in Orders and decide again. Chasing a move with a higher price is a common mistake.</p>`, buttons: [["show:orders", "Show me", false]] };
     if (t && t.action === "BTO") return ticketCoach(t);
@@ -2126,7 +2142,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const cd = $("#c-count"); if (cd && brk) { const left = Math.max(0, Math.ceil(60 * (RULE.hold - brk.hc - RP.sub))); cd.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; }
     if (tc && brk) { const f = formingSoFar(), touched = f && (brk.dir === "call" ? f.l <= brk.L : f.h >= brk.L); tc.textContent = touched ? "Price touched the line again. This hold is failing." : `Still ${brk.dir === "call" ? "above" : "below"} the line.`; tc.style.color = touched ? "var(--bad)" : "var(--good)"; }
     const p = RP.pos;
-    if (p) { const q = rpQuote(p.dir, p.strike), pl = (q.bid - p.avg) * 100 * p.qty; const e1 = $("#c-pl"); if (e1) { e1.textContent = money(Math.round(pl * 100) / 100, true); e1.className = "pl " + cls_(pl); } const e2 = $("#c-bid"); if (e2) e2.textContent = px(q.bid); const e3 = $("#c-left"); if (e3) e3.textContent = `${Math.max(0, Math.ceil(p.timeStop - rpMinute()))} min`; }
+    if (p) { const q = rpQuote(p.dir, p.strike), pl = (q.bid - p.avg) * 100 * p.qty; const e1 = $("#c-pl"); if (e1) { e1.textContent = money(Math.round(pl * 100) / 100, true); e1.className = "pl " + cls_(pl); } const e2 = $("#c-bid"); if (e2) e2.textContent = px(q.bid); const e3 = $("#c-left"); if (e3) e3.textContent = `${Math.max(0, Math.ceil(p.timeStop - rpMinute()))} min`; const e4 = $("#c-be"); if (e4) e4.innerHTML = beHtml(p.dir, p.strike, p.avg, p.targetPx); }
     const wb = RP.orders.find((o) => o.status === "working" && o.action === "BTO"), ca = $("#c-ask"); if (ca && wb) ca.textContent = px(rpQuote(wb.dir, wb.strike).ask);
   }
   $("#rp-mini-go").addEventListener("click", () => $("#rp-coach").scrollIntoView({ block: "start", behavior: "smooth" }));
@@ -2184,14 +2200,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="trow"><label for="t-action">Action</label><select id="t-action"><option value="BTO"${buy ? " selected" : ""}>Buy To Open</option><option value="STC"${!buy ? " selected" : ""}>Sell To Close</option></select></div>
         <div class="trow"><label for="t-qty">Quantity</label><input id="t-qty" type="number" min="1" step="1" value="${t.qty}"></div>
         <div class="trow"><label for="t-type">Order Type</label><select id="t-type"><option value="limit"${t.type === "limit" ? " selected" : ""}>Limit</option><option value="market"${t.type === "market" ? " selected" : ""}>Market</option></select></div>
-        ${t.type === "limit" ? `<div class="trow"><label for="t-limit">Limit Price</label><div class="row" style="flex-wrap:nowrap"><input id="t-limit" type="number" step="0.01" value="${t.limit.toFixed(2)}"><button class="btn sm" type="button" data-t="setbid">Bid</button><button class="btn sm" type="button" data-t="setmid">Mid</button><button class="btn sm" type="button" data-t="setask">Ask</button></div></div>` : ""}
+        ${t.type === "limit" ? `<div class="trow"><label for="t-limit">Limit Price</label><div class="row" style="flex-wrap:nowrap; gap:4px"><input id="t-limit" type="number" step="0.01" inputmode="decimal" value="${t.limit.toFixed(2)}" style="flex:1 1 80px; min-width:76px"><button class="btn sm" type="button" data-t="setbid">Bid</button><button class="btn sm" type="button" data-t="setmid">Mid</button><button class="btn sm" type="button" data-t="setask">Ask</button></div></div>` : ""}
         <div class="trow"><label for="t-tif">Time in Force</label><select id="t-tif"><option>Day</option></select></div>
         <div class="trow"><label>Estimated ${buy ? "cost" : "proceeds"}</label><b id="t-est">–</b></div>
+        ${buy ? `<div class="small be-box" id="t-be"></div>` : ""}
         <div class="row"><button class="btn" type="button" data-t="clear">Clear</button><button class="btn primary" type="button" data-t="preview">Preview Order</button></div></div>`;
     }
     if (RP.tab === "positions") {
       const ps = RP.positions;
-      return ps.length ? `<table class="b-pos" style="width:100%"><thead><tr><th>Symbol</th><th class="n">Qty</th><th class="n">Cost</th><th class="n">Bid</th><th class="n">Gain/Loss</th><th></th></tr></thead><tbody>${ps.map((p) => `<tr><td>${esc(cName(p.dir, p.strike))}</td><td class="n">${p.qty}</td><td class="n">${px(p.avg)}</td><td class="n" id="p-bid-${p.dir}-${p.strike}">–</td><td class="n" id="p-gl-${p.dir}-${p.strike}">–</td><td><button class="btn sm primary" type="button" data-pos="close" data-dir="${p.dir}" data-k="${p.strike}">Close</button></td></tr>`).join("")}</tbody></table><p class="small muted" style="margin-top:8px">Close opens a Sell To Close ticket for that position.</p>` : `<p class="small muted">No positions. When a buy order fills, it shows up here.</p>`;
+      return ps.length ? `<table class="b-pos" style="width:100%"><thead><tr><th>Symbol</th><th class="n">Qty</th><th class="n">Cost</th><th class="n">Bid</th><th class="n">Gain/Loss</th><th></th></tr></thead><tbody>${ps.map((p) => `<tr><td>${esc(cName(p.dir, p.strike))}</td><td class="n">${p.qty}</td><td class="n">${px(p.avg)}</td><td class="n" id="p-bid-${p.dir}-${p.strike}">–</td><td class="n" id="p-gl-${p.dir}-${p.strike}">–</td><td><button class="btn sm primary" type="button" data-pos="close" data-dir="${p.dir}" data-k="${p.strike}">Close</button></td></tr>`).join("")}</tbody></table>${ps.map((p) => `<div class="small be-box" id="p-be-${p.dir}-${p.strike}"></div>`).join("")}<p class="small muted" style="margin-top:8px">Close opens a Sell To Close ticket for that position.</p>` : `<p class="small muted">No positions. When a buy order fills, it shows up here.</p>`;
     }
     const os = RP.orders;
     return os.length ? `<table style="width:100%"><thead><tr><th>Time</th><th>Order</th><th>Status</th><th></th></tr></thead><tbody>${os.map((o) => `<tr><td class="mono">${fmtClock(Math.floor(o.placedMin))}</td><td>${o.action === "BTO" ? "Buy To Open" : "Sell To Close"} ${o.qty} × ${o.strike}${o.dir === "call" ? "C" : "P"} · ${o.type === "market" ? "Market" : "Limit " + px(o.limit)}</td><td>${o.status === "filled" ? `<span class="pill good">Filled ${px(o.fillPx)}</span>` : o.status === "working" ? '<span class="pill info">Working</span>' : `<span class="pill">${o.status === "expired" ? "Expired" : "Cancelled"}</span>`}</td><td>${o.status === "working" ? `<button class="btn sm" type="button" data-cancel="${o.id}">Cancel</button>` : ""}</td></tr>`).join("")}</tbody></table>` : `<p class="small muted">No orders yet today.</p>`;
@@ -2210,8 +2227,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       s("t-bid", px(q.bid)); s("t-ask", px(q.ask)); s("t-mid", px(Math.round(q.mid * 100) / 100));
       const price = t.type === "market" ? (t.action === "BTO" ? q.ask : q.bid) : num($("#t-limit")?.value) ?? t.limit;
       s("t-est", money(Math.round(price * 100 * t.qty * 100) / 100));
+      const tb = $("#t-be"); if (tb && price > 0) tb.innerHTML = `<b>To make money:</b> ` + beHtml(t.dir, t.strike, price, +(price * (1 + RULE.t / 100)).toFixed(2));
     }
-    if (RP.tab === "positions") for (const p of RP.positions) { const q = rpQuote(p.dir, p.strike), gl = (q.bid - p.avg) * 100 * p.qty; const a = $(`#p-bid-${p.dir}-${p.strike}`), b = $(`#p-gl-${p.dir}-${p.strike}`); if (a) a.textContent = px(q.bid); if (b) { b.textContent = `${money(Math.round(gl * 100) / 100, true)} (${pct(gl / (p.avg * 100 * p.qty))})`; b.className = "n " + cls_(gl); } }
+    if (RP.tab === "positions") for (const p of RP.positions) { const q = rpQuote(p.dir, p.strike), gl = (q.bid - p.avg) * 100 * p.qty; const a = $(`#p-bid-${p.dir}-${p.strike}`), b = $(`#p-gl-${p.dir}-${p.strike}`); if (a) a.textContent = px(q.bid); if (b) { b.textContent = `${money(Math.round(gl * 100) / 100, true)} (${pct(gl / (p.avg * 100 * p.qty))})`; b.className = "n " + cls_(gl); } const c = $(`#p-be-${p.dir}-${p.strike}`); if (c) c.innerHTML = `<b>${p.strike}${p.dir === "call" ? "C" : "P"}:</b> ` + beHtml(p.dir, p.strike, p.avg, p.targetPx); }
   }
   $("#b-body").addEventListener("click", (e) => {
     const o = e.target.closest("[data-o]");
