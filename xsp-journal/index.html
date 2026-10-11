@@ -193,6 +193,10 @@ textarea { min-height: 90px; resize: vertical; }
 .bt-split span { display: block; height: 100%; }
 .bt-card dl { display: grid; grid-template-columns: 1fr auto; gap: 3px 10px; margin: 0; font-size: 13px; }
 .bt-card dt { color: var(--muted); } .bt-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.rule-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0 12px; background: var(--panel-2); }
+.rule-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 8px; }
+.rule-lv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; font-size: 13px; margin-top: 4px; }
+.rule-lv label { display: flex; gap: 6px; align-items: center; } .rule-lv input { width: auto; }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -573,6 +577,32 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div><h2>Practice a past day</h2><p class="small muted" style="margin-top:4px">A real SPY trading day plays back minute by minute. The app watches the key price lines for you. When a signal appears, you decide: buy or skip. Practice trades never touch your official balance.</p></div>
         <div class="row"><label class="small muted" for="rp-date">Day</label><select id="rp-date" style="width:auto"></select><button class="btn primary" type="button" id="rp-load">Start this day</button></div>
       </div>
+      <div class="rule-box" id="rp-rule">
+        <div class="row" style="justify-content:space-between; gap:8px">
+          <div style="min-width:0"><div class="label">Rule you're practicing</div><div id="rp-rule-name" style="font-weight:600"></div><div class="small muted" id="rp-rule-sum"></div></div>
+          <select id="rp-rule-pick" style="width:auto" aria-label="Pick a rule"><option value="v2">V2: wait 60 seconds</option><option value="v1">V1: wait 3 minutes</option><option value="now">Buy right on the break</option><option value="custom">My own rule</option></select>
+        </div>
+        <details id="rp-rule-edit">
+          <summary class="small" style="cursor:pointer">Change the rule</summary>
+          <div class="rule-grid">
+            <div class="field"><label for="rr-hold">After SPY breaks a line, wait</label><select id="rr-hold"><option value="0">No wait (buy on the break)</option><option value="1">1 minute</option><option value="2">2 minutes</option><option value="3">3 minutes</option><option value="5">5 minutes</option></select></div>
+            <div class="field"><label for="rr-dirs">Trade</label><select id="rr-dirs"><option value="both">Calls and puts</option><option value="call">Calls only (breaks up)</option><option value="put">Puts only (breaks down)</option></select></div>
+            <div class="field"><label for="rr-until">No new trades after</label><select id="rr-until"><option value="660">11:00 am</option><option value="720">12:00 pm</option><option value="840">2:00 pm</option><option value="900">3:00 pm</option><option value="930">3:30 pm</option></select></div>
+            <div class="field"><label for="rp-t">Take profit at +%</label><input id="rp-t" type="number" step="5" min="5" value="50" inputmode="numeric"></div>
+            <div class="field"><label for="rp-s">Stop loss at −%</label><input id="rp-s" type="number" step="5" min="5" value="40" inputmode="numeric"></div>
+            <div class="field"><label for="rp-m">Sell after (minutes)</label><input id="rp-m" type="number" step="5" min="5" value="30" inputmode="numeric"></div>
+          </div>
+          <div class="small" style="margin-top:8px">Lines to watch:</div>
+          <div class="rule-lv">
+            <label><input type="checkbox" data-rl="ph" checked> Yesterday's high (call)</label>
+            <label><input type="checkbox" data-rl="pl" checked> Yesterday's low (put)</label>
+            <label><input type="checkbox" data-rl="pc"> Yesterday's close (both ways)</label>
+            <label><input type="checkbox" data-rl="or15" checked> First 15 minutes' high and low</label>
+            <label><input type="checkbox" data-rl="or30"> First 30 minutes' high and low</label>
+          </div>
+          <p class="small muted" style="margin-top:8px">Changing anything makes it "My own rule". Your practice results compare rules side by side, so try each one on a few days.</p>
+        </details>
+      </div>
       <ol class="rp-steps" id="rp-steps"><li>Watch</li><li>Signal</li><li>Pick a contract</li><li>Order ticket</li><li>Filled</li><li>Set your exit</li><li>Close</li><li>Result</li></ol>
       <div class="coach" id="rp-coach" style="margin-bottom:14px"></div>
       <div class="rp-grid">
@@ -600,9 +630,6 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <details id="rp-settings">
             <summary>Settings</summary>
             <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px; margin-top:8px">
-              <div class="field"><label for="rp-t">Take profit %</label><input id="rp-t" type="number" step="5" value="50"></div>
-              <div class="field"><label for="rp-s">Stop loss %</label><input id="rp-s" type="number" step="5" value="40"></div>
-              <div class="field"><label for="rp-m">Time stop (min)</label><input id="rp-m" type="number" step="5" value="30"></div>
               <div class="field"><label for="rp-iv">Volatility (IV %)</label><input id="rp-iv" type="number" step="0.5" value="15"></div>
             </div>
             <label class="small row" style="gap:6px; margin-top:8px"><input type="checkbox" id="rp-pausesig" checked style="width:auto"> Pause the replay at signals (training wheels)</label>
@@ -1793,22 +1820,66 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     return best?.k ?? Math.round(S);
   }
   const cName = (dir, K) => `SPY ${new Date(RP.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} ${K} ${dir === "call" ? "Call" : "Put"}`;
+  // ----- the rule being practiced -----
+  const RULE_PRESETS = {
+    v2: { name: "V2: wait 60 seconds", hold: 1 },
+    v1: { name: "V1: wait 3 minutes", hold: 3 },
+    now: { name: "Buy right on the break", hold: 0 },
+  };
+  const RULE_BASE = { hold: 1, dirs: "both", until: 930, t: 50, s: 40, m: 30, lv: { ph: true, pl: true, pc: false, or15: true, or30: false } };
+  let RULE = { ...RULE_BASE, ...ls.get("rp.rule", {}) }; RULE.lv = { ...RULE_BASE.lv, ...(RULE.lv || {}) };
+  const ruleWait = (h) => h === 0 ? "buy on the break" : h === 1 ? "wait 1 minute" : `wait ${h} minutes`;
+  function rulePreset(r) { for (const [k, v] of Object.entries(RULE_PRESETS)) { if (r.hold === v.hold && r.dirs === "both" && r.until === 930 && r.t === 50 && r.s === 40 && r.m === 30 && r.lv.ph && r.lv.pl && !r.lv.pc && r.lv.or15 && !r.lv.or30) return k; } return "custom"; }
+  function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, +${r.t}% / −${r.s}% / ${r.m} min` : RULE_PRESETS[k].name; }
+  function ruleSummary(r) {
+    const lv = [r.lv.ph && r.dirs !== "put" && "yesterday's high", r.lv.pl && r.dirs !== "call" && "yesterday's low", r.lv.pc && "yesterday's close", r.lv.or15 && "first-15-min range", r.lv.or30 && "first-30-min range"].filter(Boolean);
+    return `When SPY breaks ${lv.length ? lv.join(", ") : "(no lines picked)"}, ${ruleWait(r.hold)}${r.hold ? " with no touch back" : ""}. ${r.dirs === "both" ? "Calls and puts" : r.dirs === "call" ? "Calls only" : "Puts only"}, none after ${fmtClock(r.until)}. Sell at +${r.t}%, −${r.s}%, or after ${r.m} min.`;
+  }
+  function renderRule() {
+    $("#rp-rule-name").textContent = ruleName(RULE); $("#rp-rule-sum").textContent = ruleSummary(RULE);
+    $("#rp-rule-pick").value = rulePreset(RULE);
+    $("#rr-hold").value = String(RULE.hold); $("#rr-dirs").value = RULE.dirs; $("#rr-until").value = String(RULE.until);
+    if (document.activeElement?.id !== "rp-t") $("#rp-t").value = RULE.t; if (document.activeElement?.id !== "rp-s") $("#rp-s").value = RULE.s; if (document.activeElement?.id !== "rp-m") $("#rp-m").value = RULE.m;
+    $$("[data-rl]").forEach((c) => (c.checked = !!RULE.lv[c.dataset.rl]));
+  }
+  function setRule(patch) {
+    RULE = { ...RULE, ...patch, lv: { ...RULE.lv, ...(patch.lv || {}) } }; ls.set("rp.rule", RULE);
+    RP.coachKey = ""; renderRule(); rpRender();
+  }
+  $("#rp-rule-pick").addEventListener("change", (e) => {
+    const k = e.target.value;
+    if (k === "custom") { $("#rp-rule-edit").open = true; return renderRule(); }
+    setRule({ ...RULE_BASE, hold: RULE_PRESETS[k].hold });
+    toast(`Practicing: ${RULE_PRESETS[k].name}.`);
+  });
+  $("#rr-hold").addEventListener("change", (e) => setRule({ hold: +e.target.value }));
+  $("#rr-dirs").addEventListener("change", (e) => setRule({ dirs: e.target.value }));
+  $("#rr-until").addEventListener("change", (e) => setRule({ until: +e.target.value }));
+  [["rp-t", "t"], ["rp-s", "s"], ["rp-m", "m"]].forEach(([id, k]) => $("#" + id).addEventListener("change", (e) => { const v = Math.round(num(e.target.value)); setRule({ [k]: v > 0 ? v : RULE_BASE[k] }); }));
+  $$("[data-rl]").forEach((c) => c.addEventListener("change", () => setRule({ lv: { [c.dataset.rl]: c.checked } })));
+  renderRule();
+
   function rpLevels() {
-    const p = prevDay(RP.date), out = [];
-    if (p) out.push({ key: "ph", name: "yesterday's high", L: p.h, dir: "call", from: 570 }, { key: "pl", name: "yesterday's low", L: p.l, dir: "put", from: 570 });
-    if (RP.idx >= 14) { const or = RP.bars.slice(0, 15); out.push({ key: "orh", name: "the first-15-minute high", L: Math.max(...or.map((b) => b.h)), dir: "call", from: 585 }, { key: "orl", name: "the first-15-minute low", L: Math.min(...or.map((b) => b.l)), dir: "put", from: 585 }); }
-    return out;
+    const p = prevDay(RP.date), out = [], lv = RULE.lv;
+    const range = (n) => { const or = RP.bars.slice(0, n); return [Math.max(...or.map((b) => b.h)), Math.min(...or.map((b) => b.l))]; };
+    if (p && lv.ph) out.push({ key: "ph", name: "yesterday's high", L: p.h, dir: "call", from: 570 });
+    if (p && lv.pl) out.push({ key: "pl", name: "yesterday's low", L: p.l, dir: "put", from: 570 });
+    if (p && lv.pc) out.push({ key: "pcu", name: "yesterday's close", L: p.c, dir: "call", from: 570 }, { key: "pcd", name: "yesterday's close", L: p.c, dir: "put", from: 570 });
+    if (lv.or15 && RP.idx >= 14) { const [h, l] = range(15); out.push({ key: "orh", name: "the first-15-minute high", L: h, dir: "call", from: 585 }, { key: "orl", name: "the first-15-minute low", L: l, dir: "put", from: 585 }); }
+    if (lv.or30 && RP.idx >= 29) { const [h, l] = range(30); out.push({ key: "or30h", name: "the first-30-minute high", L: h, dir: "call", from: 600 }, { key: "or30l", name: "the first-30-minute low", L: l, dir: "put", from: 600 }); }
+    return out.filter((x) => RULE.dirs === "both" || x.dir === RULE.dirs);
   }
   function crossState(lv) {
     const beyond = (b) => lv.dir === "call" ? b.c > lv.L : b.c < lv.L, clean = (b) => lv.dir === "call" ? b.l > lv.L : b.h < lv.L;
-    let armed = false, st = "watch", bi = -1, hi = -1, resets = 0;
+    const H = RULE.hold;
+    let armed = false, st = "watch", bi = -1, hi = -1, resets = 0, hc = 0;
     for (let i = 0; i <= RP.idx; i++) {
       const b = RP.bars[i];
       if (barMin(b) < lv.from || b.t < (RP.since[lv.key] || 0)) continue;
-      if (st === "watch") { if (!armed) { if (!beyond(b)) armed = true; continue; } if (beyond(b)) { st = "broke"; bi = i; } }
-      else if (st === "broke") { if (clean(b)) { st = "held"; hi = i; break; } resets++; if (beyond(b)) bi = i; else st = "watch"; }
+      if (st === "watch") { if (!armed) { if (!beyond(b)) armed = true; continue; } if (beyond(b)) { bi = i; hc = 0; if (H === 0) { st = "held"; hi = i; break; } st = "broke"; } }
+      else if (st === "broke") { if (clean(b)) { if (++hc >= H) { st = "held"; hi = i; break; } continue; } resets++; hc = 0; if (beyond(b)) bi = i; else st = "watch"; }
     }
-    return { ...lv, st, bi, hi, resets };
+    return { ...lv, st, bi, hi, resets, hc };
   }
   const rpStates = () => rpLevels().map(crossState);
 
@@ -1877,7 +1948,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const sts = rpStates(), held = sts.find((x) => x.st === "held" && x.hi === RP.idx), broke = sts.find((x) => x.st === "broke" && x.bi === RP.idx);
     if (broke && RP.ff) { RP.ff = false; rpPlay(); }
     if (broke && AL.on) beep("break");
-    if (held) {
+    if (held && barMin(RP.bars[held.hi]) + 1 >= RULE.until) { RP.since[held.key] = RP.bars[RP.idx].t; }
+    else if (held) {
       RP.signal = { ...held, strike: rpBestStrike(held.dir), min: barMin(RP.bars[held.hi]) + 1, breakMin: barMin(RP.bars[held.bi]) + 1 };
       RP.tab = "chain"; RP.bodyKey = "";
       if (AL.on) beep("hold");
@@ -1917,8 +1989,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (o.action === "BTO") {
       const p = posOf(o.dir, o.strike);
       if (p) { p.costIn += o.fillPx * o.qty; p.bought += o.qty; p.qty += o.qty; p.avg = p.costIn / p.bought; p.targetPx = +(p.avg * (1 + (p.plan.t || 0) / 100)).toFixed(2); p.stopPx = +(p.avg * (1 - (p.plan.s || 0) / 100)).toFixed(2); return; }
-      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pd = S.cfg.planDefaults || DEFAULT_CFG.planDefaults, pl = { t: num($("#rp-t").value) || pd.target, s: num($("#rp-s").value) || pd.stop, m: num($("#rp-m").value) || pd.time };
-      RP.positions.push({ dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, costIn: o.fillPx * o.qty, bought: o.qty, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl,
+      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pl = { t: RULE.t, s: RULE.s, m: RULE.m };
+      RP.positions.push({ rule: ruleName(RULE), ruleCfg: { ...RULE, lv: { ...RULE.lv } }, dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, costIn: o.fillPx * o.qty, bought: o.qty, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl,
         targetPx: +(o.fillPx * (1 + (pl.t || 0) / 100)).toFixed(2), stopPx: +(o.fillPx * (1 - (pl.s || 0) / 100)).toFixed(2), timeStop: rpMinute() + (pl.m || 0), alert: null, alertAt: null, chase: !!(sg && sg.ask0 && o.fillPx > sg.ask0 * 1.15), followedDir: sg?.dir });
       if (sg) RP.since[sg.key] = RP.bars[Math.max(RP.idx, 0)].t;
       RP.signal = null; RP.tab = "positions";
@@ -1938,7 +2010,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const iv = num($("#rp-iv").value) || 15;
     const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
     const ignored = p.alertAt != null && rpMinute() - p.alertAt > 2 && reason !== "close";
-    const doc = { replayDate: RP.date, at: Date.now(), dir: p.dir, strike: p.strike, qty, level: p.signal?.L ?? null, levelName: p.signal?.name || "", followed: p.followed, falseBreaks: p.signal?.resets || 0,
+    const doc = { replayDate: RP.date, at: Date.now(), rule: p.rule, ruleCfg: p.ruleCfg, dir: p.dir, strike: p.strike, qty, level: p.signal?.L ?? null, levelName: p.signal?.name || "", followed: p.followed, falseBreaks: p.signal?.resets || 0,
       entryTime: fmtHM(Math.floor(p.openExact)), exitTime: fmtHM(Math.min(exitMin, 960)), entryU: +p.entryU.toFixed(2), exitU: +rpPrice().toFixed(2), entryAsk: +p.avg.toFixed(2), exitBid: +exitPx.toFixed(2), iv,
       pnl, pct: +(pnl / (p.avg * 100 * qty)).toFixed(4), minsHeld: Math.round(rpMinute() - p.openExact), plan: p.plan, exitReason: reason, exitOrder: o?.type || "market", after30,
       mistakes: [!p.followed && "early", Math.floor(p.openExact) >= 900 && "late", ignored && "ignored", p.chase && "chase", qty > 1 && "size"].filter(Boolean) };
@@ -2003,12 +2075,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (t && t.action === "BTO") return ticketCoach(t);
     if (RP.signal) {
       const sg = RP.signal, word = sg.dir === "call" ? "CALL" : "PUT", side = sg.dir === "call" ? "above" : "below", q = rpQuote(sg.dir, sg.strike);
-      return { key: "signal" + sg.key + sg.hi + RP.playing, cls: "go", title: `Signal: SPY held ${side} ${sg.name}`, body: `${RP.playing ? "" : `<p class="small muted">Replay paused so you have time. In a real market it keeps moving, so practice being quick.</p>`}<p class="small">It closed ${side} ${sg.L.toFixed(2)} at ${fmtClock(sg.breakMin)} and stayed there a full minute. Your rule says: buy a <b>${word}</b>.${sg.resets ? ` (${sg.resets} earlier break${sg.resets > 1 ? "s" : ""} failed.)` : ""}</p>${coachSteps([["Open the <b>Option Chain</b> tab.", RP.tab === "chain"], [`Find the ${word === "CALL" ? "Calls (left side)" : "Puts (right side)"} Ask closest to $1.00. That's the <b>${sg.strike}</b> strike (highlighted), Ask ${px(q.ask)}.`, false], ["Click that <b>Ask</b> price. It opens the order ticket.", false]])}`, buttons: [["show:chain", "Show me", false], ["fill:bto", "Fill it in for me", true], ["skip", "Skip this one", false]] };
+      return { key: "signal" + sg.key + sg.hi + RP.playing, cls: "go", title: `Signal: SPY ${RULE.hold ? "held" : "broke"} ${side} ${sg.name}`, body: `${RP.playing ? "" : `<p class="small muted">Replay paused so you have time. In a real market it keeps moving, so practice being quick.</p>`}<p class="small">It closed ${side} ${sg.L.toFixed(2)} at ${fmtClock(sg.breakMin)}${RULE.hold === 0 ? "" : ` and stayed there ${RULE.hold === 1 ? "a full minute" : `${RULE.hold} full minutes`}`}. Your rule says: buy a <b>${word}</b>.${sg.resets ? ` (${sg.resets} earlier break${sg.resets > 1 ? "s" : ""} failed.)` : ""}</p>${coachSteps([["Open the <b>Option Chain</b> tab.", RP.tab === "chain"], [`Find the ${word === "CALL" ? "Calls (left side)" : "Puts (right side)"} Ask closest to $1.00. That's the <b>${sg.strike}</b> strike (highlighted), Ask ${px(q.ask)}.`, false], ["Click that <b>Ask</b> price. It opens the order ticket.", false]])}`, buttons: [["show:chain", "Show me", false], ["fill:bto", "Fill it in for me", true], ["skip", "Skip this one", false]] };
     }
     const sts = rpStates(), brk = sts.find((x) => x.st === "broke");
-    if (brk) return { key: "break" + brk.key + brk.bi, cls: "", title: `Break! SPY closed ${brk.dir === "call" ? "above" : "below"} ${brk.name}`, body: `<p class="small">If the next full minute stays ${brk.dir === "call" ? "above" : "below"} ${brk.L.toFixed(2)}, that's a signal. Don't buy yet.</p><div class="count" id="c-count">0:60</div><div class="small" id="c-touch"></div>` };
+    if (brk) return { key: "break" + brk.key + brk.bi, cls: "", title: `Break! SPY closed ${brk.dir === "call" ? "above" : "below"} ${brk.name}`, body: `<p class="small">If ${RULE.hold === 1 ? "the next full minute stays" : `the next ${RULE.hold} full minutes stay`} ${brk.dir === "call" ? "above" : "below"} ${brk.L.toFixed(2)}, that's a signal. Don't buy yet.</p><div class="count" id="c-count"></div><div class="small" id="c-touch"></div>` };
     const lines = sts.map((x) => { const P = rpPrice(), dist = x.dir === "call" ? x.L - P : P - x.L; return `<li><span style="color:${x.dir === "call" ? "var(--good)" : "var(--bad)"}">${x.dir === "call" ? "Ceiling" : "Floor"}</span> ${esc(x.name)} ${x.L.toFixed(2)}: ${dist > 0 ? `$${dist.toFixed(2)} away` : `SPY is already ${x.dir === "call" ? "above" : "below"} it; it must cross back first`}</li>`; }).join("");
-    return { key: "watch" + sts.length + Math.round(rpPrice() * 4) + (RP.skipped?.note || "") + RP.playing, cls: "", title: "Watching. Nothing to click yet", body: `<p class="small">Most minutes, nothing happens. I'll tell you the moment a line breaks.${RP.idx < 14 ? " Two more lines appear at 9:45 (the first 15 minutes' high and low)." : ""}</p><ul class="small" style="margin:0;padding-left:18px">${lines}</ul>${RP.skipped?.note ? `<p class="small why">${esc(RP.skipped.note)}</p>` : ""}${RP.playing ? "" : `<p class="small muted">Paused. Press Play.</p>`}` };
+    return { key: "watch" + sts.length + Math.round(rpPrice() * 4) + (RP.skipped?.note || "") + RP.playing, cls: "", title: "Watching. Nothing to click yet", body: `<p class="small">Most minutes, nothing happens. I'll tell you the moment a line breaks.${RULE.lv.or15 && RP.idx < 14 ? " Two more lines appear at 9:45 (the first 15 minutes' high and low)." : RULE.lv.or30 && RP.idx < 29 ? " Two more lines appear at 10:00 (the first 30 minutes' high and low)." : ""}${sts.length ? "" : " <b>Your rule has no lines to watch yet.</b> Tick some under Change the rule."}</p><ul class="small" style="margin:0;padding-left:18px">${lines}</ul>${RP.skipped?.note ? `<p class="small why">${esc(RP.skipped.note)}</p>` : ""}${RP.playing ? "" : `<p class="small muted">Paused. Press Play.</p>`}` };
   }
   function ticketCoach(t) {
     const buy = t.action === "BTO", q = rpQuote(t.dir, t.strike);
@@ -2028,8 +2100,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       RP.coachKey = m.key; el.className = "coach " + (m.cls || "");
       el.innerHTML = `<div class="c-title">${m.title}</div>${m.body}${m.buttons ? `<div class="row">${m.buttons.map(([a, l, primary]) => `<button class="btn sm${primary ? " primary" : ""}" type="button" data-coach-act="${a}">${esc(l)}</button>`).join("")}</div>` : ""}`;
     }
-    const cd = $("#c-count"); if (cd) cd.textContent = `0:${String(Math.max(0, Math.ceil(60 * (1 - RP.sub)))).padStart(2, "0")}`;
     const tc = $("#c-touch"), brk = rpStates().find((x) => x.st === "broke");
+    const cd = $("#c-count"); if (cd && brk) { const left = Math.max(0, Math.ceil(60 * (RULE.hold - brk.hc - RP.sub))); cd.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; }
     if (tc && brk) { const f = formingSoFar(), touched = f && (brk.dir === "call" ? f.l <= brk.L : f.h >= brk.L); tc.textContent = touched ? "Price touched the line again. This hold is failing." : `Still ${brk.dir === "call" ? "above" : "below"} the line.`; tc.style.color = touched ? "var(--bad)" : "var(--good)"; }
     const p = RP.pos;
     if (p) { const q = rpQuote(p.dir, p.strike), pl = (q.bid - p.avg) * 100 * p.qty; const e1 = $("#c-pl"); if (e1) { e1.textContent = money(Math.round(pl * 100) / 100, true); e1.className = "pl " + cls_(pl); } const e2 = $("#c-bid"); if (e2) e2.textContent = px(q.bid); const e3 = $("#c-left"); if (e3) e3.textContent = `${Math.max(0, Math.ceil(p.timeStop - rpMinute()))} min`; }
@@ -2194,6 +2266,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function rpCmdSell() { if (!RP.pos) return "No position to sell."; const w = !!wSellFor(RP.pos); if (w) return "Cancel your working sell order first (Orders tab, or the coach's Cancel button)."; fillFor("now"); return "Sell ticket filled in (Market). Press Preview Order, then Place Order."; }
 
   const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "Held to 4:00 pm" };
+  const ruleOf = (p) => p.rule || "V2: wait 60 seconds";
   const after30Of = (p) => (p.exitTime && p.exitTime > "15:30" ? null : p.after30);
   function renderPracticeStats() {
     const P = [...S.practice].sort((a, b) => (b.at || 0) - (a.at || 0)), el = $("#rp-stats");
@@ -2215,14 +2288,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div><div class="label">Net</div><div class="num ${cls(net)}" style="font-size:20px">${money(net, true)}</div></div></div>
       <div class="small muted" style="margin-bottom:8px">Each table splits the same ${P.length} trades a different way (trades · win rate · net).</div>
       <div class="grid2" style="gap:14px">
-        ${group("By whether you followed the rule", ["Followed V2 signal", "No V2 signal"], (p) => (p.followed ? "Followed V2 signal" : "No V2 signal"))}
+        ${group("By rule practiced", [...new Set(P.map(ruleOf))], ruleOf)}
+        ${group("By whether you waited for the signal", ["Bought on a signal", "No signal"], (p) => (p.followed ? "Bought on a signal" : "No signal"))}
         ${group("By entry time", ["Opening", "Midday", "Afternoon"], (p) => bucket(p.entryTime))}
         ${group("By how you exited", exits, (p) => reasonName[p.exitReason] || p.exitReason)}
       </div>
-      ${noSignal ? `<div class="why" style="margin-top:12px">${noSignal === P.length ? "None" : `${P.length - noSignal} of ${P.length}`} of your practice trades came after a confirmed V2 signal. To practice the rule, set a level first (step 1), wait for "Hold confirmed", then buy. Trades without a signal still count, but they test a different strategy.</div>` : ""}
+      ${noSignal ? `<div class="why" style="margin-top:12px">${noSignal === P.length ? "None" : `${P.length - noSignal} of ${P.length}`} of your practice trades came after a signal from your rule. To test a rule fairly, wait for the coach to say "Signal", then buy. Trades without a signal still count, but they test a different strategy.</div>` : ""}
       <p class="small muted" style="margin-top:8px">Model prices ignore real-world quirks like wider spreads in fast markets. Treat these as practice reps, not proof.</p>`;
-    $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="n">30 min later</th><th></th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
-      `<tr><td style="white-space:nowrap">${esc(dayName(p.replayDate).replace(/^\w+, /, ""))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono" style="white-space:nowrap">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="n">${after30Of(p) != null ? px(after30Of(p)) : "–"}</td><td style="width:1%"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Delete this practice trade" aria-label="Delete this practice trade">×</button></td></tr>`).join("")}</tbody></table>`;
+    $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="hide-sm">Rule</th><th class="n">30 min later</th><th></th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
+      `<tr><td style="white-space:nowrap">${esc(dayName(p.replayDate).replace(/^\w+, /, ""))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono" style="white-space:nowrap">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="small hide-sm">${esc(ruleOf(p))}</td><td class="n">${after30Of(p) != null ? px(after30Of(p)) : "–"}</td><td style="width:1%"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Delete this practice trade" aria-label="Delete this practice trade">×</button></td></tr>`).join("")}</tbody></table>`;
   }
   $("#rp-list").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-pdel]"); if (!b) return;
@@ -2609,7 +2683,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     setContext(v) { LC.opp = v; saveLC(); renderLive(); return { no: "Context: nothing opposing.", unknown: "Context: no known opposition, some data stale.", yes: "Context: opposing signal. That blocks this entry." }[v]; },
     fillChain(strike, bid, ask, delta) { const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-strike", "strike", strike); put("lc-bid", "bid", bid); put("lc-ask", "ask", ask); put("lc-delta", "delta", delta); saveLC(); renderLive(); return `Chain filled: strike ${strike ?? LC.strike}, Bid ${bid ?? LC.bid}, Ask ${ask ?? LC.ask}${delta != null ? `, delta ${delta}` : ""}.`; },
     setPlan(t, st, m, why) {
-      if (view === "practice") { if (t != null) $("#rp-t").value = t; if (st != null) $("#rp-s").value = st; if (m != null) $("#rp-m").value = m; rpRender(); return `Practice plan: +${$("#rp-t").value}% / −${$("#rp-s").value}% / ${$("#rp-m").value} min.`; }
+      if (view === "practice") { setRule({ ...(t != null && { t }), ...(st != null && { s: st }), ...(m != null && { m }) }); return `Practice rule: +${RULE.t}% / −${RULE.s}% / ${RULE.m} min.`; }
       const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-pt", "pt", t); put("lc-ps", "ps", st); put("lc-pm", "pm", m); put("lc-pw", "pw", why); saveLC(); renderLive();
       return `Plan: take profit +${LC.pt}%, stop −${LC.ps}%, out after ${LC.pm} min${LC.pw ? ` · ${LC.pw}` : ""}.`;
     },
