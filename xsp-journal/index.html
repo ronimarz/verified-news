@@ -68,6 +68,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .tabs { display: flex; gap: 2px; overflow-x: auto; width: 100%; }
 .tab { border: 0; background: none; padding: 10px 14px 9px; cursor: pointer; font-family: var(--display); font-size: 16px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); border-bottom: 3px solid transparent; white-space: nowrap; }
 .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+@media (max-width: 600px) { .tabs { display: grid; grid-template-columns: repeat(3, 1fr); overflow: visible; } .tab { font-size: 14px; padding: 8px 4px 7px; text-align: center; } }
+@media (max-width: 600px) { .hide-sm { display: none; } }
 .tab .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--warn); margin-left: 6px; vertical-align: 2px; }
 
 .banner { margin-top: 14px; padding: 10px 14px; border-radius: 6px; background: var(--warn-bg); color: var(--ink); font-size: 13px; }
@@ -569,7 +571,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="coach" id="rp-coach" style="margin-bottom:14px"></div>
       <div class="rp-grid">
         <div style="min-width:0">
-          <div class="row" style="justify-content:space-between; align-items:baseline"><div class="rp-clock" id="rp-clock">–</div><div class="rp-price" id="rp-price"></div></div>
+          <div class="row" style="justify-content:space-between; align-items:baseline"><div class="rp-clock" id="rp-clock"></div><div class="rp-price" id="rp-price"></div></div>
           <div class="chart" id="rp-chart"><div class="empty">Pick a day and press Start this day.</div></div>
           <div class="row" style="margin-top:10px">
             <button class="btn primary" type="button" id="rp-play">Play</button>
@@ -611,7 +613,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     </div>
     <div style="display:grid; gap:18px">
       <div class="panel"><div class="panel-head"><h2>Practice results</h2><span class="small muted">Separate from your official balance</span></div><div id="rp-stats"></div></div>
-      <div class="panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
+      <div class="panel" id="rp-list-panel"><div class="panel-head"><h2>Practice trades</h2></div><div class="tbl-wrap" id="rp-list"></div></div>
     </div>
     <details class="panel" id="bt-box">
       <summary style="cursor:pointer"><b>Rule test:</b> does waiting 60 seconds really help? <span class="small muted">(tap to open)</span></summary>
@@ -1093,10 +1095,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const rows = [...st.all].reverse();
     if (!rows.length) { $("#trades-tbl").innerHTML = `<div class="empty">No trades yet. Log one from Live check, or add it here.</div>`; return; }
     const bal = new Map(st.curve.filter((p) => p.t).map((p) => [p.t.id, p.value]));
-    $("#trades-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Contract</th><th>Ver.</th><th>Entry → exit (ET)</th><th class="n">Cost</th><th class="n">P/L</th><th class="n">Return</th><th class="n">Balance</th><th>Rule check</th></tr></thead><tbody>${rows.map((t) => {
+    $("#trades-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Contract</th><th class="n">P/L</th><th>Entry → exit (ET)</th><th class="hide-sm">Ver.</th><th class="n hide-sm">Cost</th><th class="n hide-sm">Return</th><th class="n hide-sm">Balance</th><th>Rule check</th></tr></thead><tbody>${rows.map((t) => {
       const c = calc(t), pre = t.status !== "official";
-      return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(uOf(t))} ${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td>${esc(t.version || "–")}</td>
-        <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="n">${money(c.cost)}</td><td class="n ${pre ? "" : cls(c.pnl)}">${money(c.pnl, true)}</td><td class="n">${pct(c.ret)}</td><td class="n">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
+      return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(uOf(t))} ${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td class="n ${pre ? "" : cls(c.pnl)}">${money(c.pnl, true)}</td>
+        <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="hide-sm">${esc(t.version || "–")}</td><td class="n hide-sm">${money(c.cost)}</td><td class="n hide-sm">${pct(c.ret)}</td><td class="n hide-sm">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
   const openRow = (e) => { const r = e.target.closest("tr[data-id]"); if (r) openForm("trades", S.trades.find((t) => t.id === r.dataset.id)); };
@@ -1106,14 +1108,14 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderMissed() {
     const rows = [...S.missed].sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     if (!rows.length) { $("#missed-tbl").innerHTML = `<div class="empty">No missed setups logged.</div>`; return; }
-    $("#missed-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Setup</th><th>Signal</th><th class="n">Entry</th><th class="n">15m</th><th class="n">30m</th><th class="n">60m</th><th class="n">Hypothetical</th></tr></thead><tbody>${rows.map((m) =>
-      `<tr class="click" data-id="${esc(m.id)}" tabindex="0"><td>${esc(dayName(m.date))}</td><td>${esc(m.contract || "")}<div class="small muted">${esc(m.trigger || "")}</div></td><td class="mono">${esc(m.signalTime || "–")}</td><td class="n">${px(num(m.entryPrice))}</td><td class="n">${px(num(m.m15))}</td><td class="n">${px(num(m.m30))}</td><td class="n">${px(num(m.m60))}</td><td class="n ${cls(num(m.hypoPnl))}">${money(num(m.hypoPnl), true)}</td></tr>`).join("")}</tbody></table>`;
+    $("#missed-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Setup</th><th class="n">Would have made</th><th>Signal</th><th class="n">Entry</th><th class="n hide-sm">15m</th><th class="n hide-sm">30m</th><th class="n hide-sm">60m</th></tr></thead><tbody>${rows.map((m) =>
+      `<tr class="click" data-id="${esc(m.id)}" tabindex="0"><td>${esc(dayName(m.date))}</td><td>${esc(m.contract || "")}<div class="small muted">${esc(m.trigger || "")}</div></td><td class="n ${cls(num(m.hypoPnl))}">${money(num(m.hypoPnl), true)}</td><td class="mono">${esc(m.signalTime || "–")}</td><td class="n">${px(num(m.entryPrice))}</td><td class="n hide-sm">${px(num(m.m15))}</td><td class="n hide-sm">${px(num(m.m30))}</td><td class="n hide-sm">${px(num(m.m60))}</td></tr>`).join("")}</tbody></table>`;
   }
   $("#missed-tbl").addEventListener("click", (e) => { const r = e.target.closest("tr[data-id]"); if (r) openForm("missed", S.missed.find((m) => m.id === r.dataset.id)); });
 
   function renderRules() {
     const rules = S.cfg.rules || [];
-    $("#rules").innerHTML = rules.length ? `<div class="tbl-wrap"><table><tbody>${rules.map((r) => `<tr><td style="width:180px;vertical-align:top"><b>${esc(r.name)}</b></td><td>${esc(r.text)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No rules saved yet.</div>`;
+    $("#rules").innerHTML = rules.length ? `<div class="tbl-wrap"><table><tbody>${rules.map((r) => `<tr><td style="width:34%;vertical-align:top"><b>${esc(r.name)}</b></td><td>${esc(r.text)}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty">No rules saved yet.</div>`;
   }
 
   // ---------- news timeline ----------
@@ -2105,7 +2107,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const cls_ = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
   function rpRender() {
     const has = RP.bars.length > 0, price = has ? rpPrice() : null;
-    $("#rp-clock").textContent = has ? `${dayName(RP.date)} · ${rpClock()}` : "–";
+    $("#rp-clock").textContent = has ? `${dayName(RP.date)} · ${rpClock()}` : "";
     $("#rp-price").innerHTML = price != null ? `SPY <b>${price.toFixed(2)}</b>` : "";
     $("#rp-play").textContent = RP.playing ? "Pause" : RP.phase === "result" ? "Keep watching" : "Play";
     $("#rp-play").disabled = !has || RP.phase === "dayend";
@@ -2156,7 +2158,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const after30Of = (p) => (p.exitTime && p.exitTime > "15:30" ? null : p.after30);
   function renderPracticeStats() {
     const P = [...S.practice].sort((a, b) => (b.at || 0) - (a.at || 0)), el = $("#rp-stats");
-    if (!P.length) { el.innerHTML = `<div class="empty">Your practice trades and their stats show up here.</div>`; $("#rp-list").innerHTML = ""; return; }
+    if (!P.length) { el.innerHTML = `<div class="empty">Your practice trades and their stats show up here.</div>`; $("#rp-list").innerHTML = ""; $("#rp-list-panel").hidden = true; return; }
+    $("#rp-list-panel").hidden = false;
     const wins = P.filter((p) => p.pnl > 0), losses = P.filter((p) => p.pnl <= 0), net = P.reduce((s, p) => s + p.pnl, 0);
     const avg = (a) => a.length ? a.reduce((s, p) => s + p.pnl, 0) / a.length : null;
     const group = (title, keys, f) => {
