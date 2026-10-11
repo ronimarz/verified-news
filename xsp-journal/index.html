@@ -43,6 +43,7 @@
   --grid: #222c37; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.45; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 16px; padding-block: 0 48px; }
 .num, td.n, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -365,6 +366,10 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 @media (prefers-reduced-motion: no-preference) { .spot { animation: spot 1.2s ease-in-out 3; } @keyframes spot { 50% { outline-color: transparent; } } }
 .routine { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 @media (max-width: 860px) { .routine { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { #lc-plan-panel { order: -1; } }
+.routine details.phase > summary { cursor: pointer; list-style: none; }
+.routine details.phase > summary::-webkit-details-marker { display: none; }
+.routine details.phase:not([open]) > summary .label::after { content: " · tap to show"; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .routine ol { margin: 6px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; counter-reset: r; }
 .routine li { counter-increment: r; display: grid; grid-template-columns: 22px 1fr; gap: 8px; font-size: 13px; padding: 5px 6px; border-radius: 5px; align-items: start; }
 .routine li::before { content: counter(r); width: 20px; height: 20px; border-radius: 50%; background: var(--panel-2); color: var(--muted); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
@@ -449,7 +454,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- LIVE CHECK -->
   <section class="view" id="view-live" role="tabpanel" aria-labelledby="tab-live" hidden>
     <div id="live-open"></div>
-    <div class="grid2" style="align-items: start;">
+    <div class="panel row" id="lc-more" hidden style="justify-content:space-between"><span class="small">You have a trade open. Focus on managing it. The entry check is hidden.</span><button class="btn" type="button" id="lc-more-btn">Check a new setup</button></div>
+    <div class="grid2" id="lc-main" style="align-items: start;">
       <div class="panel">
         <div class="panel-head"><h2>V2 entry check</h2><button class="btn" id="lc-reset" type="button">Start over</button></div>
         <div class="steps">
@@ -466,7 +472,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
               </div>
               <div class="fields">
                 <div class="field"><label for="lc-level" id="lc-level-label">Important level</label><input id="lc-level" type="number" step="0.01" inputmode="decimal" placeholder="779.42"></div>
-                <div class="field"><label for="lc-why">Why it matters</label><input id="lc-why" type="text" placeholder="Today's high"></div>
+                <div class="field"><label for="lc-why">Why it matters (optional)</label><input id="lc-why" type="text" placeholder="Today's high"></div>
               </div>
               <div class="row" id="lc-suggest"></div>
             </div>
@@ -551,7 +557,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           </div>
           <div class="calc" id="lc-plan-calc" style="margin-top:8px"></div>
         </div>
-        <div class="panel">
+        <div class="panel hide-sm">
           <h3 style="margin-bottom:8px">Decision card</h3>
           <dl class="card-line" id="lc-card"></dl>
         </div>
@@ -758,6 +764,14 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const toMin = (hm) => { if (!hm) return null; const m = /^(\d{1,2}):(\d{2})/.exec(hm); return m ? +m[1] * 60 + +m[2] : null; };
   function weekdays(a, b) { let n = 0; const d = new Date(a + "T12:00:00Z"), e = new Date(b + "T12:00:00Z"); while (d <= e) { const w = d.getUTCDay(); if (w && w < 6) n++; d.setUTCDate(d.getUTCDate() + 1); } return n; }
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => (t.hidden = true), 2800); }
+  // Key levels from the Webull snapshot. Before today's first trade the snapshot still holds the last session,
+  // so its high/low/close are "yesterday's" and there is no open yet.
+  function snapLevels(sn) {
+    if (!sn) return [];
+    const lt = +sn.last_trade_time, today = lt && etParts(new Date(lt)).date === etParts().date;
+    return today ? [["high", "Today's high", sn.high], ["low", "Today's low", sn.low], ["close", "Yesterday's close", sn.pre_close], ["open", "Open", sn.open]]
+      : [["high", "Yesterday's high", sn.high], ["low", "Yesterday's low", sn.low], ["close", "Yesterday's close", sn.close ?? sn.price]];
+  }
   const marketOpen = () => { const e = etParts(); return !["Sat", "Sun"].includes(e.wd) && e.min >= 570 && e.min < 960; };
 
   // ---------- option math (Black-Scholes, for teaching only) ----------
@@ -1061,7 +1075,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="row"><button class="btn" type="button" data-shot-pick data-shot-for="${id}">Read a screenshot</button><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
     </div>`;
   }
+  let lcShowWhileOpen = false;
   function renderOpen(st) {
+    const busy = st.open.length > 0; if (!busy) lcShowWhileOpen = false;
+    $("#lc-more").hidden = !busy || lcShowWhileOpen; $("#lc-main").hidden = busy && !lcShowWhileOpen;
     for (const [sel, where] of [["#dash-open", "d"], ["#live-open", "l"]]) {
       const host = $(sel);
       const openIds = new Set(st.open.map((t) => t.id)), stale = [...host.querySelectorAll(".pos")].some((c) => !openIds.has(c.dataset.id));
@@ -1069,6 +1086,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       host.innerHTML = st.open.length ? `<div style="display:grid;gap:12px">${st.open.map((t) => openCard(t, where)).join("")}</div>` : "";
     }
   }
+  $("#lc-more-btn").addEventListener("click", () => { lcShowWhileOpen = true; renderOpen(stats()); });
   document.addEventListener("click", async (e) => {
     const b = e.target.closest(".pos [data-act]"); if (!b) return;
     const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
@@ -1263,8 +1281,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     // live price box + suggested levels
     if (snap) {
       const price = num(snap.price), dist = s.L != null ? price - s.L : null;
-      $("#lc-live").innerHTML = `<span class="label">${esc(u)} live</span><span class="big">${price.toFixed(2)}</span><span>Bid ${esc(snap.bid)} / Ask ${esc(snap.ask)}</span><span class="muted">High ${(+snap.high).toFixed(2)} · Low ${(+snap.low).toFixed(2)} · Prior close ${(+snap.pre_close).toFixed(2)}</span>${dist != null ? `<span class="${dist >= 0 ? "up" : "down"}">${sgn(dist)} from your level</span>` : ""}${marketOpen() ? "" : '<span class="pill plain">Market closed</span>'}`;
-      $("#lc-suggest").innerHTML = `<span class="small muted">Use a level:</span>` + [["Today's high", snap.high], ["Today's low", snap.low], ["Yesterday's close", snap.pre_close], ["Open", snap.open]].map(([n, v]) => `<button class="btn sm" type="button" data-lvl="${(+v).toFixed(2)}" data-why="${esc(n)}">${esc(n)} ${(+v).toFixed(2)}</button>`).join("");
+      $("#lc-live").innerHTML = `<span class="label">${esc(u)} live</span><span class="big">${price.toFixed(2)}</span><span>Bid ${esc(snap.bid)} / Ask ${esc(snap.ask)}</span><span class="muted">${snapLevels(snap).filter((x) => x[0] !== "open").map(([, n, v]) => `${n.replace(/^Today's (\w)/, (_, c) => c.toUpperCase())} ${(+v).toFixed(2)}`).join(" · ")}</span>${dist != null ? `<span class="${dist >= 0 ? "up" : "down"}">${sgn(dist)} from your level</span>` : ""}${marketOpen() ? "" : '<span class="pill plain">Market closed</span>'}`;
+      $("#lc-suggest").innerHTML = `<span class="small muted">Use a level:</span>` + snapLevels(snap).map(([, n, v]) => `<button class="btn sm" type="button" data-lvl="${(+v).toFixed(2)}" data-why="${esc(n)}">${esc(n)} ${(+v).toFixed(2)}</button>`).join("");
     } else {
       $("#lc-live").innerHTML = `<span class="muted small">${LIVE.status === "error" ? esc(LIVE.msg) : LIVE.status === "off" ? "Live prices aren't available in this view." : "Connecting to Webull for live " + esc(u) + " prices…"}</span>`;
       $("#lc-suggest").innerHTML = "";
@@ -2547,6 +2565,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
 
   // The whole day's routine, on the Dashboard.
   let ROUTINE_FORCE = false;
+  const RT_OPEN = {};  // remembers which routine parts you opened or closed
+  $("#routine").addEventListener("click", (e) => { const d = e.target.closest("summary")?.parentElement; if (d?.dataset.ph) RT_OPEN[d.dataset.ph] = !d.open; });
   function renderRoutine() {
     const el = $("#routine"); if (!el) return;
     if (!guideOn || (guideLevel() >= 2 && !ROUTINE_FORCE)) { el.hidden = true; return; } el.hidden = false;
@@ -2562,9 +2582,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (ph === "pre") loop.forEach((x) => (x.status = "todo")); if (ph === "after") loop.forEach((x) => (x.status = "todo"));
     if (ph !== "after") after.forEach((x) => (x.status = "todo"));
     el.innerHTML = head + `<div class="routine">
-      <div class="phase${ph === "pre" ? " now" : ""}"><div class="label">1 · Before 9:30 am</div><ol>${pre.map(li).join("")}</ol></div>
-      <div class="phase${ph === "market" ? " now" : ""}"><div class="label">2 · 9:30 am – 4:00 pm · repeat per setup</div><ol>${loop.map(li).join("")}</ol></div>
-      <div class="phase${ph === "after" ? " now" : ""}"><div class="label">3 · After the close</div><ol>${after.map(li).join("")}</ol></div></div>`;
+      ${[["pre", "1 · Before 9:30 am", pre], ["market", "2 · 9:30 am – 4:00 pm · repeat per setup", loop], ["after", "3 · After the close", after]].map(([k, name, list]) => `<details class="phase${ph === k ? " now" : ""}" data-ph="${k}"${(RT_OPEN[k] ?? (ph === k || innerWidth > 860)) ? " open" : ""}><summary><div class="label">${name}</div></summary><ol>${list.map(li).join("")}</ol></details>`).join("")}</div>`;
   }
   $("#routine").addEventListener("click", (e) => { if (e.target.id === "r-off") { guideOn = false; ls.set("guide.on", false); renderGuide(); renderRoutine(); } });
 
@@ -2581,9 +2599,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       let L = level, why = "";
       if (L == null && name) {
         const sn = LIVE.snap; if (!sn) return "Live prices aren't loaded yet, so I can't look up that level. Type the number instead, e.g. watch 779.42 call.";
-        const map = { high: ["high", "Today's high"], low: ["low", "Today's low"], open: ["open", "Open"], close: ["pre_close", "Yesterday's close"] };
-        const k = map[name]; if (!k) return "Try: watch high, watch low, watch open, watch close, or a number.";
-        L = +(+sn[k[0]]).toFixed(2); why = k[1];
+        const k = snapLevels(sn).find((x) => x[0] === name); if (!k) return name === "open" ? "The market hasn't opened yet, so there's no open price. Try: watch high, watch low, watch close." : "Try: watch high, watch low, watch open, watch close, or a number.";
+        L = +(+k[2]).toFixed(2); why = k[1];
       }
       if (L == null) return "Which level? e.g. watch 779.42 call, or watch high call.";
       LC.level = String(L); LC.why = why || LC.why || ""; if (dir) LC.dir = dir; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); if (view !== "live") showView("live"); renderLive();
