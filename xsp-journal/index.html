@@ -833,6 +833,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const marketOpen = () => { const e = etParts(); return !["Sat", "Sun"].includes(e.wd) && e.min >= 570 && e.min < 960; };
 
   // ---------- option math (Black-Scholes, for teaching only) ----------
+  // Volatility for the option model from recent daily ranges. The model counts time in calendar minutes (how 0DTE
+  // implied volatility is quoted), so one trading day (390 min) is scaled with that same clock. Checked against real
+  // SPY 0DTE quotes: ranges of ~0.55% gave ~12%, real quotes implied 11-12%.
+  const ivFromRange = (avgR) => Math.min(60, Math.max(6, (avgR / 1.665) / Math.sqrt(390 / 525600) * 100));
   const ncdf = (x) => { const t = 1 / (1 + 0.2316419 * Math.abs(x)), d = 0.3989423 * Math.exp(-x * x / 2); const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274)))); return x > 0 ? 1 - p : p; };
   const npdf = (x) => Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI);
   function bs(type, S, K, ivPct, mins) {
@@ -1887,7 +1891,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   let RULE = { ...RULE_BASE, ...ls.get("rp.rule", {}) }; RULE.lv = { ...RULE_BASE.lv, ...(RULE.lv || {}) };
   const ruleWait = (h) => h === 0 ? "buy on the break" : h === 1 ? "wait 1 minute" : `wait ${h} minutes`;
   function rulePreset(r) { for (const [k, v] of Object.entries(RULE_PRESETS)) { if (r.hold === v.hold && r.dirs === "both" && r.until === 930 && r.t === 50 && r.s === 40 && r.m === 30 && Object.keys(RULE_BASE.lv).every((x) => !!r.lv[x] === RULE_BASE.lv[x])) return k; } return "custom"; }
-  function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, +${r.t}% / −${r.s}% / ${r.m} min` : RULE_PRESETS[k].name; }
+  const LV_SHORT = { ph: "y-high", pl: "y-low", pc: "y-close", or15: "15m range", or30: "30m range", day: "day high/low" };
+  function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, ${Object.keys(LV_SHORT).filter((x) => r.lv?.[x]).map((x) => LV_SHORT[x]).join("+") || "no lines"}${r.dirs && r.dirs !== "both" ? `, ${r.dirs}s only` : ""}${r.until && r.until !== 930 ? `, before ${fmtClock(r.until)}` : ""}, +${r.t}% / −${r.s}% / ${r.m} min` : RULE_PRESETS[k].name; }
   function ruleSummary(r) {
     const lv = [r.lv.ph && r.dirs !== "put" && "yesterday's high", r.lv.pl && r.dirs !== "call" && "yesterday's low", r.lv.day && "today's high/low so far", r.lv.pc && "yesterday's close", r.lv.or15 && "first-15-min range", r.lv.or30 && "first-30-min range"].filter(Boolean);
     return `When SPY breaks ${lv.length ? lv.join(", ") : "(no lines picked)"}, ${ruleWait(r.hold)}${r.hold ? " with no touch back" : ""}. ${r.dirs === "both" ? "Calls and puts" : r.dirs === "call" ? "Calls only" : "Puts only"}, none after ${fmtClock(r.until)}. Sell at +${r.t}%, −${r.s}%, or after ${r.m} min.`;
@@ -2413,16 +2418,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   // 5-minute regular-hours candles per day, cached in this browser so later runs are fast.
   async function load5m(dates, onProgress) {
-    let cache = {}; try { cache = JSON.parse(localStorage.getItem("pat.m5") || "{}"); } catch {}
+    let cache = {}; try { cache = JSON.parse(localStorage.getItem("pat.m5." + U()) || "{}"); } catch {}
     const need = dates.filter((d) => !cache[d]);
     for (let i = 0; i < need.length; i += 15) {
       const chunk = need.slice(i, i + 15);
       const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
       for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (cache[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
-      for (const d of chunk) cache[d] ||= [];
       onProgress?.(Math.min(i + 15, need.length), need.length);
     }
-    try { const keep = Object.keys(cache).sort().slice(-520); localStorage.setItem("pat.m5", JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
+    try { const keep = Object.keys(cache).filter((k) => cache[k].length >= 70).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
     return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 60));
   }
   const pctOf = (a, n) => (n ? a / n : null);
@@ -2695,23 +2699,23 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   // 1-minute candles for many days: memory, then this browser's cache, then Webull.
   async function loadM1(dates, onProgress) {
     const missing = dates.filter((d) => !HIST.dayCache.has(d));
-    const cached = await idbGetMany(missing.map((d) => "m1:" + d));
-    for (const [k, v] of cached) HIST.dayCache.set(k.slice(3), v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })));
+    const cached = await idbGetMany(missing.map((d) => `m1:${U()}:${d}`));
+    for (const [k, v] of cached) HIST.dayCache.set(k.split(":").pop(), v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })));
     const fetchNow = dates.filter((d) => !HIST.dayCache.has(d));
     await manyDays(fetchNow, onProgress);
-    await idbPutMany(fetchNow.filter((d) => HIST.dayCache.get(d)?.length).map((d) => ["m1:" + d, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
+    await idbPutMany(fetchNow.filter((d) => (HIST.dayCache.get(d)?.length || 0) >= 380).map((d) => [`m1:${U()}:${d}`, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
     return new Map(dates.map((d) => [d, (HIST.dayCache.get(d) || []).map((b) => ({ ...b, m: barMin(b) })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 300));
   }
 
   // ---------- strategy lab: replay a rule over many days with model option prices ----------
   const LINE_GROUPS = { ph: "Yesterday's high/low", pl: "Yesterday's high/low", pc: "Yesterday's close", or15: "First 15 min range", or30: "First 30 min range", day: "Today's high/low so far" };
   function dayLines(B, prev, lv) {
-    const out = [], rng = (n) => { const g = B.slice(0, n); return [Math.max(...g.map((b) => b.h)), Math.min(...g.map((b) => b.l))]; };
+    const out = [], rng = (n) => { const g = B.filter((b) => b.m < 570 + n); return g.length ? [Math.max(...g.map((b) => b.h)), Math.min(...g.map((b) => b.l))] : [null, null]; };
     if (prev && lv.ph) out.push({ g: "ph", name: "yesterday's high", L: prev.h, dir: "call", from: 570 });
     if (prev && lv.pl) out.push({ g: "pl", name: "yesterday's low", L: prev.l, dir: "put", from: 570 });
     if (prev && lv.pc) out.push({ g: "pc", name: "yesterday's close", L: prev.c, dir: "call", from: 570 }, { g: "pc", name: "yesterday's close", L: prev.c, dir: "put", from: 570 });
-    if (lv.or15 && B.length > 15) { const [h, l] = rng(15); out.push({ g: "or15", name: "first-15-minute high", L: h, dir: "call", from: 585 }, { g: "or15", name: "first-15-minute low", L: l, dir: "put", from: 585 }); }
-    if (lv.or30 && B.length > 30) { const [h, l] = rng(30); out.push({ g: "or30", name: "first-30-minute high", L: h, dir: "call", from: 600 }, { g: "or30", name: "first-30-minute low", L: l, dir: "put", from: 600 }); }
+    if (lv.or15 && B.length > 15 && rng(15)[0] != null) { const [h, l] = rng(15); out.push({ g: "or15", name: "first-15-minute high", L: h, dir: "call", from: 585 }, { g: "or15", name: "first-15-minute low", L: l, dir: "put", from: 585 }); }
+    if (lv.or30 && B.length > 30 && rng(30)[0] != null) { const [h, l] = rng(30); out.push({ g: "or30", name: "first-30-minute high", L: h, dir: "call", from: 600 }, { g: "or30", name: "first-30-minute low", L: l, dir: "put", from: 600 }); }
     if (lv.day) out.push({ g: "day", name: "today's high so far", dir: "call", from: 585, dyn: true }, { g: "day", name: "today's low so far", dir: "put", from: 585, dyn: true });
     return out;
   }
@@ -2749,7 +2753,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function exitOf(sig, t, s, m) {
     const tgt = sig.ask * (1 + t / 100), stp = sig.ask * (1 - s / 100), P = sig.path;
     for (let k = 0; k < P.length; k++) {
-      if (P[k].lo <= stp) return { res: "stop", px: Math.min(stp, P[k].hi), k };
+      if (P[k].lo <= stp) return { res: "stop", px: P[k].hi < stp ? P[k].c : stp, k };   // if the whole minute is below the stop, you get filled lower
       if (P[k].hi >= tgt) return { res: "target", px: tgt, k };
       if (k + 1 >= m) return { res: "time", px: P[k].c, k };
     }
@@ -2773,13 +2777,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       if (uOf(t) !== "SPY" || num(t.strike) == null || !t.dir) continue;
       const di = idx.get(t.date); if (di == null || di < 11) continue;
       const R = D.slice(di - 10, di).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null);
-      const ivM = Math.min(45, Math.max(9, 1.2 * (R.reduce((a, b) => a + b, 0) / R.length) / 1.665 * Math.sqrt(252) * 100));
+      const ivM = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
       for (const cp of t.checkpoints || []) {
         const bid = num(cp.bid), ask = num(cp.ask), S0 = num(cp.xsp), m = toMin(cp.t); if (bid == null || ask == null || S0 == null || m == null || ask > 20 || ask < bid) continue;
         const ivR = impliedVol(t.dir, S0, num(t.strike), 960 - m, (bid + ask) / 2); if (ivR) out.push(ivR / ivM);
       }
     }
-    return { ivMul: out.length >= 3 ? Math.min(2, Math.max(0.7, median(out))) : 1, n: out.length, raw: out.length ? median(out) : null };
+    return { ivMul: out.length >= 3 ? Math.min(3, Math.max(0.5, median(out))) : 1, n: out.length, raw: out.length ? median(out) : null };
   }
   // All signals for a rule over many days, with context tags.
   function labSignals(M, D, rule) {
@@ -2788,11 +2792,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (const [date, B] of M) {
       const di = idx.get(date); if (di == null || di < 21) continue;
       const prev = D[di - 1], avgR = ranges.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, sma20 = D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
-      const iv = Math.min(45, Math.max(9, 1.2 * avgR / 1.665 * Math.sqrt(252) * 100)) * ivMul, gap = B[0].o / prev.c - 1;
+      const iv = ivFromRange(avgR) * ivMul, gap = B[0].o / prev.c - 1;
       for (const ln of dayLines(B, prev, rule.lv)) {
         if (rule.dirs !== "both" && ln.dir !== rule.dirs) continue;
         const sg = scanLine(B, ln, rule.hold, rule.until); if (!sg) continue;
-        const ei = sg.i + delay; if (ei >= B.length || B[ei].m >= 955) continue;   // you enter a little after the signal
+        const want = B[sg.i].m + delay; let ei = sg.i; while (ei < B.length - 1 && B[ei].m < want) ei++;   // you enter a few minutes after the signal
+        if (ei >= B.length || B[ei].m >= 955) continue;
         const op = optPath(B, ei, ln.dir, iv);
         out.push({ date, m: B[sg.i].m + 1, em: B[ei].m + 1, dir: ln.dir, g: ln.g, line: ln.name, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down", ev: eventsOn(date) });
       }
@@ -3000,7 +3005,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const R = D.map((d, i) => (i ? (d.h - d.l) / D[i - 1].c : null));
     const avgR = (di, n) => R.slice(di - n, di).reduce((a, b) => a + b, 0) / n, sma = (rows, di) => rows.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
     const orOf = (bars) => { const g = bars.filter((b) => b.m < 600); return g.length >= 5 ? { h: Math.max(...g.map((b) => b.h)), l: Math.min(...g.map((b) => b.l)), c: g[g.length - 1].c } : null; };
-    const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
+    const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date && etParts().min >= 570 && +LIVE.snap.open > 0 ? LIVE.snap : null;
     let subj, tBars = [];
     if (live) { tBars = await todayM5().catch(() => []); subj = { di: D.length, open: +live.open, label: "today" }; }
     else { const last = D.length - 1; subj = { di: last, open: D[last].o, label: dayName(D[last].date) + " (last trading day)" }; tBars = M.get(D[last].date) || []; }
@@ -3059,9 +3064,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   });
 
   // ---------- edge: how your rule did in past situations like this one ----------
+  const settingsKey = () => { const r = realCfg(); return [r.on, r.delayNow, r.slip, r.maxDay, r.stopLoss, calibration().ivMul.toFixed(2)].join("|"); };
   function edgeSave(rule, sum) {
     const rs = sum.rs.map((x) => ({ date: x.date, m: x.m, g: x.g, dir: x.dir, pnl: Math.round(x.pnl * 100) / 100 }));
-    try { localStorage.setItem("edge.v1", JSON.stringify({ at: Date.now(), rule, win: sum.win, avg: sum.avg, n: sum.n, rs })); } catch {}
+    try { localStorage.setItem("edge.v1", JSON.stringify({ at: Date.now(), key: settingsKey(), rule, win: sum.win, avg: sum.avg, n: sum.n, rs })); } catch {}
   }
   function edgeLoad() { try { const e = JSON.parse(localStorage.getItem("edge.v1") || "null"); return e && e.rs?.length ? e : null; } catch { return null; } }
   const G_NAME = { ph: "yesterday's-high breaks", pl: "yesterday's-low breaks", pc: "yesterday's-close breaks", or15: "first-15-minute breaks", or30: "first-30-minute breaks", day: "today's-high/low breaks" };
@@ -3078,8 +3084,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (let k = 0; k < tries.length; k++) {
       const [f, scope] = tries[k]; if (!q.g && k < 3) continue;
       const g = ed.rs.filter(f); if (g.length < 10) continue;
-      const w = g.filter((x) => x.pnl > 0).length, avg = g.reduce((a, x) => a + x.pnl, 0) / g.length, sd = Math.sqrt(g.reduce((a, x) => a + (x.pnl - avg) ** 2, 0) / Math.max(g.length - 1, 1));
-      return { n: g.length, w, win: w / g.length, avg, tstat: sd ? avg / (sd / Math.sqrt(g.length)) : 0, scope, rule: ed.rule, generic: !!q.g && k >= 3 };
+      const w = g.filter((x) => x.pnl > 0).length, avg = g.reduce((a, x) => a + x.pnl, 0) / g.length;
+      const byDay = new Map(); for (const x of g) byDay.set(x.date, (byDay.get(x.date) || 0) + x.pnl);
+      const dv = [...byDay.values()], dm = dv.reduce((a, b) => a + b, 0) / dv.length, dsd = Math.sqrt(dv.reduce((a, b) => a + (b - dm) ** 2, 0) / Math.max(dv.length - 1, 1));
+      return { n: g.length, days: dv.length, w, win: w / g.length, avg, tstat: dsd && dv.length >= 5 ? dm / (dsd / Math.sqrt(dv.length)) : 0, scope, rule: ed.rule, generic: !!q.g && k >= 3 };
     }
     return null;
   }
@@ -3163,7 +3171,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       alts: alts.map((c) => ({ text: stratText(c), n: c.n, win: c.win, avg: c.avg, worst: c.base })) };
     const changed = prev && prev.date === pick.date && prev.name !== pick.name;
     ls.set("strat.today", pick);
-    const hist = ls.get("strat.hist", {}); hist[pick.date] = { ...(hist[pick.date] || {}), name: pick.name, rule: pick.rule, noTrade, text: pick.text }; ls.set("strat.hist", hist);
+    const hist = ls.get("strat.hist", {}); hist[pick.date] = { ...(hist[pick.date] || {}), name: pick.name, rule: pick.rule, noTrade, text: pick.text, pickMin: nowM }; ls.set("strat.hist", hist);
     if (best && !noTrade) { lib[pick.name] = { rule: pick.rule, text: pick.text, picks: (lib[pick.name]?.picks || 0) + (prev?.date === pick.date && prev?.name === pick.name ? 0 : 1), last: pick.date }; ls.set("strat.lib", lib); }
     if (changed) toast("Today's strategy was updated with the first 30 minutes of data.");
     stratSync(); applyStrat();
@@ -3178,7 +3186,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (const d of todo) {
       const B = M.get(d); if (!B) continue;
       const one = new Map([[d, B]]), sum = (rs) => rs.reduce((a, x) => a + x.pnl, 0);
-      const r = hist[d].noTrade || !hist[d].rule ? [] : summarize(labSignals(one, D, hist[d].rule), hist[d].rule.t, hist[d].rule.s, hist[d].rule.m).rs;
+      const after = (x) => x.m > (hist[d].pickMin || 570);   // only signals after the pick was made
+      const r = hist[d].noTrade || !hist[d].rule ? [] : summarize(labSignals(one, D, hist[d].rule).filter(after), hist[d].rule.t, hist[d].rule.s, hist[d].rule.m).rs;
       const sg = new Map(); for (let li = 0; li < 6; li++) for (const h of [0, 1, 3]) sg.set(h + ":" + li, labSignals(one, D, baseRule(h, li)));
       const typ = RAND.reduce((a, c) => a + sum(summarize(sg.get(c.rule.hold + ":" + c.li).filter((x) => x.m < c.rule.until), c.rule.t, c.rule.s, c.rule.m).rs), 0) / RAND.length;
       hist[d].score = { pnl: Math.round(sum(r) * 100) / 100, n: r.length, typ: Math.round(typ * 100) / 100 };
@@ -3221,7 +3230,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       rows.push({ d, pick: sit ? "Sit out" : stratText(best), sit, pnl: p.pnl, n: p.n, fixed: f.pnl, typ, ev: evD });
     }
     const tot = (k) => rows.reduce((a, r) => a + r[k], 0), res = { at: Date.now(), days: rows.length, from: rows[0]?.d, to: rows[rows.length - 1]?.d, picker: tot("pnl"), fixed: tot("fixed"), typ: tot("typ"), trades: tot("n"), sat: rows.filter((r) => r.sit).length, upDays: rows.filter((r) => r.pnl > 0).length, fixedText: fixed ? stratText(fixed) : "", rows };
-    ls.set("prove.v1", { ...res, rows: undefined }); stratSync();
+    ls.set("prove.v1", { ...res, key: settingsKey(), rows: undefined }); stratSync();
     return res;
   }
   function renderProof(r) {
@@ -3296,7 +3305,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       await scorePastPicks(D).catch(() => {});
       if (PLAN.like) await pickStrategy(PLAN.like, D, say);
       const ed = edgeLoad();
-      if (!ed || ed.rule !== ruleName(RULE) || Date.now() - ed.at > 20 * 3600000) { say("Grading lines for today's strategy…"); edgeSave(ruleName(RULE), summarize(labSignals(LAB.M, D, RULE), RULE.t, RULE.s, RULE.m)); }
+      if (!ed || ed.rule !== ruleName(RULE) || ed.key !== settingsKey() || Date.now() - ed.at > 20 * 3600000) { say("Grading lines for today's strategy…"); edgeSave(ruleName(RULE), summarize(labSignals(LAB.M, D, RULE), RULE.t, RULE.s, RULE.m)); }
       const M5 = await load5m(D.map((d) => d.date).slice(-252));
       PLAN.intra = M5.size >= 20 ? intradayPatterns(M5, D) : null;
       PLAN.at = Date.now(); PLAN.msg = "";
@@ -3326,7 +3335,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (ed) { const tb = ["9:30–10:30", "10:30–12:00", "12:00–2:00", "2:00–3:30"].filter((k) => tStart[k] < untilM).map((k) => { const g = ed.rs.filter((x) => tBucket(x.m) === k), w = g.filter((x) => x.pnl > 0).length; return { k, n: g.length, win: g.length ? w / g.length : 0, avg: g.length ? g.reduce((a, x) => a + x.pnl, 0) / g.length : 0 }; }).filter((x) => x.n >= 10).sort((a, b) => b.avg - a.avg);
       if (tb.length >= 2) { const b = tb[0], w = tb[tb.length - 1]; win = `<li><b>Best window:</b> ${b.k} (your rule won ${P0(b.win)}, ${money0(b.avg)}/trade). <b>${w.avg < 0 ? "Sit out" : "Weakest"}:</b> ${w.k} (${money0(w.avg)}/trade).</li>`; } }
     // room to move vs what the take-profit needs
-    const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = Math.min(45, Math.max(9, 1.2 * (R.reduce((a, b) => a + b, 0) / R.length) / 1.665 * Math.sqrt(252) * 100));
+    const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
     const need = tpMove(P, 960 - Math.max(nowM, 600), RULE.t, RULE.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
     const typ30 = blk?.v != null ? blk.v * P : null;
     const room = `<li><b>Room to move:</b> days like today ranged about <b>$${(L.medRng * L.px0).toFixed(2)}</b>${L.useOR ? " after 10:00" : " for the day"}. ${need != null ? `Your +${RULE.t}% take-profit needs SPY to move about <b>$${need.toFixed(2)}</b> your way within ${RULE.m} min${typ30 != null ? `; a typical half hour ${live && marketOpen() ? "right now" : "after 10:00"} spans $${typ30.toFixed(2)} high-to-low` : ""}.` : ""} ${!activeStrat() && need != null && typ30 != null && need > typ30 * 0.9 ? "<b>That's a stretch</b>: consider a smaller take-profit today." : ""}</li>`;
