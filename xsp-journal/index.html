@@ -215,6 +215,10 @@ textarea { min-height: 90px; resize: vertical; }
 .lab-tbl td, .lab-tbl th { padding: 4px 6px; }
 @media (max-width: 600px) { .lab-tbl .trust { display: block; width: fit-content; margin: 2px 0 0 auto; } .lab-tbl th { font-size: 10.5px; } } .lab-idea { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 10px; }
 .lab-idea.ok { border-color: var(--good); } .like-days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.grade { flex: none; width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 18px; color: #fff; }
+.grade.gA { background: var(--good); } .grade.gB { background: var(--accent); } .grade.gC { background: var(--faint); color: var(--ink); } .grade.gD { background: var(--bad); }
+.grade-row { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+.plan-lv { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -446,6 +450,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
+    <div class="panel" id="plan-card" hidden></div>
     <div class="panel" id="routine"></div>
     <div class="kpis" id="kpis"></div>
     <div id="dash-open"></div>
@@ -1388,7 +1393,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
     else { c2 = "go"; verdict = "Qualified · V2"; why = `Buy 1× ${esc(u)} ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is noted in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
     d.className = "decision " + c2;
-    d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}${s.broke ? labHint() : ""}`;
+    d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}${s.broke ? liveGrade() : ""}`;
     $("#lc-card").innerHTML = [
       ["Level", s.s1 ? `${esc(LC.level)} ${LC.dir === "put" ? "↓ put" : "↑ call"}${LC.why ? ` · ${esc(LC.why)}` : ""}` : "–"],
       ["Break", s.breakET ? `${esc(s.breakET)} ET` : "–"],
@@ -2153,7 +2158,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (t && t.action === "BTO") return ticketCoach(t);
     if (RP.signal) {
       const sg = RP.signal, word = sg.dir === "call" ? "CALL" : "PUT", side = sg.dir === "call" ? "above" : "below", q = rpQuote(sg.dir, sg.strike);
-      return { key: "signal" + sg.key + sg.hi + RP.playing, cls: "go", title: `Signal: SPY ${RULE.hold ? "held" : "broke"} ${side} ${sg.name}`, body: `${RP.playing ? "" : `<p class="small muted">Replay paused so you have time. In a real market it keeps moving, so practice being quick.</p>`}<p class="small">It closed ${side} ${sg.L.toFixed(2)} at ${fmtClock(sg.breakMin)}${RULE.hold === 0 ? "" : ` and stayed there ${RULE.hold === 1 ? "a full minute" : `${RULE.hold} full minutes`}`}. Your rule says: buy a <b>${word}</b>.${sg.resets ? ` (${sg.resets} earlier break${sg.resets > 1 ? "s" : ""} failed.)` : ""}</p>${coachSteps([["Open the <b>Option Chain</b> tab.", RP.tab === "chain"], [`Find the ${word === "CALL" ? "Calls (left side)" : "Puts (right side)"} Ask closest to $1.00. That's the <b>${sg.strike}</b> strike (highlighted), Ask ${px(q.ask)}.`, false], ["Click that <b>Ask</b> price. It opens the order ticket.", false]])}`, buttons: [["show:chain", "Show me", false], ["fill:bto", "Fill it in for me", true], ["skip", "Skip this one", false]] };
+      return { key: "signal" + sg.key + sg.hi + RP.playing, cls: "go", title: `Signal: SPY ${RULE.hold ? "held" : "broke"} ${side} ${sg.name}`, body: `${RP.playing ? "" : `<p class="small muted">Replay paused so you have time. In a real market it keeps moving, so practice being quick.</p>`}<p class="small">It closed ${side} ${sg.L.toFixed(2)} at ${fmtClock(sg.breakMin)}${RULE.hold === 0 ? "" : ` and stayed there ${RULE.hold === 1 ? "a full minute" : `${RULE.hold} full minutes`}`}. Your rule says: buy a <b>${word}</b>.${sg.resets ? ` (${sg.resets} earlier break${sg.resets > 1 ? "s" : ""} failed.)` : ""}</p>${gradeHtml({ g: gOfKey(sg.key), dir: sg.dir, m: sg.min })}${coachSteps([["Open the <b>Option Chain</b> tab.", RP.tab === "chain"], [`Find the ${word === "CALL" ? "Calls (left side)" : "Puts (right side)"} Ask closest to $1.00. That's the <b>${sg.strike}</b> strike (highlighted), Ask ${px(q.ask)}.`, false], ["Click that <b>Ask</b> price. It opens the order ticket.", false]])}`, buttons: [["show:chain", "Show me", false], ["fill:bto", "Fill it in for me", true], ["skip", "Skip this one", false]] };
     }
     const sts = rpStates(), brk = sts.find((x) => x.st === "broke");
     if (brk) return { key: "break" + brk.key + brk.bi, cls: "", title: `Break! SPY closed ${brk.dir === "call" ? "above" : "below"} ${brk.name}`, body: `<p class="small">If ${RULE.hold === 1 ? "the next full minute stays" : `the next ${RULE.hold} full minutes stay`} ${brk.dir === "call" ? "above" : "below"} ${brk.L.toFixed(2)}, that's a signal. Don't buy yet.</p><div class="count" id="c-count"></div><div class="small" id="c-touch"></div>` };
@@ -2799,8 +2804,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const best = ctx.flatMap((c) => c.rows.filter((x) => x.n >= 12).map((x) => ({ ...x, t: c.title }))).sort((a, b) => b.avg - a.avg);
     out.innerHTML = `<div class="bt-answer"><b>${esc(r.name)}</b> over ${LAB.days} days: <b>${all.n}</b> trades, won <b>${P0(all.win)}</b>, average <b class="${cls(all.avg)}">${money0(all.avg)}</b> per trade after fees${all.n ? `, total ${money0(all.avg * all.n)}` : ""}.</div>
       <p class="small" style="margin-top:8px">Older days: ${o.n} trades, ${P0(o.win)} won, ${money0(o.avg)}/trade → recent days: ${nw.n} trades, ${P0(nw.win)} won, ${money0(nw.avg)}/trade · ${(() => { const st = (o.avg > 0) !== (nw.avg > 0) ? ["Changed recently", "var(--warn)"] : Math.abs(nw.avg) < Math.abs(o.avg) / 2 ? ["Weaker recently", "var(--warn)"] : ["Held up", "var(--good)"]; return `<b style="color:${st[1]}">${st[0]}</b>`; })()}</p>
-      ${best.length >= 2 ? `<p class="small" style="margin-top:6px">Best conditions: <b>${esc(best[0].k)}</b> (${esc(best[0].t.toLowerCase())}, ${money0(best[0].avg)}/trade over ${best[0].n}). Worst: <b>${esc(best[best.length - 1].k)}</b> (${money0(best[best.length - 1].avg)}/trade over ${best[best.length - 1].n}).</p>` : ""}
-      <div class="grid2" style="gap:14px">${ctx.map((c) => ctxTable(c, all.win)).join("")}</div>
+      ${best.length >= 2 ? `<div class="small" style="margin-top:8px"><b>What to do with this:</b></div><ul class="small" style="margin:4px 0 0 18px; display:grid; gap:3px">
+        <li><b>Lean into:</b> ${best.slice(0, 2).map((x) => `${esc(x.k)} (${money0(x.avg)}/trade over ${x.n})`).join(" and ")}.</li>
+        <li><b>${best[best.length - 1].avg < 0 ? "Avoid" : "Be pickier with"}:</b> ${best.slice(-2).reverse().map((x) => `${esc(x.k)} (${money0(x.avg)}/trade over ${x.n})`).join(" and ")}.</li>
+        <li>Your signals are now graded A–D from these results on Live check, in Practice and in Today's game plan.</li></ul>` : ""}
+      <details style="margin-top:10px"><summary class="small" style="cursor:pointer">Show all the breakdowns</summary><div class="grid2" style="gap:14px">${ctx.map((c) => ctxTable(c, all.win)).join("")}</div></details>
       <p class="small muted" style="margin-top:10px">How this works: one signal per line per day, the strike with an Ask nearest $1.00, your take-profit, stop and time limit, $1.30 fees per round trip. Option prices come from the Black-Scholes model with volatility estimated from the past 10 days. Real fills can be worse, especially in fast markets. Labels compare each row with your rule's overall win rate.</p>`;
   }
   $("#lab-test").addEventListener("click", async () => {
@@ -2813,7 +2821,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       LAB.test = { name: ruleName(RULE), sum }; renderLabTest();
       // remember results by time of day for hints during live trading
       const byT = {}; for (const x of sum.rs) { const k = tBucket(x.m); (byT[k] ||= { n: 0, w: 0, pnl: 0 }); byT[k].n++; if (x.pnl > 0) byT[k].w++; byT[k].pnl += x.pnl; }
-      try { localStorage.setItem("lab.hint", JSON.stringify({ at: Date.now(), name: ruleName(RULE), byT })); } catch {}
+      edgeSave(ruleName(RULE), sum); renderPlan();
       if (S.db) S.db.doc("patterns/lab").set({ ranAt: Date.now(), rule: ruleName(RULE), days: LAB.days, trades: sum.n, win: sum.win, avg: sum.avg, byTime: byT }).catch(() => {});
     } catch (e) { $("#lab-out").innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
     finally { btn.disabled = false; btn.textContent = "Test my rule"; }
@@ -2857,18 +2865,31 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   function renderIdeas() {
     const I = LAB.ideas, out = $("#lab-out"); if (!I) return;
-    const okN = I.picks.filter((x) => x.ok).length;
-    out.innerHTML = `<div class="bt-answer">Tried <b>${I.tried}</b> rule variations on older days (${esc(dayName(I.from))} – ${esc(dayName(I.cut))}), then checked the top ${I.picks.length} on newer days they never saw (${esc(dayName(I.cut))} – ${esc(dayName(I.to))}). <b>${okN ? `${okN} held up` : "None held up"}</b>${okN ? "" : ", which is common and a useful answer in itself: the best-looking rules were probably luck"}.</div>
+    const okN = I.picks.filter((x) => x.ok).length, v2t = I.v2.test.avg ?? -999;
+    const good = I.picks.map((x, i) => ({ x, i })).filter((o) => o.x.ok).sort((a, b) => b.x.test.avg - a.x.test.avg)[0];
+    let rec;
+    if (good && good.x.test.n >= 15 && good.x.test.avg > v2t + 3) {
+      const x = good.x, ch = [];
+      if (x.hold !== 1) ch.push(x.hold === 0 ? "buy right on the break instead of waiting 1 minute" : `wait ${x.hold} minutes instead of 1`);
+      if (x.lname !== "All the usual lines") ch.push(`watch only ${x.lname.toLowerCase()}`);
+      if (x.until !== 930) ch.push(`only take signals ${x.wname}`);
+      if (x.t !== 50 || x.s !== 40 || x.m !== 30) ch.push(`sell at +${x.t}% / −${x.s}% / ${x.m} min instead of +50% / −40% / 30 min`);
+      rec = `<div class="lab-idea ok"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Try this change:</b> ${esc(ch.join("; ") || "same as V2")}.</p>
+        <p class="small">On days the search never saw, it made <b>${money0(x.test.avg)}</b> per trade (${x.test.n} trades, ${P0(x.test.win)} won) vs <b>${money0(I.v2.test.avg)}</b> for your V2 rule. Practice it on 20+ replays before using it live.</p>
+        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" data-idea="${good.i}">Try it in Practice</button><button class="btn" type="button" data-keepv2>Keep V2</button></div></div>`;
+    } else rec = `<div class="lab-idea"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Keep V2.</b> Nothing beat it on days the search never saw, so the "better" rules were probably luck.</p><p class="small">That's a good result: it means your rule isn't obviously worse than the alternatives. Keep practicing it and re-run this in a few weeks.</p><div class="row" style="margin-top:8px"><button class="btn" type="button" data-keepv2>Practice V2</button></div></div>`;
+    out.innerHTML = `${rec}<details style="margin-top:10px"><summary class="small" style="cursor:pointer">Show the evidence</summary><div class="bt-answer" style="margin-top:8px">Tried <b>${I.tried}</b> rule variations on older days (${esc(dayName(I.from))} – ${esc(dayName(I.cut))}), then checked the top ${I.picks.length} on newer days they never saw (${esc(dayName(I.cut))} – ${esc(dayName(I.to))}). <b>${okN ? `${okN} held up` : "None held up"}</b>${okN ? "" : ", which is common and a useful answer in itself: the best-looking rules were probably luck"}.</div>
       <p class="small" style="margin-top:8px">For comparison, your <b>V2 default</b> (wait 1 minute, +50% / −40% / 30 min): older days ${statLine(I.v2.train)} → newer days ${statLine(I.v2.test)}.</p>
       ${I.picks.map((x, i) => `<div class="lab-idea${x.ok ? " ok" : ""}"><div class="row" style="justify-content:space-between"><b>Idea ${i + 1}</b><span class="pill ${x.ok ? "good" : "warn"}">${x.ok ? "Held up on new days" : "Did not hold up"}</span></div>
         <p class="small" style="margin:6px 0">${esc(ideaText(x))}</p>
         <div class="small">Older days (where it was found): ${statLine(x.train)}</div><div class="small">Newer days (the real test): <b>${statLine(x.test)}</b></div>
         <div class="row" style="margin-top:8px"><button class="btn sm${x.ok ? " primary" : ""}" type="button" data-idea="${i}">Practice this rule</button></div></div>`).join("")}
-      <div class="row" style="margin-top:12px"><button class="btn" type="button" id="lab-ask">Ask Claude to suggest a strategy from this</button></div>
-      <div id="lab-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>
-      <p class="small muted" style="margin-top:10px">Why split old and new days: if you try hundreds of rules, some look great by luck. A rule only counts if it also works on days it wasn't picked from. Even then, practice it in replays before trusting it. Option prices are modelled, fees included, real fills can be worse.</p>`;
+      <p class="small muted" style="margin-top:10px">Why split old and new days: if you try hundreds of rules, some look great by luck. A rule only counts if it also works on days it wasn't picked from. Even then, practice it in replays before trusting it. Option prices are modelled, fees included, real fills can be worse.</p></details>
+      <div class="row" style="margin-top:12px"><button class="btn" type="button" id="lab-ask">Ask Claude to explain this</button></div>
+      <div id="lab-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>`;
   }
   document.addEventListener("click", async (e) => {
+    if (e.target.closest("[data-keepv2]")) { setRule({ ...RULE_BASE, hold: 1 }); showView("practice"); spotlight("#rp-rule"); toast("Practicing V2: wait 60 seconds."); return; }
     const b = e.target.closest("[data-idea]");
     if (b && LAB.ideas) {
       const x = LAB.ideas.picks[+b.dataset.idea];
@@ -2885,13 +2906,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get a suggestion right now. Try again."; }
     finally { e.target.disabled = false; }
   });
-  // A one-line hint during live trading from the last "Test my rule" run.
-  function labHint() {
-    let h = null; try { h = JSON.parse(localStorage.getItem("lab.hint") || "null"); } catch {}
-    if (!h || !marketOpen()) return "";
-    const k = tBucket(etParts().min), x = h.byT[k]; if (!x || x.n < 8) return "";
-    return `<div class="small" style="margin-top:6px; opacity:.85">History check: ${esc(h.name)} between ${k} won ${Math.round((x.w / x.n) * 100)}% of ${x.n} past signals (${money0(x.pnl / x.n)}/trade).</div>`;
-  }
+
 
   // ---------- days like today ----------
   async function todayM5() {
@@ -2900,59 +2915,59 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(d + "T12:00:00Z"), end_time: Date.now(), count: 100, trading_sessions: "RTH", real_time_required: false }, { cache: false });
     return toBars(r.payload?.result?.[0]?.result).filter((b) => barDate(b) === d).map((b) => ({ m: barMin(b), o: b.o, h: b.h, l: b.l, c: b.c })).sort((a, b) => a.m - b.m);
   }
+  // Find the past days most like today and what happened next on them.
+  async function computeLike(onProgress, nDays = 504) {
+    const D = await loadDailyAll(), idx = new Map(D.map((d, i) => [d.date, i]));
+    const M = await load5m(D.map((d) => d.date).slice(-nDays), onProgress);
+    const R = D.map((d, i) => (i ? (d.h - d.l) / D[i - 1].c : null));
+    const avgR = (di, n) => R.slice(di - n, di).reduce((a, b) => a + b, 0) / n, sma = (rows, di) => rows.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
+    const orOf = (bars) => { const g = bars.filter((b) => b.m < 600); return g.length >= 5 ? { h: Math.max(...g.map((b) => b.h)), l: Math.min(...g.map((b) => b.l)), c: g[g.length - 1].c } : null; };
+    const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
+    let subj, tBars = [];
+    if (live) { tBars = await todayM5().catch(() => []); subj = { di: D.length, open: +live.open, label: "today" }; }
+    else { const last = D.length - 1; subj = { di: last, open: D[last].o, label: dayName(D[last].date) + " (last trading day)" }; tBars = M.get(D[last].date) || []; }
+    const useOR = tBars.filter((b) => b.m < 600).length >= 6 && (live ? etParts().min >= 600 : true);
+    const Dx = live ? [...D, { date: etParts().date, o: subj.open }] : D;
+    const featAt = (rows, di, open, or) => { const p = rows[di - 1], pp = rows[di - 2], f = [open / p.c - 1, p.c / pp.c - 1, avgR(di, 10) / avgR(di, 60), p.c / sma(rows, di) - 1]; if (or) f.push((or.c - open) / open, (or.h - or.l) / open); return f; };
+    const fToday = featAt(Dx, subj.di, subj.open, useOR ? orOf(tBars) : null);
+    const cands = [];
+    for (const [date, bars] of M) { const di = idx.get(date); if (di == null || di < 61 || di === subj.di) continue; const or = useOR ? orOf(bars) : null; if (useOR && !or) continue; cands.push({ date, di, bars, f: featAt(D, di, D[di].o, or) }); }
+    if (cands.length < 30) return null;
+    const sd = fToday.map((_, j) => { const v = cands.map((c) => c.f[j]), mu = v.reduce((a, b) => a + b, 0) / v.length; return Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) || 1; });
+    cands.forEach((c) => (c.dist = Math.sqrt(c.f.reduce((a, v, j) => a + ((v - fToday[j]) / sd[j]) ** 2, 0))));
+    const K = Math.min(40, cands.length), near = cands.sort((a, b) => a.dist - b.dist).slice(0, K);
+    const res = near.map((c) => { const B = c.bars, p = D[c.di - 1], close = B[B.length - 1].c, after = B.filter((b) => b.m >= (useOR ? 600 : 570)), or = orOf(B);
+      const iu = or ? after.findIndex((b) => b.c > or.h) : -1, idn = or ? after.findIndex((b) => b.c < or.l) : -1;
+      return { up: close > (useOR ? or.c : B[0].o), rng: (Math.max(...after.map((b) => b.h)) - Math.min(...after.map((b) => b.l))) / B[0].o, hiBrk: Math.max(...B.map((b) => b.h)) > p.h, hiHold: close > p.h, loBrk: Math.min(...B.map((b) => b.l)) < p.l, loHold: close < p.l,
+        orUp: iu >= 0 && (idn < 0 || iu < idn), orDn: idn >= 0 && (iu < 0 || idn < iu), orUpHold: or && close > or.h, orDnHold: or && close < or.l, fill: (B[0].o >= p.c ? Math.min(...B.map((b) => b.l)) <= p.c : Math.max(...B.map((b) => b.h)) >= p.c) }; });
+    const cnt = (f) => res.filter(f).length;
+    return { at: Date.now(), live: !!live, subj, useOR, fToday, K, n: cands.length, near, res, cnt, px0: live ? +live.price : D[D.length - 1].c, tBars, D,
+      upN: cnt((x) => x.up), hiB: cnt((x) => x.hiBrk), loB: cnt((x) => x.loBrk), orU: cnt((x) => x.orUp), orD: cnt((x) => x.orDn), medRng: median(res.map((x) => x.rng)) };
+  }
+  function renderLike(L) {
+    const out = $("#like-out"); if (!L) { out.innerHTML = `<div class="empty">Not enough history loaded yet to compare.</div>`; return; }
+    const { K, fToday, useOR, cnt, upN, hiB, loB, orU, orD, px0, subj, live } = L;
+    let ruleLine = "";
+    const ed = edgeLoad();
+    if (ed) { const set = new Set(L.near.map((c) => c.date)), g = ed.rs.filter((x) => set.has(x.date)); if (g.length) { const w = g.filter((x) => x.pnl > 0).length; ruleLine = `<li>Your rule (${esc(ed.rule)}) on these days: <b>${g.length}</b> signals, won <b>${Math.round((w / g.length) * 100)}%</b>, ${money0(g.reduce((a, x) => a + x.pnl, 0) / g.length)}/trade ${tpill(trust(w, g.length, ed.win))}.</li>`; } }
+    out.innerHTML = `<div class="bt-answer">Compared <b>${esc(subj.label)}</b> with ${L.n} past days and picked the <b>${K} most similar</b>, matching: opened ${fToday[0] >= 0 ? "up" : "down"} ${Math.abs(fToday[0] * 100).toFixed(2)}%, the day before ${fToday[1] >= 0 ? "rose" : "fell"} ${Math.abs(fToday[1] * 100).toFixed(1)}%, the market's been ${fToday[2] > 1.15 ? "busier than usual" : fToday[2] < 0.85 ? "calmer than usual" : "about as busy as usual"}, SPY is ${fToday[3] >= 0 ? "above" : "below"} its 20-day average${useOR ? `, and the first 30 minutes moved ${fToday[4] >= 0 ? "up" : "down"} ${Math.abs(fToday[4] * 100).toFixed(2)}%` : ""}.</div>
+      <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">
+        <li>${useOR ? "From 10:00 to the close" : "Over the day"}, SPY finished <b>${upN >= K / 2 ? "higher" : "lower"}</b> on ${Math.round((Math.max(upN, K - upN) / K) * 100)}% of these days ${tpill(trust(Math.max(upN, K - upN), K))}.</li>
+        <li>Typical range ${useOR ? "after 10:00" : "for the day"}: <b>$${(L.medRng * px0).toFixed(2)}</b>. That's how much room there usually was to move.</li>
+        <li>Broke yesterday's high on ${Math.round((hiB / K) * 100)}%; ${hiB ? `held above it at the close on <b>${Math.round((cnt((x) => x.hiHold) / hiB) * 100)}%</b> of those` : "–"}. Broke yesterday's low on ${Math.round((loB / K) * 100)}%; ${loB ? `held below on <b>${Math.round((cnt((x) => x.loHold) / loB) * 100)}%</b>` : "–"}.</li>
+        ${useOR ? `<li>First-30-minute breakout: up first on ${Math.round((orU / K) * 100)}% (held to the close ${orU ? Math.round((cnt((x) => x.orUp && x.orUpHold) / orU) * 100) : 0}%), down first on ${Math.round((orD / K) * 100)}% (held ${orD ? Math.round((cnt((x) => x.orDn && x.orDnHold) / orD) * 100) : 0}%).</li>` : ""}
+        <li>The opening gap filled the same day on ${Math.round((cnt((x) => x.fill) / K) * 100)}% of these days.</li>
+        ${ruleLine || (ed ? "" : `<li class="muted">Run <b>Test my rule</b> in the Strategy lab to also see how your rule did on these days.</li>`)}
+      </ul>
+      <div class="small" style="margin-top:10px"><b>Closest matches</b> (tap to replay in Practice):</div>
+      <div class="like-days">${L.near.slice(0, 10).map((c) => `<button class="btn sm" type="button" data-like-day="${c.date}">${esc(dayName(c.date).replace(/^\w+, /, ""))} ${c.date.slice(0, 4)}</button>`).join("")}</div>
+      <p class="small muted" style="margin-top:10px">${K} days is a small sample, so read these as "leans", not certainties. ${live && !useOR ? (etParts().min < 600 ? "After 10:00 am, run this again: it will also match the first 30 minutes and get sharper." : "Today's first 30 minutes couldn't be loaded, so this matched on the open only.") : ""}</p>`;
+  }
   $("#like-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("This needs Webull, which isn't available in this view.");
     const btn = $("#like-run"), out = $("#like-out"); btn.disabled = true; btn.textContent = "Searching…";
-    try {
-      out.innerHTML = `<div class="empty">Loading history…</div>`;
-      const D = await loadDailyAll(), idx = new Map(D.map((d, i) => [d.date, i]));
-      const dates = D.map((d) => d.date).slice(-504);
-      const M = await load5m(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; });
-      const R = D.map((d, i) => (i ? (d.h - d.l) / D[i - 1].c : null));
-      const feat = (di, open, or) => {
-        const p = D[di - 1], pp = D[di - 2], avg10 = R.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, avg60 = R.slice(di - 60, di).reduce((a, b) => a + b, 0) / 60, sma20 = D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
-        const f = [open / p.c - 1, p.c / pp.c - 1, avg10 / avg60, p.c / sma20 - 1];
-        if (or) f.push((or.c - open) / open, (or.h - or.l) / open);
-        return f;
-      };
-      // today (or the last trading day when the market is closed)
-      const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
-      let subj, subjName, tBars = [];
-      if (live) { tBars = await todayM5(); subj = { di: D.length, open: +live.open, label: "today" }; }
-      else { const last = D.length - 1; subj = { di: last, open: D[last].o, label: dayName(D[last].date) + " (last trading day)" }; tBars = M.get(D[last].date) || []; }
-      const useOR = tBars.filter((b) => b.m < 600).length >= 6 && (live ? etParts().min >= 600 : true);
-      const orOf = (bars) => { const g = bars.filter((b) => b.m < 600); return g.length >= 5 ? { h: Math.max(...g.map((b) => b.h)), l: Math.min(...g.map((b) => b.l)), c: g[g.length - 1].c } : null; };
-      const Dx = live ? [...D, { date: etParts().date, o: subj.open }] : D;
-      const fToday = (() => { const di = subj.di, p = Dx[di - 1], pp = Dx[di - 2]; const avg10 = R.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, avg60 = R.slice(di - 60, di).reduce((a, b) => a + b, 0) / 60, sma20 = Dx.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20; const f = [subj.open / p.c - 1, p.c / pp.c - 1, avg10 / avg60, p.c / sma20 - 1]; const or = useOR ? orOf(tBars) : null; if (or) f.push((or.c - subj.open) / subj.open, (or.h - or.l) / subj.open); return f; })();
-      const cands = [];
-      for (const [date, bars] of M) { const di = idx.get(date); if (di == null || di < 61 || di === subj.di) continue; const or = useOR ? orOf(bars) : null; if (useOR && !or) continue; cands.push({ date, di, bars, f: feat(di, D[di].o, or) }); }
-      if (cands.length < 30) { out.innerHTML = `<div class="empty">Not enough history loaded yet to compare.</div>`; return; }
-      const sd = fToday.map((_, j) => { const v = cands.map((c) => c.f[j]), mu = v.reduce((a, b) => a + b, 0) / v.length; return Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) || 1; });
-      cands.forEach((c) => (c.dist = Math.sqrt(c.f.reduce((a, v, j) => a + ((v - fToday[j]) / sd[j]) ** 2, 0))));
-      const K = Math.min(40, cands.length), near = cands.sort((a, b) => a.dist - b.dist).slice(0, K);
-      // what happened next on those days
-      const res = near.map((c) => { const B = c.bars, p = D[c.di - 1], close = B[B.length - 1].c, after = B.filter((b) => b.m >= (useOR ? 600 : 570)); const or = orOf(B);
-        const iu = or ? after.findIndex((b) => b.c > or.h) : -1, idn = or ? after.findIndex((b) => b.c < or.l) : -1;
-        return { up: close > (useOR ? or.c : B[0].o), rng: (Math.max(...after.map((b) => b.h)) - Math.min(...after.map((b) => b.l))) / B[0].o, hiBrk: Math.max(...B.map((b) => b.h)) > p.h, hiHold: close > p.h, loBrk: Math.min(...B.map((b) => b.l)) < p.l, loHold: close < p.l,
-          orUp: iu >= 0 && (idn < 0 || iu < idn), orDn: idn >= 0 && (iu < 0 || idn < iu), orUpHold: or && close > or.h, orDnHold: or && close < or.l, fill: (B[0].o >= p.c ? Math.min(...B.map((b) => b.l)) <= p.c : Math.max(...B.map((b) => b.h)) >= p.c) }; });
-      const cnt = (f) => res.filter(f).length, px0 = live ? +live.price : D[D.length - 1].c;
-      const hiB = cnt((x) => x.hiBrk), loB = cnt((x) => x.loBrk), orU = cnt((x) => x.orUp), orD = cnt((x) => x.orDn), upN = cnt((x) => x.up);
-      let ruleLine = "";
-      if (LAB.test) { const set = new Set(near.map((c) => c.date)), g = LAB.test.sum.rs.filter((x) => set.has(x.date)); if (g.length) { const w = g.filter((x) => x.pnl > 0).length; ruleLine = `<li>Your rule (${esc(LAB.test.name)}) on these days: <b>${g.length}</b> signals, won <b>${Math.round((w / g.length) * 100)}%</b>, ${money0(g.reduce((a, x) => a + x.pnl, 0) / g.length)}/trade ${tpill(trust(w, g.length, LAB.test.sum.win))}.</li>`; } }
-      const gapNow = fToday[0];
-      out.innerHTML = `<div class="bt-answer">Compared <b>${esc(subj.label)}</b> with ${cands.length} past days and picked the <b>${K} most similar</b>, matching: opened ${gapNow >= 0 ? "up" : "down"} ${Math.abs(gapNow * 100).toFixed(2)}%, the day before ${fToday[1] >= 0 ? "rose" : "fell"} ${Math.abs(fToday[1] * 100).toFixed(1)}%, the market's been ${fToday[2] > 1.15 ? "busier than usual" : fToday[2] < 0.85 ? "calmer than usual" : "about as busy as usual"}, SPY is ${fToday[3] >= 0 ? "above" : "below"} its 20-day average${useOR ? `, and the first 30 minutes moved ${fToday[4] >= 0 ? "up" : "down"} ${Math.abs(fToday[4] * 100).toFixed(2)}%` : ""}.</div>
-        <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">
-          <li>${useOR ? "From 10:00 to the close" : "Over the day"}, SPY finished <b>${upN >= K / 2 ? "higher" : "lower"}</b> on ${Math.round((Math.max(upN, K - upN) / K) * 100)}% of these days ${tpill(trust(Math.max(upN, K - upN), K))}.</li>
-          <li>Typical range ${useOR ? "after 10:00" : "for the day"}: <b>$${(median(res.map((x) => x.rng)) * px0).toFixed(2)}</b>. That's how much room there usually was to move.</li>
-          <li>Broke yesterday's high on ${Math.round((hiB / K) * 100)}%; ${hiB ? `held above it at the close on <b>${Math.round((cnt((x) => x.hiHold) / hiB) * 100)}%</b> of those` : "–"}. Broke yesterday's low on ${Math.round((loB / K) * 100)}%; ${loB ? `held below on <b>${Math.round((cnt((x) => x.loHold) / loB) * 100)}%</b>` : "–"}.</li>
-          ${useOR ? `<li>First-30-minute breakout: up first on ${Math.round((orU / K) * 100)}% (held to the close ${orU ? Math.round((cnt((x) => x.orUp && x.orUpHold) / orU) * 100) : 0}%), down first on ${Math.round((orD / K) * 100)}% (held ${orD ? Math.round((cnt((x) => x.orDn && x.orDnHold) / orD) * 100) : 0}%).</li>` : ""}
-          <li>The opening gap filled the same day on ${Math.round((cnt((x) => x.fill) / K) * 100)}% of these days.</li>
-          ${ruleLine || (LAB.test ? "" : `<li class="muted">Run <b>Test my rule</b> in the Strategy lab to also see how your rule did on these days.</li>`)}
-        </ul>
-        <div class="small" style="margin-top:10px"><b>Closest matches</b> (tap to replay in Practice):</div>
-        <div class="like-days">${near.slice(0, 10).map((c) => `<button class="btn sm" type="button" data-like-day="${c.date}">${esc(dayName(c.date).replace(/^\w+, /, ""))} ${c.date.slice(0, 4)}</button>`).join("")}</div>
-        <p class="small muted" style="margin-top:10px">${K} days is a small sample, so read these as "leans", not certainties. ${live && !useOR ? (etParts().min < 600 ? "After 10:00 am, run this again: it will also match the first 30 minutes and get sharper." : "Today's first 30 minutes couldn't be loaded, so this matched on the open only.") : ""}</p>`;
-    } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    try { out.innerHTML = `<div class="empty">Loading history…</div>`; PLAN.like = await computeLike((a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; }); renderLike(PLAN.like); }
+    catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
     finally { btn.disabled = false; btn.textContent = "Find days like today"; }
   });
   document.addEventListener("click", (e) => {
@@ -2961,6 +2976,116 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (PAT.daily && PAT.daily.length > HIST.daily.length) HIST.daily = PAT.daily.filter((x) => x.date < etParts().date);
     if (![...sel.options].some((o) => o.value === d)) sel.insertAdjacentHTML("afterbegin", `<option value="${d}">${esc(dayName(d))} · similar day</option>`);
     sel.value = d; showView("practice"); $("#rp-load").click();
+  });
+
+  // ---------- edge: how your rule did in past situations like this one ----------
+  function edgeSave(rule, sum) {
+    const rs = sum.rs.map((x) => ({ date: x.date, m: x.m, g: x.g, dir: x.dir, pnl: Math.round(x.pnl * 100) / 100 }));
+    try { localStorage.setItem("edge.v1", JSON.stringify({ at: Date.now(), rule, win: sum.win, avg: sum.avg, n: sum.n, rs })); } catch {}
+  }
+  function edgeLoad() { try { const e = JSON.parse(localStorage.getItem("edge.v1") || "null"); return e && e.rs?.length ? e : null; } catch { return null; } }
+  const G_NAME = { ph: "yesterday's-high breaks", pl: "yesterday's-low breaks", pc: "yesterday's-close breaks", or15: "first-15-minute breaks", or30: "first-30-minute breaks", day: "today's-high/low breaks" };
+  function edgeFor(q) {
+    const ed = edgeLoad(); if (!ed) return null;
+    const tb = q.m != null ? tBucket(q.m) : null, inT = (x) => !tb || tBucket(x.m) === tb;
+    const tries = [
+      [(x) => x.g === q.g && x.dir === q.dir && inT(x), `${G_NAME[q.g] || "these breaks"} ${q.dir === "call" ? "up" : "down"}${tb ? ` between ${tb}` : ""}`],
+      [(x) => x.g === q.g && inT(x), `${G_NAME[q.g] || "these breaks"}${tb ? ` between ${tb}` : ""}`],
+      [(x) => x.g === q.g, `${G_NAME[q.g] || "these breaks"} at any time`],
+      [(x) => inT(x), `all your signals${tb ? ` between ${tb}` : ""}`],
+      [() => true, "all your signals"],
+    ];
+    for (let k = 0; k < tries.length; k++) {
+      const [f, scope] = tries[k]; if (!q.g && k < 3) continue;
+      const g = ed.rs.filter(f); if (g.length < 10) continue;
+      const w = g.filter((x) => x.pnl > 0).length, avg = g.reduce((a, x) => a + x.pnl, 0) / g.length, sd = Math.sqrt(g.reduce((a, x) => a + (x.pnl - avg) ** 2, 0) / Math.max(g.length - 1, 1));
+      return { n: g.length, w, win: w / g.length, avg, tstat: sd ? avg / (sd / Math.sqrt(g.length)) : 0, scope, rule: ed.rule, generic: !!q.g && k >= 3 };
+    }
+    return null;
+  }
+  function gradeOf(e) {
+    if (!e || e.generic) return null;
+    // grade on average profit and on how sure we can be of it (t-statistic of the average)
+    const ts = e.tstat, t = Math.abs(ts) >= 2.6 && e.n >= 40 ? { k: "strong", label: "strong", why: `Based on ${e.n} signals. Very unlikely to be chance.` } : Math.abs(ts) >= 1 ? { k: "weak", label: "weak", why: `Based on ${e.n} signals. Some evidence, but it could still be chance.` } : { k: "luck", label: "could be luck", why: `Based on ${e.n} signals. The average could easily be chance.` };
+    const L = e.avg >= 12 && ts >= 2 ? "A" : e.avg >= 4 && ts >= 1 ? "B" : e.avg <= -4 && ts <= -1 ? "D" : "C";
+    const advice = { A: "Strong setup in the past. Normal size.", B: "Decent setup in the past.", C: "No clear edge in the past. Only take it if everything else is clean.", D: "Weak setup in the past. Consider skipping it." }[L];
+    return { L, advice, t, line: `Your rule on ${esc(e.scope)}: won ${Math.round(e.win * 100)}% of ${e.n} past signals, ${money0(e.avg)}/trade` };
+  }
+  const gradeBadge = (g) => g ? `<span class="grade g${g.L}" title="${esc(g.advice)}">${g.L}</span>` : "";
+  const gOfWhy = (why) => /yesterday's high/i.test(why) ? "ph" : /yesterday's low/i.test(why) ? "pl" : /yesterday's close|prior close/i.test(why) ? "pc" : /today's (high|low)/i.test(why) ? "day" : /15/.test(why) ? "or15" : /30/.test(why) ? "or30" : null;
+  const gOfKey = (k) => ({ ph: "ph", pl: "pl", pcu: "pc", pcd: "pc", orh: "or15", orl: "or15", or30h: "or30", or30l: "or30", dh: "day", dl: "day" })[k] || null;
+  function gradeHtml(q) {
+    const e = edgeFor(q), g = gradeOf(e);
+    if (!g) return !edgeLoad() ? `<div class="small muted" style="margin-top:6px">Tip: run the Strategy lab once and signals get a grade from history.</div>` : e?.generic ? `<div class="small muted" style="margin-top:6px">Your rule doesn't watch this kind of line, so there's no history to grade it.</div>` : "";
+    return `<div class="grade-row">${gradeBadge(g)}<div class="small"><b>${esc(g.advice)}</b> ${g.line} ${tpill(g.t)}</div></div>`;
+  }
+  const liveGrade = () => LC.dir ? gradeHtml({ g: gOfWhy(LC.why || ""), dir: LC.dir, m: marketOpen() ? etParts().min : null }) : "";
+
+  // ---------- today's game plan (dashboard) ----------
+  const PLAN = { like: null, intra: null, at: 0, building: false, msg: "" };
+  function tpMove(S, minsLeft, t, mHold, iv) {
+    let best = null; for (let K = Math.floor(S) - 5; K <= Math.ceil(S) + 5; K++) { const a = qAsk(bs0("call", S, K, iv, minsLeft)); if (!best || Math.abs(a - 1) < Math.abs(best.a - 1)) best = { K, a }; }
+    const tgt = best.a * (1 + t / 100), ml = Math.max(minsLeft - mHold, 1), bidAt = (m) => qBid(bs0("call", S + m, best.K, iv, ml));
+    if (bidAt(25) < tgt) return null; let lo = 0, hi = 25; for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (bidAt(mid) >= tgt) hi = mid; else lo = mid; } return hi;
+  }
+  async function buildPlan(force) {
+    if (!S.mcp || PLAN.building) return;
+    if (!force && PLAN.at && Date.now() - PLAN.at < 30 * 60000 && !(etParts(new Date(PLAN.at)).min < 600 && etParts().min >= 601)) return;
+    PLAN.building = true; PLAN.msg = "Building today's game plan…"; renderPlan();
+    try {
+      const D = await loadDailyAll();
+      let ed = edgeLoad();
+      if (!ed || ed.rule !== ruleName(RULE) || Date.now() - ed.at > 20 * 3600000) {
+        const M = await loadM1(D.map((d) => d.date).slice(-126), (a, b) => { PLAN.msg = `Studying how your rule did on past days… ${a} of ${b} (only slow the first time)`; renderPlan(); });
+        Object.assign(LAB, { M, D, days: M.size });
+        edgeSave(ruleName(RULE), summarize(labSignals(M, D, RULE), RULE.t, RULE.s, RULE.m));
+      }
+      PLAN.msg = "Finding days like today…"; renderPlan();
+      PLAN.like = await computeLike((a, b) => { PLAN.msg = `Loading 5-minute candles… ${a} of ${b}`; renderPlan(); }, 252);
+      const M5 = await load5m(D.map((d) => d.date).slice(-252));
+      PLAN.intra = M5.size >= 20 ? intradayPatterns(M5, D) : null;
+      PLAN.at = Date.now(); PLAN.msg = "";
+    } catch (e) { PLAN.msg = liveErr(e); }
+    finally { PLAN.building = false; renderPlan(); }
+  }
+  function renderPlan() {
+    const el = $("#plan-card"); if (!el) return;
+    if (!S.mcp) { el.hidden = true; return; }
+    el.hidden = false;
+    const head = `<div class="panel-head"><div><h2>Today's game plan</h2><p class="small muted" style="margin-top:4px">${PLAN.at ? `Built ${esc(fmtClock(etParts(new Date(PLAN.at)).min))} ET from SPY's history and your rule (${esc(edgeLoad()?.rule || ruleName(RULE))}).` : "Built from SPY's history and your rule."}</p></div><button class="btn sm" type="button" id="plan-refresh"${PLAN.building ? " disabled" : ""}>Refresh</button></div>`;
+    if (!PLAN.at || !PLAN.like || !PAT.daily) { el.innerHTML = head + `<div class="empty">${esc(PLAN.msg || "Press Refresh to build today's plan.")}</div>`; return; }
+    const D = PAT.daily, y = D[D.length - 1], L = PLAN.like, ed = edgeLoad();
+    const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
+    const P = live ? +live.price : y.c, nowM = live && marketOpen() ? etParts().min : 600;
+    // levels worth watching, graded by how your rule did on them
+    const lv = [{ name: "Yesterday's high", L: y.h, dir: "call", g: "ph" }, { name: "Yesterday's low", L: y.l, dir: "put", g: "pl" }, { name: "Yesterday's close", L: y.c, dir: P < y.c ? "call" : "put", g: "pc" }];
+    if (live) lv.push({ name: "Today's high", L: +live.high, dir: "call", g: "day" }, { name: "Today's low", L: +live.low, dir: "put", g: "day" });
+    const o15 = (L.tBars || []).filter((b) => b.m < 585); if (live && o15.length >= 3) lv.push({ name: "First 15 min high", L: Math.max(...o15.map((b) => b.h)), dir: "call", g: "or15" }, { name: "First 15 min low", L: Math.min(...o15.map((b) => b.l)), dir: "put", g: "or15" });
+    const rows = lv.map((x) => { const beyond = x.dir === "call" ? P > x.L + 0.02 : P < x.L - 0.02; const e = edgeFor({ g: x.g, dir: x.dir, m: nowM }); return { ...x, beyond, e, gr: gradeOf(e), dist: Math.abs(P - x.L) }; })
+      .filter((x) => !x.beyond).sort((a, b) => ("ABCD?".indexOf(a.gr?.L || "?") - "ABCD?".indexOf(b.gr?.L || "?")) || a.dist - b.dist).slice(0, 3);
+    // time windows
+    let win = "";
+    if (ed) { const tb = ["9:30–10:30", "10:30–12:00", "12:00–2:00", "2:00–3:30"].map((k) => { const g = ed.rs.filter((x) => tBucket(x.m) === k), w = g.filter((x) => x.pnl > 0).length; return { k, n: g.length, win: g.length ? w / g.length : 0, avg: g.length ? g.reduce((a, x) => a + x.pnl, 0) / g.length : 0 }; }).filter((x) => x.n >= 10).sort((a, b) => b.avg - a.avg);
+      if (tb.length >= 2) { const b = tb[0], w = tb[tb.length - 1]; win = `<li><b>Best window:</b> ${b.k} (your rule won ${P0(b.win)}, ${money0(b.avg)}/trade). <b>${w.avg < 0 ? "Sit out" : "Weakest"}:</b> ${w.k} (${money0(w.avg)}/trade).</li>`; } }
+    // room to move vs what the take-profit needs
+    const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = Math.min(45, Math.max(9, 1.2 * (R.reduce((a, b) => a + b, 0) / R.length) / 1.665 * Math.sqrt(252) * 100));
+    const need = tpMove(P, 960 - Math.max(nowM, 600), RULE.t, RULE.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
+    const typ30 = blk?.v != null ? blk.v * P : null;
+    const room = `<li><b>Room to move:</b> days like today ranged about <b>$${(L.medRng * L.px0).toFixed(2)}</b>${L.useOR ? " after 10:00" : " for the day"}. ${need != null ? `Your +${RULE.t}% take-profit needs SPY to move about <b>$${need.toFixed(2)}</b> your way within ${RULE.m} min${typ30 != null ? `; a typical half hour ${live && marketOpen() ? "right now" : "after 10:00"} spans $${typ30.toFixed(2)} high-to-low` : ""}.` : ""} ${need != null && typ30 != null && need > typ30 * 0.9 ? "<b>That's a stretch</b>: consider a smaller take-profit today." : ""}</li>`;
+    // lean from similar days
+    const upT = trust(Math.max(L.upN, L.K - L.upN), L.K), gf = L.cnt((x) => x.fill) / L.K;
+    const lean = upT.k === "strong" || upT.k === "weak" ? `Days like today leaned <b>${L.upN >= L.K / 2 ? "higher" : "lower"}</b> (${Math.round((Math.max(L.upN, L.K - L.upN) / L.K) * 100)}% of ${L.K}) ${tpill(upT)}. Favor ${L.upN >= L.K / 2 ? "calls" : "puts"}, but still wait for your signal.` : `Days like today had <b>no clear direction</b>. Trade both sides, only on clean signals.`;
+    const gapL = Math.abs(L.fToday[0]) >= 0.002 ? ` The opening gap filled the same day on ${Math.round(gf * 100)}% of them.` : "";
+    el.innerHTML = head + `<div class="small" style="margin-bottom:6px"><b>Lines to watch</b> (graded by how your rule did on them)</div>
+      ${rows.length ? rows.map((x) => `<div class="plan-lv">${gradeBadge(x.gr)}<div style="min-width:0"><b class="mono">${x.L.toFixed(2)}</b> · ${esc(x.name)} · ${x.dir === "call" ? "↑ call if it breaks up" : "↓ put if it breaks down"}<div class="small muted">${x.gr ? `${x.gr.line}. ${esc(x.gr.advice)} ${tpill(x.gr.t)}` : x.e?.generic ? "Your rule doesn't watch this line, so it can't be graded. Add it in Practice → Change the rule." : "Not enough past signals on this line to grade it."}</div></div><button class="btn sm" type="button" data-plan-watch="${x.L.toFixed(2)}" data-dir="${x.dir}" data-why="${esc(x.name)}">Watch</button></div>`).join("") : `<p class="small muted">SPY is already past the usual lines. Wait for a new high or low to form.</p>`}
+      <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">${win}${room}<li><b>Today's lean:</b> ${lean}${gapL}</li></ul>
+      <p class="small muted" style="margin-top:8px">These are leans from history, not predictions. Your rule still decides each entry.</p>`;
+  }
+  document.addEventListener("click", (e) => {
+    if (e.target.id === "plan-refresh") return buildPlan(true);
+    const b = e.target.closest("[data-plan-watch]"); if (!b) return;
+    const msg = ACT.setLevel(+b.dataset.planWatch, null, b.dataset.dir);
+    LC.why = b.dataset.why; $("#lc-why").value = LC.why; saveLC(); renderLive(); toast(msg);
   });
 
   // ---------- screenshot reader ----------
@@ -3694,7 +3819,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // ---------- boot ----------
   showView(["dash", "live", "practice", "journal", "news", "learn"].includes(view) ? view : "dash");
   fillPlanDefaults();
-  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") renderRoutine(); } }, 15000);
+  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") { renderRoutine(); if (PLAN.at && marketOpen() && etParts(new Date(PLAN.at)).min < 600 && etParts().min >= 601) buildPlan(); } } }, 15000);
   setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
@@ -3720,7 +3845,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   (async () => {
     const mcp = await use("mcp");
     if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); rpInitDates(); return; }
-    S.mcp = mcp; schedulePoll(0);
+    S.mcp = mcp; schedulePoll(0); setTimeout(() => buildPlan(), 4000);
     if (view === "practice") rpInitDates();
   })();
 })();
