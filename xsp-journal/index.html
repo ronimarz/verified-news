@@ -1131,6 +1131,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   });
   // Save a checkpoint, or close the position at the Bid. Returns a message, or null if saving failed.
   async function recordQuote(t, v, exiting) {
+    // Catch a missing decimal point (49 instead of 0.49) before it lands in the journal.
+    const ref = calc(t).entry || 1, odd = (x) => x != null && x >= 10 && x > ref * 8;
+    if (odd(v.bid) || odd(v.ask)) return `That price looks too high (${odd(v.bid) ? v.bid : v.ask}). Did you mean ${((odd(v.bid) ? v.bid : v.ask) / 100).toFixed(2)}? Nothing was saved.`;
     if (v.xsp == null && uOf(t) === U() && LIVE.snap) v.xsp = num(LIVE.snap.price);
     const now = etParts(), prev = stripId(t);
     const cp = { t: now.hm, xsp: v.xsp ?? null, bid: v.bid, ask: v.ask ?? null };
