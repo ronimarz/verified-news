@@ -210,6 +210,11 @@ textarea { min-height: 90px; resize: vertical; }
 .pat-bars .fill.hi { background: var(--ink); }
 .pat-bars .v { font-family: var(--mono); color: var(--ink); text-align: right; }
 .pat-today { border-left: 3px solid var(--accent); background: var(--info-bg); padding: 10px 12px; border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 14px; }
+.trust { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; margin-left: 4px; white-space: nowrap; font-family: var(--sans, inherit); background: var(--panel-2); color: var(--muted); }
+.trust.strong { background: var(--good-bg); color: var(--good); } .trust.weak { background: var(--warn-bg); color: var(--warn); }
+.lab-tbl td, .lab-tbl th { padding: 4px 6px; }
+@media (max-width: 600px) { .lab-tbl .trust { display: block; width: fit-content; margin: 2px 0 0 auto; } .lab-tbl th { font-size: 10.5px; } } .lab-idea { border: 1px solid var(--line); border-radius: 8px; padding: 12px; margin-top: 10px; }
+.lab-idea.ok { border-color: var(--good); } .like-days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -723,9 +728,22 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
     <div class="panel" id="progress"></div>
     <div class="panel" id="pat-panel">
-      <div class="panel-head"><div><h2>SPY pattern finder</h2><p class="small muted" style="margin-top:4px">Looks through SPY's past trading days and finds what tends to happen: how far it moves, when it moves, what gaps and level breaks usually do. These are tendencies, not promises.</p></div>
-        <div class="row"><select id="pat-period" style="width:auto" aria-label="How much history"><option value="126">Last 6 months</option><option value="252" selected>Last year</option><option value="504">Last 2 years</option><option value="all">All history (daily patterns)</option></select><button class="btn primary" type="button" id="pat-run">Find patterns</button></div></div>
-      <div id="pat-out"><div class="empty">Press <b>Find patterns</b>. The first run loads a lot of history from Webull and takes about a minute. After that it's quick.</div></div>
+      <div class="panel-head"><div><h2>SPY pattern finder</h2><p class="small muted" style="margin-top:4px">Looks through SPY's past trading days to find what tends to happen, which days looked like today, and which rules would have worked. These are tendencies, not promises.</p></div></div>
+      <div class="seg" role="group" aria-label="Pattern finder sections" id="pat-tabs" style="margin-bottom:12px"><button type="button" data-pt="pat" aria-pressed="true">Patterns</button><button type="button" data-pt="like" aria-pressed="false">Days like today</button><button type="button" data-pt="lab" aria-pressed="false">Strategy lab</button></div>
+      <div id="pat-sec-pat">
+        <div class="row" style="margin-bottom:10px"><select id="pat-period" style="width:auto" aria-label="How much history"><option value="126">Last 6 months</option><option value="252" selected>Last year</option><option value="504">Last 2 years</option><option value="all">All history (daily patterns)</option></select><button class="btn primary" type="button" id="pat-run">Find patterns</button></div>
+        <div id="pat-out"><div class="empty">Press <b>Find patterns</b>. The first run loads a lot of history from Webull and takes about a minute. After that it's quick.</div></div>
+      </div>
+      <div id="pat-sec-like" hidden>
+        <p class="small" style="margin-bottom:8px">Finds past days that <b>started like today</b> (same kind of gap, similar day before, similar trend and how busy the market has been; after 10:00 am also the first 30 minutes) and shows what happened next on those days.</p>
+        <div class="row" style="margin-bottom:10px"><button class="btn primary" type="button" id="like-run">Find days like today</button><span class="small muted">Uses the last 2 years of 5-minute candles.</span></div>
+        <div id="like-out"></div>
+      </div>
+      <div id="pat-sec-lab" hidden>
+        <p class="small" style="margin-bottom:8px">Replays real SPY days minute by minute with option prices from the model. <b>Test my rule</b> runs the rule you picked in Practice and shows when it works best. <b>Find strategy ideas</b> tries hundreds of variations on older days, then checks the best ones on recent days they never saw.</p>
+        <div class="row" style="margin-bottom:10px"><select id="lab-days" style="width:auto" aria-label="How many days"><option value="60">60 days (fast)</option><option value="126" selected>6 months</option><option value="252">1 year (slow first time)</option></select><button class="btn primary" type="button" id="lab-test">Test my rule</button><button class="btn" type="button" id="lab-ideas">Find strategy ideas</button></div>
+        <div id="lab-out"></div>
+      </div>
     </div>
     <div class="panel">
       <div class="panel-head"><div><h2>How a trade fits together</h2><p class="small muted" style="margin-top:4px">Read left to right. Each stage feeds the next. Tap any idea for a short lesson.</p></div><span class="small muted" id="learn-progress"></span></div>
@@ -1370,7 +1388,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
     else { c2 = "go"; verdict = "Qualified · V2"; why = `Buy 1× ${esc(u)} ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is noted in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
     d.className = "decision " + c2;
-    d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}`;
+    d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}${s.broke ? labHint() : ""}`;
     $("#lc-card").innerHTML = [
       ["Level", s.s1 ? `${esc(LC.level)} ${LC.dir === "put" ? "↓ put" : "↑ call"}${LC.why ? ` · ${esc(LC.why)}` : ""}` : "–"],
       ["Break", s.breakET ? `${esc(s.breakET)} ET` : "–"],
@@ -2496,7 +2514,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const gaps = gb.map(([a, b, n]) => { const g = rows.filter((d) => { const x = d.o / d.p.c - 1; return x >= a && x < b; }); const filled = g.filter((d) => (d.o >= d.p.c ? d.l <= d.p.c : d.h >= d.p.c)).length; return { n, a, b, days: g.length, fill: pctOf(filled, g.length), up: pctOf(g.filter((d) => d.c > d.o).length, g.length) }; });
     // 3. yesterday's high / low
     const aboveH = rows.filter((d) => d.h > d.p.h), belowL = rows.filter((d) => d.l < d.p.l);
-    const lvl = { hiTouch: pctOf(aboveH.length, rows.length), hiHold: pctOf(aboveH.filter((d) => d.c > d.p.h).length, aboveH.length), loTouch: pctOf(belowL.length, rows.length), loHold: pctOf(belowL.filter((d) => d.c < d.p.l).length, belowL.length), both: pctOf(rows.filter((d) => d.h > d.p.h && d.l < d.p.l).length, rows.length), inside: pctOf(rows.filter((d) => d.h <= d.p.h && d.l >= d.p.l).length, rows.length) };
+    const lvl = { hiN: aboveH.length, hiHits: aboveH.filter((d) => d.c > d.p.h).length, loN: belowL.length, loHits: belowL.filter((d) => d.c < d.p.l).length, hiTouch: pctOf(aboveH.length, rows.length), hiHold: pctOf(aboveH.filter((d) => d.c > d.p.h).length, aboveH.length), loTouch: pctOf(belowL.length, rows.length), loHold: pctOf(belowL.filter((d) => d.c < d.p.l).length, belowL.length), both: pctOf(rows.filter((d) => d.h > d.p.h && d.l < d.p.l).length, rows.length), inside: pctOf(rows.filter((d) => d.h <= d.p.h && d.l >= d.p.l).length, rows.length) };
     // 4. day after a big day
     const chg = (d) => d.c / d.p.c - 1, next = rows.slice(1).map((d, i) => ({ d, prev: rows[i] }));
     const after = [["After a drop of more than 1%", (x) => chg(x.prev) < -0.01], ["After a normal day", (x) => Math.abs(chg(x.prev)) <= 0.01], ["After a gain of more than 1%", (x) => chg(x.prev) > 0.01]].map(([n, f]) => { const g = next.filter(f); return { n, days: g.length, up: pctOf(g.filter((x) => chg(x.d) > 0).length, g.length), avgRange: g.length ? g.reduce((s, x) => s + (x.d.h - x.d.l) / x.d.p.c, 0) / g.length : null }; });
@@ -2509,6 +2527,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const bname = (m) => fmtClock(m).replace(/:00 /, " ").replace(/ (am|pm)/, "$1");
     const move = blocks.map(() => []), hiAt = blocks.map(() => 0), loAt = blocks.map(() => 0);
     let orUp = 0, orDn = 0, orNone = 0, upHold = 0, dnHold = 0, upFail = 0, dnFail = 0, firstSame = 0, firstN = 0;
+    if (!days.length) return null;
     for (const [date, bars] of days) {
       blocks.forEach((m0, k) => { const g = bars.filter((b) => b.m >= m0 && b.m < m0 + 30); if (g.length) move[k].push((Math.max(...g.map((b) => b.h)) - Math.min(...g.map((b) => b.l))) / bars[0].o); });
       const H = Math.max(...bars.map((b) => b.h)), L = Math.min(...bars.map((b) => b.l));
@@ -2529,14 +2548,31 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     return { days: n, from: days[0]?.[0], to: days[n - 1]?.[0], px: px0,
       blocks: blocks.map((m, k) => ({ n: bname(m), v: median(move[k]) })), hiAt: blocks.map((m, k) => ({ n: bname(m), v: pctOf(hiAt[k], n) })), loAt: blocks.map((m, k) => ({ n: bname(m), v: pctOf(loAt[k], n) })),
       firstHourHiLo: pctOf(days.filter(([, bars]) => { const H = Math.max(...bars.map((b) => b.h)), L = Math.min(...bars.map((b) => b.l)); return bars.find((b) => b.h === H).m < 630 || bars.find((b) => b.l === L).m < 630; }).length, n),
+      orN: { up: orUp, upHold, dn: orDn, dnHold }, firstN: { n: firstN, same: firstSame },
       or: { up: pctOf(orUp, n), dn: pctOf(orDn, n), none: pctOf(orNone, n), upHold: pctOf(upHold, orUp), dnHold: pctOf(dnHold, orDn), upFail: pctOf(upFail, orUp), dnFail: pctOf(dnFail, orDn) },
       firstHour: pctOf(firstSame, firstN) };
   }
-  const pbars = (items, fmt, hiN) => { const max = Math.max(...items.map((x) => x.v || 0), 1e-9); return `<div class="pat-bars">${items.map((x) => `<span>${esc(x.n)}</span><div class="track" title="${esc(x.n)}: ${x.v != null ? fmt(x.v) : "–"}"><div class="fill${x === hiN ? " hi" : ""}" style="width:${((x.v || 0) / max) * 100}%"></div></div><span class="v">${x.v != null ? fmt(x.v) : "–"}</span>`).join("")}</div>`; };
+  // How sure can we be? Compares a share of days with a baseline (a coin flip, or the normal rate) given how many days it rests on.
+  function trust(hits, n, base = 0.5) {
+    if (!n || n < 15) return { k: "few", label: "too few days", why: `Only ${n || 0} days. Too few to judge.` };
+    const p = hits / n, se = Math.sqrt(Math.max(base * (1 - base), 1e-6) / n), z = (p - base) / se;
+    if (Math.abs(z) >= 2.6 && n >= 40) return { k: "strong", label: "strong", z, why: `Based on ${n} days and far from ${Math.round(base * 100)}%. Very unlikely to be chance.` };
+    if (Math.abs(z) >= 1.65) return { k: "weak", label: "weak", z, why: `Based on ${n} days. Some evidence, but it could still be chance.` };
+    return { k: "luck", label: "could be luck", z, why: `Based on ${n} days but too close to ${Math.round(base * 100)}% to mean much.` };
+  }
+  const tpill = (t) => t ? `<span class="trust ${t.k}" title="${esc(t.why)}">${esc(t.label)}</span>` : "";
+  // Did it hold up? Same number on the older part of history vs the most recent part.
+  function heldUp(oldV, newV, base = 0.5) {
+    if (oldV == null || newV == null) return "";
+    const same = Math.sign(oldV - base) === Math.sign(newV - base) || Math.abs(newV - base) < 0.03;
+    const ok = same && Math.abs(newV - oldV) < 0.15;
+    return `<div class="small" style="margin-top:6px">Older days ${Math.round(oldV * 100)}% → recent days ${Math.round(newV * 100)}% · <b style="color:${ok ? "var(--good)" : "var(--warn)"}">${ok ? "Held up" : "Changed recently"}</b></div>`;
+  }
+  const pbars = (items, fmt, hiN) => { const max = Math.max(...items.map((x) => x.v || 0), 1e-9); return `<div class="pat-bars">${items.map((x) => `<span>${esc(x.n)}</span><div class="track" title="${esc(x.n)}: ${x.v != null ? fmt(x.v) : "–"}"><div class="fill${x === hiN ? " hi" : ""}" style="width:${((x.v || 0) / max) * 100}%"></div></div><span class="v">${x.v != null ? fmt(x.v) : "–"}${tpill(x.tr)}</span>`).join("")}</div>`; };
   const P0 = (v) => v == null ? "–" : Math.round(v * 100) + "%", P1 = (v) => v == null ? "–" : (v * 100).toFixed(1) + "%";
   function renderPatterns() {
     const r = PAT.res, out = $("#pat-out"); if (!r) return;
-    const d = r.daily, m = r.intra, px = d.range.px, dol = (pct) => "$" + (pct * px).toFixed(2);
+    const d = r.daily, m = r.intra, px = d.range.px, dol = (pct) => "$" + (pct * px).toFixed(2), dO = r.dOld, dN = r.dNew, mO = r.iOld, mN = r.iNew;
     const maxBlock = m ? m.blocks.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a)) : null, minBlock = m ? m.blocks.reduce((a, b) => ((b.v ?? 9) < (a.v ?? 9) ? b : a)) : null;
     const hiBlock = (arr) => arr.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a));
     const realGaps = d.gaps.filter((g) => g.a !== -0.002), gDays = realGaps.reduce((a, g) => a + g.days, 0), gFill = gDays ? realGaps.reduce((a, g) => a + (g.fill || 0) * g.days, 0) / gDays : null;
@@ -2548,6 +2584,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       today = `<div class="pat-today"><b>Today so far:</b> SPY opened ${gap >= 0 ? "up" : "down"} ${Math.abs(gap * 100).toFixed(2)}% (${g ? esc(g.n.toLowerCase()) : ""}). In the past, ${g && g.days ? `<b>${P0(g.fill)}</b> of gaps like this were filled the same day` : "there were too few gaps like this to say"}. Today's range so far is <b>$${(+sn.high - +sn.low).toFixed(2)}</b>; ${P0(pctOf(r.rangeList.filter((x) => x > rs).length, r.rangeList.length))} of past days ended with a bigger range than that.</div>`;
     }
     out.innerHTML = `${today}
+      <div class="why" style="margin-bottom:10px">How sure is each number? <span class="trust strong">strong</span> very unlikely to be chance · <span class="trust weak">weak</span> some evidence · <span class="trust luck">could be luck</span> too close to normal · <span class="trust few">too few days</span>. "Held up" means the pattern was about the same on older and recent days. Tap a label for details.</div>
       <p class="small muted" style="margin-bottom:10px">Daily patterns: ${d.days.toLocaleString()} days (${esc(dayName(d.from))} – ${esc(dayName(d.to))}).${m ? ` Intraday patterns: ${m.days} days of 5-minute candles.` : ""} SPY closed higher on ${P0(d.upDays)} of these days.</p>
       <div class="pat-grid">
         <div class="pat-card"><h3>How far SPY moves in a day</h3><div class="pat-big">${dol(d.range.med)} <span class="small muted">(${P1(d.range.med)})</span></div>
@@ -2561,22 +2598,24 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <div class="small" style="margin-top:6px"><b>Where the day's high was set</b></div>${pbars(m.hiAt, P0)}</div>` : ""}
         <div class="pat-card"><h3>Breaking yesterday's high or low</h3><div class="pat-big">${P0(d.lvl.hiTouch)} / ${P0(d.lvl.loTouch)}</div>
           <p class="small">SPY traded above yesterday's high on <b>${P0(d.lvl.hiTouch)}</b> of days, but only <b>${P0(d.lvl.hiHold)}</b> of those days <i>closed</i> above it. It went below yesterday's low on ${P0(d.lvl.loTouch)} of days, and ${P0(d.lvl.loHold)} of those closed below it.</p>
-          ${pbars([{ n: "Broke the high", v: d.lvl.hiTouch }, { n: "…and closed above", v: d.lvl.hiTouch * d.lvl.hiHold }, { n: "Broke the low", v: d.lvl.loTouch }, { n: "…and closed below", v: d.lvl.loTouch * d.lvl.loHold }, { n: "Stayed inside", v: d.lvl.inside }], P0)}
+          ${pbars([{ n: "Broke high: closed above", v: d.lvl.hiHold, tr: trust(d.lvl.hiHits, d.lvl.hiN) }, { n: "Broke low: closed below", v: d.lvl.loHold, tr: trust(d.lvl.loHits, d.lvl.loN) }, { n: "Stayed inside (all days)", v: d.lvl.inside }], P0)}
+          ${heldUp(dO?.lvl.hiHold, dN?.lvl.hiHold)}
           <p class="small muted" style="margin-top:6px">Why it matters: a break of yesterday's level is common, and holding it is the hard part. That's what your 60-second hold tries to filter.</p></div>
         ${m ? `<div class="pat-card"><h3>Breaking out of the first 30 minutes</h3><div class="pat-big">${P0(m.or.up)} up · ${P0(m.or.dn)} down</div>
           <p class="small">After 10:00 am, SPY closed a candle above the first 30 minutes' high first on ${P0(m.or.up)} of days, and below its low first on ${P0(m.or.dn)}. It stayed inside all day on ${P0(m.or.none)}.</p>
-          ${pbars([{ n: "Broke up, closed above", v: m.or.upHold }, { n: "Broke up, then broke down", v: m.or.upFail }, { n: "Broke down, closed below", v: m.or.dnHold }, { n: "Broke down, then broke up", v: m.or.dnFail }], P0)}
+          ${pbars([{ n: "Broke up, closed above", v: m.or.upHold, tr: trust(m.orN.upHold, m.orN.up) }, { n: "Broke up, then broke down", v: m.or.upFail }, { n: "Broke down, closed below", v: m.or.dnHold, tr: trust(m.orN.dnHold, m.orN.dn) }, { n: "Broke down, then broke up", v: m.or.dnFail }], P0)}
+          ${heldUp(mO?.or.upHold, mN?.or.upHold)}
           <p class="small muted" style="margin-top:6px">"Then broke the other way" is a failed breakout. If that number is high, waiting for a hold matters.</p></div>` : ""}
         <div class="pat-card"><h3>Gaps at the open</h3><div class="pat-big">${P0(gFill)} filled</div><p class="small">Of the ${gDays} days that opened at least 0.2% away from yesterday's close, ${P0(gFill)} came back to it the same day.</p>
           <p class="small">A gap is when SPY opens away from yesterday's close. A gap is "filled" when price comes back to yesterday's close the same day. Share of gaps filled, by size:</p>
-          ${pbars(d.gaps.map((g) => ({ n: g.n, v: g.fill })), P0)}<p class="small muted" style="margin-top:6px">${d.gaps.map((g) => `${g.n}: ${g.days} days`).join(" · ")}</p></div>
+          ${pbars(d.gaps.map((g) => ({ n: g.n, v: g.fill, tr: g.a === -0.002 ? null : trust(Math.round((g.fill || 0) * g.days), g.days) })), P0)}<p class="small muted" style="margin-top:6px">${d.gaps.map((g) => `${g.n}: ${g.days} days`).join(" · ")}</p></div>
         <div class="pat-card"><h3>The day after a big day</h3>
           <p class="small">Chance SPY closes higher the next day, and its typical range:</p>
-          ${pbars(d.after.map((x) => ({ n: x.n, v: x.up })), P0)}<p class="small muted" style="margin-top:6px">${d.after.map((x) => `${x.n.replace("After ", "after ")}: ${x.days} days, typical range ${dol(x.avgRange || 0)}`).join(" · ")}. Big days are usually followed by bigger-than-normal ranges.</p></div>
+          ${pbars(d.after.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) })), P0)}<p class="small muted" style="margin-top:6px">${d.after.map((x) => `${x.n.replace("After ", "after ")}: ${x.days} days, typical range ${dol(x.avgRange || 0)}`).join(" · ")}. Big days are usually followed by bigger-than-normal ranges.</p></div>
         <div class="pat-card"><h3>Day of the week</h3>
-          <p class="small">Chance SPY closes higher, by weekday:</p>${pbars(d.wd.map((x) => ({ n: x.n, v: x.up })), P0)}
+          <p class="small">Chance SPY closes higher, by weekday:</p>${pbars(d.wd.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) })), P0)}
           <p class="small muted" style="margin-top:6px">Typical range: ${d.wd.map((x) => `${x.n} ${dol(x.range || 0)}`).join(" · ")}. Differences of a few percent are usually just noise.</p></div>
-        ${m ? `<div class="pat-card"><h3>Does the first hour predict the rest?</h3><div class="pat-big">${P0(m.firstHour)}</div>
+        ${m ? `<div class="pat-card"><h3>Does the first hour predict the rest?</h3><div class="pat-big">${P0(m.firstHour)} ${tpill(trust(m.firstN.same, m.firstN.n))}</div>
           <p class="small">On <b>${P0(m.firstHour)}</b> of days, SPY moved the same direction after 10:30 am as it did in the first hour. ${m.firstHour > 0.55 ? "That's a mild tendency to keep going." : m.firstHour < 0.45 ? "That's a mild tendency to reverse." : "That's close to a coin flip, so the first hour alone tells you little."}</p></div>` : ""}
       </div>
       <div class="row" style="margin-top:12px"><button class="btn" type="button" id="pat-ask">Explain what this means for my trading</button><span class="small muted">Last run ${esc(new Date(r.ranAt).toLocaleString())}</span></div>
@@ -2590,6 +2629,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       `Gap fill rates: ${d.gaps.map((g) => `${g.n} ${P0(g.fill)} (${g.days}d)`).join("; ")}.`, `Next-day up%: ${d.after.map((x) => `${x.n} ${P0(x.up)}`).join("; ")}.`, `Weekday up%: ${d.wd.map((x) => `${x.n} ${P0(x.up)}`).join(", ")}.`,
       m ? `Intraday (${m.days} days, 5-min): typical 30-min range by block ${m.blocks.map((b) => `${b.n} ${dol(b.v)}`).join(", ")}. High or low set in first hour on ${P0(m.firstHourHiLo)} of days. First-30-min breakout: up first ${P0(m.or.up)} (closed above ${P0(m.or.upHold)}, failed other way ${P0(m.or.upFail)}), down first ${P0(m.or.dn)} (closed below ${P0(m.or.dnHold)}, failed ${P0(m.or.dnFail)}), none ${P0(m.or.none)}. First hour direction continued ${P0(m.firstHour)}.` : ""].join("\n");
   }
+  $("#pat-tabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pt]"); if (!b) return;
+    $$("#pat-tabs [data-pt]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+    for (const k of ["pat", "like", "lab"]) $("#pat-sec-" + k).hidden = k !== b.dataset.pt;
+  });
   $("#pat-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("The pattern finder needs Webull, which isn't available in this view.");
     const btn = $("#pat-run"), out = $("#pat-out"), per = $("#pat-period").value;
@@ -2601,7 +2645,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const idays = D.slice(1).map((x) => x.date).slice(-Math.min(504, per === "all" ? 504 : +per));
       const M = await load5m(idays, (a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; });
       const daily = dailyPatterns(D), intra = M.size >= 20 ? intradayPatterns(M, D) : null;
-      PAT.res = { ranAt: Date.now(), period: per, daily, intra, rangeList: D.slice(1).map((x, i) => (x.h - x.l) / D[i].c) };
+      const cut = Math.floor(D.length * 2 / 3), Me = [...M.entries()], mc = Math.floor(Me.length * 2 / 3);
+      PAT.res = { ranAt: Date.now(), period: per, daily, intra, rangeList: D.slice(1).map((x, i) => (x.h - x.l) / D[i].c),
+        dOld: D.length > 60 ? dailyPatterns(D.slice(0, cut)) : null, dNew: D.length > 60 ? dailyPatterns(D.slice(cut - 1)) : null,
+        iOld: Me.length > 60 ? intradayPatterns(new Map(Me.slice(0, mc)), D) : null, iNew: Me.length > 60 ? intradayPatterns(new Map(Me.slice(mc)), D) : null };
       renderPatterns();
       if (S.db) S.db.doc("patterns/latest").set({ ranAt: PAT.res.ranAt, period: per, brief: patternBrief(PAT.res) }).catch(() => {});
     } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
@@ -2616,6 +2663,304 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
     catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get an explanation right now. Try again."; }
     finally { e.target.disabled = false; }
+  });
+
+  // ---------- browser cache for minute candles (IndexedDB; falls back to memory) ----------
+  let idbP = null;
+  function idb() {
+    if (!idbP) idbP = new Promise((res) => { try { const r = indexedDB.open("spy-cache", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => res(r.result); r.onerror = () => res(null); } catch { res(null); } });
+    return idbP;
+  }
+  async function idbGetMany(keys) {
+    const db = await idb(), out = new Map(); if (!db) return out;
+    await new Promise((res) => { try { const st = db.transaction("kv").objectStore("kv"); let left = keys.length; if (!left) return res(); for (const k of keys) { const q = st.get(k); q.onsuccess = () => { if (q.result) out.set(k, q.result); if (!--left) res(); }; q.onerror = () => { if (!--left) res(); }; } } catch { res(); } });
+    return out;
+  }
+  async function idbPutMany(entries) {
+    const db = await idb(); if (!db || !entries.length) return;
+    await new Promise((res) => { try { const tx = db.transaction("kv", "readwrite"), st = tx.objectStore("kv"); for (const [k, v] of entries) st.put(v, k); tx.oncomplete = res; tx.onerror = res; } catch { res(); } });
+  }
+  // 1-minute candles for many days: memory, then this browser's cache, then Webull.
+  async function loadM1(dates, onProgress) {
+    const missing = dates.filter((d) => !HIST.dayCache.has(d));
+    const cached = await idbGetMany(missing.map((d) => "m1:" + d));
+    for (const [k, v] of cached) HIST.dayCache.set(k.slice(3), v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })));
+    const fetchNow = dates.filter((d) => !HIST.dayCache.has(d));
+    await manyDays(fetchNow, onProgress);
+    await idbPutMany(fetchNow.filter((d) => HIST.dayCache.get(d)?.length).map((d) => ["m1:" + d, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
+    return new Map(dates.map((d) => [d, (HIST.dayCache.get(d) || []).map((b) => ({ ...b, m: barMin(b) })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 300));
+  }
+
+  // ---------- strategy lab: replay a rule over many days with model option prices ----------
+  const LINE_GROUPS = { ph: "Yesterday's high/low", pl: "Yesterday's high/low", pc: "Yesterday's close", or15: "First 15 min range", or30: "First 30 min range", day: "Today's high/low so far" };
+  function dayLines(B, prev, lv) {
+    const out = [], rng = (n) => { const g = B.slice(0, n); return [Math.max(...g.map((b) => b.h)), Math.min(...g.map((b) => b.l))]; };
+    if (prev && lv.ph) out.push({ g: "ph", name: "yesterday's high", L: prev.h, dir: "call", from: 570 });
+    if (prev && lv.pl) out.push({ g: "pl", name: "yesterday's low", L: prev.l, dir: "put", from: 570 });
+    if (prev && lv.pc) out.push({ g: "pc", name: "yesterday's close", L: prev.c, dir: "call", from: 570 }, { g: "pc", name: "yesterday's close", L: prev.c, dir: "put", from: 570 });
+    if (lv.or15 && B.length > 15) { const [h, l] = rng(15); out.push({ g: "or15", name: "first-15-minute high", L: h, dir: "call", from: 585 }, { g: "or15", name: "first-15-minute low", L: l, dir: "put", from: 585 }); }
+    if (lv.or30 && B.length > 30) { const [h, l] = rng(30); out.push({ g: "or30", name: "first-30-minute high", L: h, dir: "call", from: 600 }, { g: "or30", name: "first-30-minute low", L: l, dir: "put", from: 600 }); }
+    if (lv.day) out.push({ g: "day", name: "today's high so far", dir: "call", from: 585, dyn: true }, { g: "day", name: "today's low so far", dir: "put", from: 585, dyn: true });
+    return out;
+  }
+  // First signal on one line in one day, using the same break-then-hold logic as Practice.
+  function scanLine(B, ln, hold, until) {
+    const call = ln.dir === "call"; let armed = false, st = 0, L = null, hc = 0, ext = null, resets = 0;
+    for (let i = 0; i < B.length; i++) {
+      const b = B[i]; if (b.m >= until) break;
+      const lv = ln.dyn ? ext : ln.L;
+      if (b.m >= ln.from && lv != null) {
+        if (st === 0) {
+          const beyond = call ? b.c > lv : b.c < lv;
+          if (!ln.dyn && !armed) { if (!beyond) armed = true; }
+          else if (beyond) { L = lv; hc = 0; if (hold === 0) return { i, L, resets }; st = 1; }
+        } else if (call ? b.l > L : b.h < L) { if (++hc >= hold) return { i, L, resets }; }
+        else { resets++; hc = 0; if (!(call ? b.c > L : b.c < L)) st = 0; }
+      }
+      if (ln.dyn) ext = ext == null ? (call ? b.h : b.l) : call ? Math.max(ext, b.h) : Math.min(ext, b.l);
+    }
+    return null;
+  }
+  const qBid = (p) => Math.max(Math.floor((p - (p < 3 ? 0.01 : 0.02)) * 100) / 100, 0), qAsk = (p) => Math.max(Math.ceil((p + (p < 3 ? 0.01 : 0.02)) * 100) / 100, 0.01);
+  // Buy the strike whose Ask is nearest $1.00 at the signal, then record the Bid's high, low and close for the next hour.
+  function optPath(B, i, dir, iv) {
+    const b = B[i], S = b.c, mins = 960 - (b.m + 1); let best = null;
+    for (let K = Math.floor(S) - 5; K <= Math.ceil(S) + 5; K++) { const a = qAsk(bs0(dir, S, K, iv, mins)); if (!best || Math.abs(a - 1) < Math.abs(best.a - 1)) best = { K, a }; }
+    const path = [];
+    for (let k = i + 1; k < B.length && k <= i + 60 && B[k].m < 955; k++) {
+      const x = B[k], ml = 960 - (x.m + 1), up = dir === "call";
+      path.push({ hi: qBid(bs0(dir, up ? x.h : x.l, best.K, iv, ml)), lo: qBid(bs0(dir, up ? x.l : x.h, best.K, iv, ml)), c: qBid(bs0(dir, x.c, best.K, iv, ml)) });
+    }
+    return { K: best.K, ask: best.a, path };
+  }
+  // Exit with take-profit %, stop %, time limit (minutes). If target and stop both touch in one minute, assume the stop (the cautious choice).
+  function exitOf(sig, t, s, m) {
+    const tgt = sig.ask * (1 + t / 100), stp = sig.ask * (1 - s / 100), P = sig.path;
+    for (let k = 0; k < P.length; k++) {
+      if (P[k].lo <= stp) return { res: "stop", px: Math.min(stp, P[k].hi) };
+      if (P[k].hi >= tgt) return { res: "target", px: tgt };
+      if (k + 1 >= m) return { res: "time", px: P[k].c };
+    }
+    return { res: "close", px: P.length ? P[P.length - 1].c : sig.ask };
+  }
+  const FEES = 1.3;  // $0.65 per contract each way at Fidelity
+  // All signals for a rule over many days, with context tags.
+  function labSignals(M, D, rule) {
+    const idx = new Map(D.map((d, i) => [d.date, i])), out = [], ranges = D.map((d, i) => i ? (d.h - d.l) / D[i - 1].c : null);
+    for (const [date, B] of M) {
+      const di = idx.get(date); if (di == null || di < 21) continue;
+      const prev = D[di - 1], avgR = ranges.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, sma20 = D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
+      const iv = Math.min(45, Math.max(9, 1.2 * avgR / 1.665 * Math.sqrt(252) * 100)), gap = B[0].o / prev.c - 1;
+      for (const ln of dayLines(B, prev, rule.lv)) {
+        if (rule.dirs !== "both" && ln.dir !== rule.dirs) continue;
+        const sg = scanLine(B, ln, rule.hold, rule.until); if (!sg) continue;
+        const op = optPath(B, sg.i, ln.dir, iv);
+        out.push({ date, m: B[sg.i].m + 1, dir: ln.dir, g: ln.g, line: ln.name, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down" });
+      }
+    }
+    return out;
+  }
+  function summarize(sigs, t, s, m) {
+    const rs = sigs.map((x) => { const e = exitOf(x, t, s, m); return { ...x, ...e, pnl: (e.px - x.ask) * 100 - FEES }; });
+    const n = rs.length, w = rs.filter((x) => x.pnl > 0).length;
+    return { n, wins: w, win: n ? w / n : null, avg: n ? rs.reduce((a, x) => a + x.pnl, 0) / n : null, rs };
+  }
+  const tBucket = (m) => m < 630 ? "9:30–10:30" : m < 720 ? "10:30–12:00" : m < 840 ? "12:00–2:00" : "2:00–3:30";
+  function contexts(rs, D) {
+    const rq = rs.map((x) => x.avgR).sort((a, b) => a - b), lo = rq[Math.floor(rq.length / 3)] ?? 0, hi = rq[Math.floor(rq.length * 2 / 3)] ?? 1;
+    return [
+      ["Time of day", (x) => tBucket(x.m), ["9:30–10:30", "10:30–12:00", "12:00–2:00", "2:00–3:30"]],
+      ["Which line broke", (x) => LINE_GROUPS[x.g], [...new Set(Object.values(LINE_GROUPS))]],
+      ["Calls or puts", (x) => (x.dir === "call" ? "Calls" : "Puts"), ["Calls", "Puts"]],
+      ["How the day opened", (x) => (x.gap > 0.002 ? "Gap up" : x.gap < -0.002 ? "Gap down" : "Flat open"), ["Gap down", "Flat open", "Gap up"]],
+      ["Recent market", (x) => (x.avgR <= lo ? "Calm week" : x.avgR >= hi ? "Busy week" : "Normal week"), ["Calm week", "Normal week", "Busy week"]],
+      ["Trend", (x) => (x.trend === "up" ? "Above 20-day average" : "Below 20-day average"), ["Above 20-day average", "Below 20-day average"]],
+      ["Same-day trade direction vs trend", (x) => ((x.dir === "call") === (x.trend === "up") ? "With the trend" : "Against the trend"), ["With the trend", "Against the trend"]],
+      ["Earlier false breaks", (x) => (x.resets ? "After a false break" : "First try"), ["First try", "After a false break"]],
+    ].map(([title, f, keys]) => ({ title, rows: keys.map((k) => { const g = rs.filter((x) => f(x) === k), w = g.filter((x) => x.pnl > 0).length; return { k, n: g.length, w, win: g.length ? w / g.length : null, avg: g.length ? g.reduce((a, x) => a + x.pnl, 0) / g.length : null }; }).filter((r) => r.n) }));
+  }
+  const LAB = { M: null, D: null, days: 0, test: null, ideas: null };
+  async function labData(nDays) {
+    const out = $("#lab-out");
+    out.innerHTML = `<div class="empty">Loading SPY's daily history…</div>`;
+    const D = await loadDailyAll(), dates = D.map((d) => d.date).slice(-nDays);
+    const M = await loadM1(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading 1-minute candles from Webull… ${a} of ${b} days. This is only slow the first time.</div>`; });
+    Object.assign(LAB, { M, D, days: M.size }); return LAB;
+  }
+  const money0 = (v) => (v == null ? "–" : (v < 0 ? "−$" : "+$") + Math.abs(v).toFixed(0));
+  function ctxTable(c, base) {
+    return `<div style="min-width:0"><div class="label" style="margin:10px 0 4px">${esc(c.title)}</div><table class="lab-tbl" style="width:100%"><thead><tr><th></th><th class="n">Trades</th><th class="n">Win rate</th><th class="n">Avg per trade</th></tr></thead><tbody>${c.rows.map((r) => `<tr><td>${esc(r.k)}</td><td class="n">${r.n}</td><td class="n">${P0(r.win)}${tpill(trust(r.w, r.n, base))}</td><td class="n ${cls(r.avg)}">${money0(r.avg)}</td></tr>`).join("")}</tbody></table></div>`;
+  }
+  function renderLabTest() {
+    const r = LAB.test, out = $("#lab-out"); if (!r) return;
+    const all = r.sum, ctx = contexts(all.rs, LAB.D), half = (rs) => { const n = rs.length, w = rs.filter((x) => x.pnl > 0).length; return { n, win: n ? w / n : null, avg: n ? rs.reduce((a, x) => a + x.pnl, 0) / n : null }; };
+    const ds = [...new Set(all.rs.map((x) => x.date))].sort(), cut = ds[Math.floor(ds.length * 2 / 3)] || "9999";
+    const o = half(all.rs.filter((x) => x.date < cut)), nw = half(all.rs.filter((x) => x.date >= cut));
+    const best = ctx.flatMap((c) => c.rows.filter((x) => x.n >= 12).map((x) => ({ ...x, t: c.title }))).sort((a, b) => b.avg - a.avg);
+    out.innerHTML = `<div class="bt-answer"><b>${esc(r.name)}</b> over ${LAB.days} days: <b>${all.n}</b> trades, won <b>${P0(all.win)}</b>, average <b class="${cls(all.avg)}">${money0(all.avg)}</b> per trade after fees${all.n ? `, total ${money0(all.avg * all.n)}` : ""}.</div>
+      <p class="small" style="margin-top:8px">Older days: ${o.n} trades, ${P0(o.win)} won, ${money0(o.avg)}/trade → recent days: ${nw.n} trades, ${P0(nw.win)} won, ${money0(nw.avg)}/trade · ${(() => { const st = (o.avg > 0) !== (nw.avg > 0) ? ["Changed recently", "var(--warn)"] : Math.abs(nw.avg) < Math.abs(o.avg) / 2 ? ["Weaker recently", "var(--warn)"] : ["Held up", "var(--good)"]; return `<b style="color:${st[1]}">${st[0]}</b>`; })()}</p>
+      ${best.length >= 2 ? `<p class="small" style="margin-top:6px">Best conditions: <b>${esc(best[0].k)}</b> (${esc(best[0].t.toLowerCase())}, ${money0(best[0].avg)}/trade over ${best[0].n}). Worst: <b>${esc(best[best.length - 1].k)}</b> (${money0(best[best.length - 1].avg)}/trade over ${best[best.length - 1].n}).</p>` : ""}
+      <div class="grid2" style="gap:14px">${ctx.map((c) => ctxTable(c, all.win)).join("")}</div>
+      <p class="small muted" style="margin-top:10px">How this works: one signal per line per day, the strike with an Ask nearest $1.00, your take-profit, stop and time limit, $1.30 fees per round trip. Option prices come from the Black-Scholes model with volatility estimated from the past 10 days. Real fills can be worse, especially in fast markets. Labels compare each row with your rule's overall win rate.</p>`;
+  }
+  $("#lab-test").addEventListener("click", async () => {
+    if (!S.mcp) return toast("The strategy lab needs Webull, which isn't available in this view.");
+    const btn = $("#lab-test"); btn.disabled = true; btn.textContent = "Testing…";
+    try {
+      await labData(+$("#lab-days").value);
+      $("#lab-out").innerHTML = `<div class="empty">Replaying ${LAB.days} days…</div>`; await new Promise((r) => setTimeout(r, 30));
+      const sigs = labSignals(LAB.M, LAB.D, RULE), sum = summarize(sigs, RULE.t, RULE.s, RULE.m);
+      LAB.test = { name: ruleName(RULE), sum }; renderLabTest();
+      // remember results by time of day for hints during live trading
+      const byT = {}; for (const x of sum.rs) { const k = tBucket(x.m); (byT[k] ||= { n: 0, w: 0, pnl: 0 }); byT[k].n++; if (x.pnl > 0) byT[k].w++; byT[k].pnl += x.pnl; }
+      try { localStorage.setItem("lab.hint", JSON.stringify({ at: Date.now(), name: ruleName(RULE), byT })); } catch {}
+      if (S.db) S.db.doc("patterns/lab").set({ ranAt: Date.now(), rule: ruleName(RULE), days: LAB.days, trades: sum.n, win: sum.win, avg: sum.avg, byTime: byT }).catch(() => {});
+    } catch (e) { $("#lab-out").innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    finally { btn.disabled = false; btn.textContent = "Test my rule"; }
+  });
+  // Strategy ideas: try many rules on the older 2/3 of days, then check the best on the newest 1/3.
+  $("#lab-ideas").addEventListener("click", async () => {
+    if (!S.mcp) return toast("The strategy lab needs Webull, which isn't available in this view.");
+    const btn = $("#lab-ideas"), out = $("#lab-out"); btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      await labData(+$("#lab-days").value);
+      const ds = [...LAB.M.keys()].sort(), cut = ds[Math.floor(ds.length * 2 / 3)];
+      const lineSets = [["Yesterday's high/low", { ph: true, pl: true }], ["Yesterday's close", { pc: true }], ["First 15 min range", { or15: true }], ["First 30 min range", { or30: true }], ["Today's high/low so far", { day: true }], ["All the usual lines", { ph: true, pl: true, or15: true, day: true }]];
+      const windows = [["before 11:00 am", 660], ["before 1:00 pm", 780], ["until 3:30 pm", 930]], exits = [];
+      for (const t of [30, 50, 100]) for (const s of [25, 40, 60]) for (const m of [15, 30, 60]) exits.push([t, s, m]);
+      const tried = [];
+      for (const hold of [0, 1, 3]) for (const [lname, lv] of lineSets) {
+        out.innerHTML = `<div class="empty">Trying rules… wait ${hold} min, ${esc(lname)}</div>`; await new Promise((r) => setTimeout(r, 0));
+        const base = { ...RULE_BASE, lv: { ph: false, pl: false, pc: false, or15: false, or30: false, day: false, ...lv }, hold, dirs: "both", until: 930 };
+        const sigs = labSignals(LAB.M, LAB.D, base);
+        for (const [wname, until] of windows) {
+          const ws = sigs.filter((x) => x.m < until), tr = ws.filter((x) => x.date < cut), te = ws.filter((x) => x.date >= cut);
+          for (const [t, s, m] of exits) { const a = summarize(tr, t, s, m); if (a.n >= 20) tried.push({ hold, lname, lv, wname, until, t, s, m, train: a, te }); }
+        }
+      }
+      tried.sort((a, b) => b.train.avg - a.train.avg);
+      const picks = [], seen = new Set();
+      for (const x of tried) { const key = x.hold + x.lname; if (seen.has(key)) continue; seen.add(key); picks.push(x); if (picks.length >= 5) break; }
+      for (const x of picks) { x.test = summarize(x.te, x.t, x.s, x.m); x.ok = x.test.n >= 10 && x.test.avg > 0 && x.test.avg >= x.train.avg * 0.25 && x.test.win >= 0.4; }
+      const v2 = { ...RULE_BASE, hold: 1 }, v2s = labSignals(LAB.M, LAB.D, v2), v2tr = summarize(v2s.filter((x) => x.date < cut), 50, 40, 30), v2te = summarize(v2s.filter((x) => x.date >= cut), 50, 40, 30);
+      LAB.ideas = { at: Date.now(), tried: tried.length, cut, from: ds[0], to: ds[ds.length - 1], picks, v2: { train: v2tr, test: v2te } };
+      renderIdeas();
+      if (S.db) S.db.doc("patterns/ideas").set({ ranAt: Date.now(), brief: ideasBrief() }).catch(() => {});
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    finally { btn.disabled = false; btn.textContent = "Find strategy ideas"; }
+  });
+  const ideaText = (x) => `When SPY breaks ${x.lname.toLowerCase().replace("all the usual lines", "any of the usual lines")}, ${x.hold ? `wait ${x.hold === 1 ? "1 minute" : x.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down). Only take signals ${x.wname}. Sell at +${x.t}%, −${x.s}%, or after ${x.m} minutes, whichever comes first.`;
+  const statLine = (a) => `${a.n} trades · ${P0(a.win)} won · ${money0(a.avg)}/trade`;
+  function ideasBrief() {
+    const I = LAB.ideas; if (!I) return "";
+    return `Tested ${I.tried} rule variations on ${I.from}..${I.cut} (training), checked on ${I.cut}..${I.to} (test).\nCurrent V2 default: training ${statLine(I.v2.train)}; test ${statLine(I.v2.test)}.\n` + I.picks.map((x, i) => `Idea ${i + 1}: ${ideaText(x)} Training ${statLine(x.train)}; test ${statLine(x.test)}; ${x.ok ? "held up" : "did not hold up"}.`).join("\n");
+  }
+  function renderIdeas() {
+    const I = LAB.ideas, out = $("#lab-out"); if (!I) return;
+    const okN = I.picks.filter((x) => x.ok).length;
+    out.innerHTML = `<div class="bt-answer">Tried <b>${I.tried}</b> rule variations on older days (${esc(dayName(I.from))} – ${esc(dayName(I.cut))}), then checked the top ${I.picks.length} on newer days they never saw (${esc(dayName(I.cut))} – ${esc(dayName(I.to))}). <b>${okN ? `${okN} held up` : "None held up"}</b>${okN ? "" : ", which is common and a useful answer in itself: the best-looking rules were probably luck"}.</div>
+      <p class="small" style="margin-top:8px">For comparison, your <b>V2 default</b> (wait 1 minute, +50% / −40% / 30 min): older days ${statLine(I.v2.train)} → newer days ${statLine(I.v2.test)}.</p>
+      ${I.picks.map((x, i) => `<div class="lab-idea${x.ok ? " ok" : ""}"><div class="row" style="justify-content:space-between"><b>Idea ${i + 1}</b><span class="pill ${x.ok ? "good" : "warn"}">${x.ok ? "Held up on new days" : "Did not hold up"}</span></div>
+        <p class="small" style="margin:6px 0">${esc(ideaText(x))}</p>
+        <div class="small">Older days (where it was found): ${statLine(x.train)}</div><div class="small">Newer days (the real test): <b>${statLine(x.test)}</b></div>
+        <div class="row" style="margin-top:8px"><button class="btn sm${x.ok ? " primary" : ""}" type="button" data-idea="${i}">Practice this rule</button></div></div>`).join("")}
+      <div class="row" style="margin-top:12px"><button class="btn" type="button" id="lab-ask">Ask Claude to suggest a strategy from this</button></div>
+      <div id="lab-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>
+      <p class="small muted" style="margin-top:10px">Why split old and new days: if you try hundreds of rules, some look great by luck. A rule only counts if it also works on days it wasn't picked from. Even then, practice it in replays before trusting it. Option prices are modelled, fees included, real fills can be worse.</p>`;
+  }
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-idea]");
+    if (b && LAB.ideas) {
+      const x = LAB.ideas.picks[+b.dataset.idea];
+      setRule({ ...RULE_BASE, hold: x.hold, until: x.until, t: x.t, s: x.s, m: x.m, dirs: "both", lv: { ph: false, pl: false, pc: false, or15: false, or30: false, day: false, ...x.lv } });
+      showView("practice"); $("#rp-rule-edit").open = true; spotlight("#rp-rule"); toast("This rule is now loaded in Practice. Replay a few days with it.");
+      return;
+    }
+    if (e.target.id !== "lab-ask" || !LAB.ideas) return;
+    const box = $("#lab-ai");
+    if (!S.sample) { box.textContent = "Suggestions need Claude, which isn't available in this view."; return; }
+    e.target.disabled = true; box.textContent = "Thinking…";
+    const prompt = `You are a careful, honest options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). A strategy lab replayed real SPY minute data with modelled option prices. Results:\n${ideasBrief()}\n${PAT.res ? "Market patterns:\n" + patternBrief(PAT.res) + "\n" : ""}${LAB.test ? `Their current practice rule (${LAB.test.name}) over ${LAB.days} days: ${statLine(LAB.test.sum)}.\n` : ""}\nIn plain words, under 260 words: (1) say which idea, if any, is worth practicing and why, judged mainly on the newer-days test, not the older days; (2) suggest one concrete strategy to practice next (entry, which lines, time window, exits) built from what held up, or say to keep V2 if nothing beat it; (3) list 2 reasons this could still fail live (small samples, model prices, changing markets); (4) how many practice trades to do before trusting it. Define jargon. No promises of profit.`;
+    try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
+    catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get a suggestion right now. Try again."; }
+    finally { e.target.disabled = false; }
+  });
+  // A one-line hint during live trading from the last "Test my rule" run.
+  function labHint() {
+    let h = null; try { h = JSON.parse(localStorage.getItem("lab.hint") || "null"); } catch {}
+    if (!h || !marketOpen()) return "";
+    const k = tBucket(etParts().min), x = h.byT[k]; if (!x || x.n < 8) return "";
+    return `<div class="small" style="margin-top:6px; opacity:.85">History check: ${esc(h.name)} between ${k} won ${Math.round((x.w / x.n) * 100)}% of ${x.n} past signals (${money0(x.pnl / x.n)}/trade).</div>`;
+  }
+
+  // ---------- days like today ----------
+  async function todayM5() {
+    if (!S.mcp || !marketOpen()) return [];
+    const d = etParts().date;
+    const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(d + "T12:00:00Z"), end_time: Date.now(), count: 100, trading_sessions: "RTH", real_time_required: false }, { cache: false });
+    return toBars(r.payload?.result?.[0]?.result).filter((b) => barDate(b) === d).map((b) => ({ m: barMin(b), o: b.o, h: b.h, l: b.l, c: b.c })).sort((a, b) => a.m - b.m);
+  }
+  $("#like-run").addEventListener("click", async () => {
+    if (!S.mcp) return toast("This needs Webull, which isn't available in this view.");
+    const btn = $("#like-run"), out = $("#like-out"); btn.disabled = true; btn.textContent = "Searching…";
+    try {
+      out.innerHTML = `<div class="empty">Loading history…</div>`;
+      const D = await loadDailyAll(), idx = new Map(D.map((d, i) => [d.date, i]));
+      const dates = D.map((d) => d.date).slice(-504);
+      const M = await load5m(dates, (a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; });
+      const R = D.map((d, i) => (i ? (d.h - d.l) / D[i - 1].c : null));
+      const feat = (di, open, or) => {
+        const p = D[di - 1], pp = D[di - 2], avg10 = R.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, avg60 = R.slice(di - 60, di).reduce((a, b) => a + b, 0) / 60, sma20 = D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
+        const f = [open / p.c - 1, p.c / pp.c - 1, avg10 / avg60, p.c / sma20 - 1];
+        if (or) f.push((or.c - open) / open, (or.h - or.l) / open);
+        return f;
+      };
+      // today (or the last trading day when the market is closed)
+      const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
+      let subj, subjName, tBars = [];
+      if (live) { tBars = await todayM5(); subj = { di: D.length, open: +live.open, label: "today" }; }
+      else { const last = D.length - 1; subj = { di: last, open: D[last].o, label: dayName(D[last].date) + " (last trading day)" }; tBars = M.get(D[last].date) || []; }
+      const useOR = tBars.filter((b) => b.m < 600).length >= 6 && (live ? etParts().min >= 600 : true);
+      const orOf = (bars) => { const g = bars.filter((b) => b.m < 600); return g.length >= 5 ? { h: Math.max(...g.map((b) => b.h)), l: Math.min(...g.map((b) => b.l)), c: g[g.length - 1].c } : null; };
+      const Dx = live ? [...D, { date: etParts().date, o: subj.open }] : D;
+      const fToday = (() => { const di = subj.di, p = Dx[di - 1], pp = Dx[di - 2]; const avg10 = R.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, avg60 = R.slice(di - 60, di).reduce((a, b) => a + b, 0) / 60, sma20 = Dx.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20; const f = [subj.open / p.c - 1, p.c / pp.c - 1, avg10 / avg60, p.c / sma20 - 1]; const or = useOR ? orOf(tBars) : null; if (or) f.push((or.c - subj.open) / subj.open, (or.h - or.l) / subj.open); return f; })();
+      const cands = [];
+      for (const [date, bars] of M) { const di = idx.get(date); if (di == null || di < 61 || di === subj.di) continue; const or = useOR ? orOf(bars) : null; if (useOR && !or) continue; cands.push({ date, di, bars, f: feat(di, D[di].o, or) }); }
+      if (cands.length < 30) { out.innerHTML = `<div class="empty">Not enough history loaded yet to compare.</div>`; return; }
+      const sd = fToday.map((_, j) => { const v = cands.map((c) => c.f[j]), mu = v.reduce((a, b) => a + b, 0) / v.length; return Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) || 1; });
+      cands.forEach((c) => (c.dist = Math.sqrt(c.f.reduce((a, v, j) => a + ((v - fToday[j]) / sd[j]) ** 2, 0))));
+      const K = Math.min(40, cands.length), near = cands.sort((a, b) => a.dist - b.dist).slice(0, K);
+      // what happened next on those days
+      const res = near.map((c) => { const B = c.bars, p = D[c.di - 1], close = B[B.length - 1].c, after = B.filter((b) => b.m >= (useOR ? 600 : 570)); const or = orOf(B);
+        const iu = or ? after.findIndex((b) => b.c > or.h) : -1, idn = or ? after.findIndex((b) => b.c < or.l) : -1;
+        return { up: close > (useOR ? or.c : B[0].o), rng: (Math.max(...after.map((b) => b.h)) - Math.min(...after.map((b) => b.l))) / B[0].o, hiBrk: Math.max(...B.map((b) => b.h)) > p.h, hiHold: close > p.h, loBrk: Math.min(...B.map((b) => b.l)) < p.l, loHold: close < p.l,
+          orUp: iu >= 0 && (idn < 0 || iu < idn), orDn: idn >= 0 && (iu < 0 || idn < iu), orUpHold: or && close > or.h, orDnHold: or && close < or.l, fill: (B[0].o >= p.c ? Math.min(...B.map((b) => b.l)) <= p.c : Math.max(...B.map((b) => b.h)) >= p.c) }; });
+      const cnt = (f) => res.filter(f).length, px0 = live ? +live.price : D[D.length - 1].c;
+      const hiB = cnt((x) => x.hiBrk), loB = cnt((x) => x.loBrk), orU = cnt((x) => x.orUp), orD = cnt((x) => x.orDn), upN = cnt((x) => x.up);
+      let ruleLine = "";
+      if (LAB.test) { const set = new Set(near.map((c) => c.date)), g = LAB.test.sum.rs.filter((x) => set.has(x.date)); if (g.length) { const w = g.filter((x) => x.pnl > 0).length; ruleLine = `<li>Your rule (${esc(LAB.test.name)}) on these days: <b>${g.length}</b> signals, won <b>${Math.round((w / g.length) * 100)}%</b>, ${money0(g.reduce((a, x) => a + x.pnl, 0) / g.length)}/trade ${tpill(trust(w, g.length, LAB.test.sum.win))}.</li>`; } }
+      const gapNow = fToday[0];
+      out.innerHTML = `<div class="bt-answer">Compared <b>${esc(subj.label)}</b> with ${cands.length} past days and picked the <b>${K} most similar</b>, matching: opened ${gapNow >= 0 ? "up" : "down"} ${Math.abs(gapNow * 100).toFixed(2)}%, the day before ${fToday[1] >= 0 ? "rose" : "fell"} ${Math.abs(fToday[1] * 100).toFixed(1)}%, the market's been ${fToday[2] > 1.15 ? "busier than usual" : fToday[2] < 0.85 ? "calmer than usual" : "about as busy as usual"}, SPY is ${fToday[3] >= 0 ? "above" : "below"} its 20-day average${useOR ? `, and the first 30 minutes moved ${fToday[4] >= 0 ? "up" : "down"} ${Math.abs(fToday[4] * 100).toFixed(2)}%` : ""}.</div>
+        <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">
+          <li>${useOR ? "From 10:00 to the close" : "Over the day"}, SPY finished <b>${upN >= K / 2 ? "higher" : "lower"}</b> on ${Math.round((Math.max(upN, K - upN) / K) * 100)}% of these days ${tpill(trust(Math.max(upN, K - upN), K))}.</li>
+          <li>Typical range ${useOR ? "after 10:00" : "for the day"}: <b>$${(median(res.map((x) => x.rng)) * px0).toFixed(2)}</b>. That's how much room there usually was to move.</li>
+          <li>Broke yesterday's high on ${Math.round((hiB / K) * 100)}%; ${hiB ? `held above it at the close on <b>${Math.round((cnt((x) => x.hiHold) / hiB) * 100)}%</b> of those` : "–"}. Broke yesterday's low on ${Math.round((loB / K) * 100)}%; ${loB ? `held below on <b>${Math.round((cnt((x) => x.loHold) / loB) * 100)}%</b>` : "–"}.</li>
+          ${useOR ? `<li>First-30-minute breakout: up first on ${Math.round((orU / K) * 100)}% (held to the close ${orU ? Math.round((cnt((x) => x.orUp && x.orUpHold) / orU) * 100) : 0}%), down first on ${Math.round((orD / K) * 100)}% (held ${orD ? Math.round((cnt((x) => x.orDn && x.orDnHold) / orD) * 100) : 0}%).</li>` : ""}
+          <li>The opening gap filled the same day on ${Math.round((cnt((x) => x.fill) / K) * 100)}% of these days.</li>
+          ${ruleLine || (LAB.test ? "" : `<li class="muted">Run <b>Test my rule</b> in the Strategy lab to also see how your rule did on these days.</li>`)}
+        </ul>
+        <div class="small" style="margin-top:10px"><b>Closest matches</b> (tap to replay in Practice):</div>
+        <div class="like-days">${near.slice(0, 10).map((c) => `<button class="btn sm" type="button" data-like-day="${c.date}">${esc(dayName(c.date).replace(/^\w+, /, ""))} ${c.date.slice(0, 4)}</button>`).join("")}</div>
+        <p class="small muted" style="margin-top:10px">${K} days is a small sample, so read these as "leans", not certainties. ${live && !useOR ? (etParts().min < 600 ? "After 10:00 am, run this again: it will also match the first 30 minutes and get sharper." : "Today's first 30 minutes couldn't be loaded, so this matched on the open only.") : ""}</p>`;
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    finally { btn.disabled = false; btn.textContent = "Find days like today"; }
+  });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-like-day]"); if (!b) return;
+    const d = b.dataset.likeDay, sel = $("#rp-date");
+    if (PAT.daily && PAT.daily.length > HIST.daily.length) HIST.daily = PAT.daily.filter((x) => x.date < etParts().date);
+    if (![...sel.options].some((o) => o.value === d)) sel.insertAdjacentHTML("afterbegin", `<option value="${d}">${esc(dayName(d))} · similar day</option>`);
+    sel.value = d; showView("practice"); $("#rp-load").click();
   });
 
   // ---------- screenshot reader ----------
