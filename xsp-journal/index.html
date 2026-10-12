@@ -200,6 +200,16 @@ textarea { min-height: 90px; resize: vertical; }
 .be-box { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: var(--info-bg); }
 .paste-zone { border: 2px dashed var(--accent); border-radius: 8px; padding: 18px 12px; text-align: center; color: var(--muted); min-height: 60px; outline: none; -webkit-user-select: text; user-select: text; }
 .paste-zone:focus { background: var(--info-bg); }
+.pat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.pat-card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; min-width: 0; }
+.pat-card h3 { font-size: 15px; margin: 0 0 4px; }
+.pat-big { font-family: var(--mono); font-size: 22px; font-weight: 600; margin: 4px 0; }
+.pat-bars { display: grid; grid-template-columns: minmax(70px, auto) 1fr auto; gap: 4px 8px; align-items: center; font-size: 12.5px; margin-top: 8px; }
+.pat-bars .track { height: 10px; background: var(--panel-2); border-radius: 0 4px 4px 0; overflow: hidden; }
+.pat-bars .fill { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
+.pat-bars .fill.hi { background: var(--ink); }
+.pat-bars .v { font-family: var(--mono); color: var(--ink); text-align: right; }
+.pat-today { border-left: 3px solid var(--accent); background: var(--info-bg); padding: 10px 12px; border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 14px; }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -712,6 +722,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- LEARN -->
   <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
     <div class="panel" id="progress"></div>
+    <div class="panel" id="pat-panel">
+      <div class="panel-head"><div><h2>SPY pattern finder</h2><p class="small muted" style="margin-top:4px">Looks through SPY's past trading days and finds what tends to happen: how far it moves, when it moves, what gaps and level breaks usually do. These are tendencies, not promises.</p></div>
+        <div class="row"><select id="pat-period" style="width:auto" aria-label="How much history"><option value="126">Last 6 months</option><option value="252" selected>Last year</option><option value="504">Last 2 years</option><option value="all">All history (daily patterns)</option></select><button class="btn primary" type="button" id="pat-run">Find patterns</button></div></div>
+      <div id="pat-out"><div class="empty">Press <b>Find patterns</b>. The first run loads a lot of history from Webull and takes about a minute. After that it's quick.</div></div>
+    </div>
     <div class="panel">
       <div class="panel-head"><div><h2>How a trade fits together</h2><p class="small muted" style="margin-top:4px">Read left to right. Each stage feeds the next. Tap any idea for a short lesson.</p></div><span class="small muted" id="learn-progress"></span></div>
       <div class="flow" id="flow"></div>
@@ -2439,6 +2454,170 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       </details>`;
   }
 
+  // ---------- pattern finder: what SPY tends to do ----------
+  const PAT = { daily: null, m5: null, res: null };
+  async function loadDailyAll() {
+    if (PAT.daily) return PAT.daily;
+    const rows = new Map(); let end = Date.now();
+    for (let k = 0; k < 6; k++) {
+      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "D", count: 1200, end_time: end }, LONG_CACHE);
+      const got = r.payload?.result?.[0]?.result || []; if (!got.length) break;
+      for (const x of got) rows.set(String(x.time).slice(0, 10), { date: String(x.time).slice(0, 10), o: +x.open, h: +x.high, l: +x.low, c: +x.close });
+      const oldest = Math.min(...got.map((x) => Date.parse(x.time))); if (got.length < 1200 || !(oldest < end)) break; end = oldest - 1;
+    }
+    PAT.daily = [...rows.values()].filter((d) => d.date < etParts().date || !marketOpen()).sort((a, b) => a.date.localeCompare(b.date));
+    return PAT.daily;
+  }
+  // 5-minute regular-hours candles per day, cached in this browser so later runs are fast.
+  async function load5m(dates, onProgress) {
+    let cache = {}; try { cache = JSON.parse(localStorage.getItem("pat.m5") || "{}"); } catch {}
+    const need = dates.filter((d) => !cache[d]);
+    for (let i = 0; i < need.length; i += 15) {
+      const chunk = need.slice(i, i + 15);
+      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+      for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (cache[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
+      for (const d of chunk) cache[d] ||= [];
+      onProgress?.(Math.min(i + 15, need.length), need.length);
+    }
+    try { const keep = Object.keys(cache).sort().slice(-520); localStorage.setItem("pat.m5", JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
+    return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 60));
+  }
+  const pctOf = (a, n) => (n ? a / n : null);
+  const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), i = s.length / 2; return s.length % 2 ? s[Math.floor(i)] : (s[i - 1] + s[i]) / 2; };
+  const quant = (a, q) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
+  function dailyPatterns(D) {
+    const px0 = D[D.length - 1].c, rows = D.slice(1).map((d, i) => ({ ...d, p: D[i] }));
+    // 1. typical range
+    const rng = rows.map((d) => (d.h - d.l) / d.p.c);
+    const bucketsR = [[0, 0.005, "under 0.5%"], [0.005, 0.01, "0.5–1%"], [0.01, 0.015, "1–1.5%"], [0.015, 0.02, "1.5–2%"], [0.02, 9, "over 2%"]];
+    const range = { med: median(rng), q75: quant(rng, 0.75), q25: quant(rng, 0.25), px: px0, dist: bucketsR.map(([a, b, n]) => ({ n, v: pctOf(rng.filter((x) => x >= a && x < b).length, rng.length) })) };
+    // 2. gaps
+    const gb = [[-9, -0.005, "Down more than 0.5%"], [-0.005, -0.002, "Down 0.2–0.5%"], [-0.002, 0.002, "Flat (under 0.2%)"], [0.002, 0.005, "Up 0.2–0.5%"], [0.005, 9, "Up more than 0.5%"]];
+    const gaps = gb.map(([a, b, n]) => { const g = rows.filter((d) => { const x = d.o / d.p.c - 1; return x >= a && x < b; }); const filled = g.filter((d) => (d.o >= d.p.c ? d.l <= d.p.c : d.h >= d.p.c)).length; return { n, a, b, days: g.length, fill: pctOf(filled, g.length), up: pctOf(g.filter((d) => d.c > d.o).length, g.length) }; });
+    // 3. yesterday's high / low
+    const aboveH = rows.filter((d) => d.h > d.p.h), belowL = rows.filter((d) => d.l < d.p.l);
+    const lvl = { hiTouch: pctOf(aboveH.length, rows.length), hiHold: pctOf(aboveH.filter((d) => d.c > d.p.h).length, aboveH.length), loTouch: pctOf(belowL.length, rows.length), loHold: pctOf(belowL.filter((d) => d.c < d.p.l).length, belowL.length), both: pctOf(rows.filter((d) => d.h > d.p.h && d.l < d.p.l).length, rows.length), inside: pctOf(rows.filter((d) => d.h <= d.p.h && d.l >= d.p.l).length, rows.length) };
+    // 4. day after a big day
+    const chg = (d) => d.c / d.p.c - 1, next = rows.slice(1).map((d, i) => ({ d, prev: rows[i] }));
+    const after = [["After a drop of more than 1%", (x) => chg(x.prev) < -0.01], ["After a normal day", (x) => Math.abs(chg(x.prev)) <= 0.01], ["After a gain of more than 1%", (x) => chg(x.prev) > 0.01]].map(([n, f]) => { const g = next.filter(f); return { n, days: g.length, up: pctOf(g.filter((x) => chg(x.d) > 0).length, g.length), avgRange: g.length ? g.reduce((s, x) => s + (x.d.h - x.d.l) / x.d.p.c, 0) / g.length : null }; });
+    // 5. weekday
+    const wd = ["Mon", "Tue", "Wed", "Thu", "Fri"].map((n, i) => { const g = rows.filter((d) => new Date(d.date + "T12:00:00Z").getUTCDay() === i + 1); return { n, days: g.length, up: pctOf(g.filter((d) => d.c > d.p.c).length, g.length), range: g.length ? median(g.map((d) => (d.h - d.l) / d.p.c)) : null }; });
+    return { days: rows.length, from: rows[0]?.date, to: rows[rows.length - 1]?.date, upDays: pctOf(rows.filter((d) => d.c > d.p.c).length, rows.length), range, gaps, lvl, after, wd };
+  }
+  function intradayPatterns(M, D) {
+    const days = [...M.entries()], blocks = []; for (let m = 570; m < 960; m += 30) blocks.push(m);
+    const bname = (m) => fmtClock(m).replace(/:00 /, " ").replace(/ (am|pm)/, "$1");
+    const move = blocks.map(() => []), hiAt = blocks.map(() => 0), loAt = blocks.map(() => 0);
+    let orUp = 0, orDn = 0, orNone = 0, upHold = 0, dnHold = 0, upFail = 0, dnFail = 0, firstSame = 0, firstN = 0;
+    for (const [date, bars] of days) {
+      blocks.forEach((m0, k) => { const g = bars.filter((b) => b.m >= m0 && b.m < m0 + 30); if (g.length) move[k].push((Math.max(...g.map((b) => b.h)) - Math.min(...g.map((b) => b.l))) / bars[0].o); });
+      const H = Math.max(...bars.map((b) => b.h)), L = Math.min(...bars.map((b) => b.l));
+      const hb = bars.find((b) => b.h === H), lb = bars.find((b) => b.l === L);
+      hiAt[Math.min(blocks.length - 1, Math.floor((hb.m - 570) / 30))]++; loAt[Math.min(blocks.length - 1, Math.floor((lb.m - 570) / 30))]++;
+      // opening range = first 30 minutes
+      const or = bars.filter((b) => b.m < 600), rest = bars.filter((b) => b.m >= 600); if (or.length < 5 || !rest.length) continue;
+      const oh = Math.max(...or.map((b) => b.h)), ol = Math.min(...or.map((b) => b.l)), close = bars[bars.length - 1].c;
+      const iu = rest.findIndex((b) => b.c > oh), idn = rest.findIndex((b) => b.c < ol);
+      if (iu < 0 && idn < 0) orNone++;
+      else if (iu >= 0 && (idn < 0 || iu < idn)) { orUp++; if (close > oh) upHold++; if (idn > iu) upFail++; }
+      else { orDn++; if (close < ol) dnHold++; if (iu > idn) dnFail++; }
+      // first hour vs rest of day
+      const h1 = bars.filter((b) => b.m < 630), after = bars.filter((b) => b.m >= 630);
+      if (h1.length && after.length) { firstN++; if (Math.sign(h1[h1.length - 1].c - h1[0].o) === Math.sign(close - after[0].o)) firstSame++; }
+    }
+    const n = days.length, px0 = D[D.length - 1].c;
+    return { days: n, from: days[0]?.[0], to: days[n - 1]?.[0], px: px0,
+      blocks: blocks.map((m, k) => ({ n: bname(m), v: median(move[k]) })), hiAt: blocks.map((m, k) => ({ n: bname(m), v: pctOf(hiAt[k], n) })), loAt: blocks.map((m, k) => ({ n: bname(m), v: pctOf(loAt[k], n) })),
+      firstHourHiLo: pctOf(days.filter(([, bars]) => { const H = Math.max(...bars.map((b) => b.h)), L = Math.min(...bars.map((b) => b.l)); return bars.find((b) => b.h === H).m < 630 || bars.find((b) => b.l === L).m < 630; }).length, n),
+      or: { up: pctOf(orUp, n), dn: pctOf(orDn, n), none: pctOf(orNone, n), upHold: pctOf(upHold, orUp), dnHold: pctOf(dnHold, orDn), upFail: pctOf(upFail, orUp), dnFail: pctOf(dnFail, orDn) },
+      firstHour: pctOf(firstSame, firstN) };
+  }
+  const pbars = (items, fmt, hiN) => { const max = Math.max(...items.map((x) => x.v || 0), 1e-9); return `<div class="pat-bars">${items.map((x) => `<span>${esc(x.n)}</span><div class="track" title="${esc(x.n)}: ${x.v != null ? fmt(x.v) : "–"}"><div class="fill${x === hiN ? " hi" : ""}" style="width:${((x.v || 0) / max) * 100}%"></div></div><span class="v">${x.v != null ? fmt(x.v) : "–"}</span>`).join("")}</div>`; };
+  const P0 = (v) => v == null ? "–" : Math.round(v * 100) + "%", P1 = (v) => v == null ? "–" : (v * 100).toFixed(1) + "%";
+  function renderPatterns() {
+    const r = PAT.res, out = $("#pat-out"); if (!r) return;
+    const d = r.daily, m = r.intra, px = d.range.px, dol = (pct) => "$" + (pct * px).toFixed(2);
+    const maxBlock = m ? m.blocks.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a)) : null, minBlock = m ? m.blocks.reduce((a, b) => ((b.v ?? 9) < (a.v ?? 9) ? b : a)) : null;
+    const hiBlock = (arr) => arr.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a));
+    const realGaps = d.gaps.filter((g) => g.a !== -0.002), gDays = realGaps.reduce((a, g) => a + g.days, 0), gFill = gDays ? realGaps.reduce((a, g) => a + (g.fill || 0) * g.days, 0) / gDays : null;
+    // today vs history
+    let today = "";
+    const sn = LIVE.snap, lt = sn && +sn.last_trade_time;
+    if (sn && lt && etParts(new Date(lt)).date === etParts().date) {
+      const gap = +sn.open / +sn.pre_close - 1, g = d.gaps.find((x) => gap >= x.a && gap < x.b), rs = (+sn.high - +sn.low) / +sn.pre_close;
+      today = `<div class="pat-today"><b>Today so far:</b> SPY opened ${gap >= 0 ? "up" : "down"} ${Math.abs(gap * 100).toFixed(2)}% (${g ? esc(g.n.toLowerCase()) : ""}). In the past, ${g && g.days ? `<b>${P0(g.fill)}</b> of gaps like this were filled the same day` : "there were too few gaps like this to say"}. Today's range so far is <b>$${(+sn.high - +sn.low).toFixed(2)}</b>; ${P0(pctOf(r.rangeList.filter((x) => x > rs).length, r.rangeList.length))} of past days ended with a bigger range than that.</div>`;
+    }
+    out.innerHTML = `${today}
+      <p class="small muted" style="margin-bottom:10px">Daily patterns: ${d.days.toLocaleString()} days (${esc(dayName(d.from))} – ${esc(dayName(d.to))}).${m ? ` Intraday patterns: ${m.days} days of 5-minute candles.` : ""} SPY closed higher on ${P0(d.upDays)} of these days.</p>
+      <div class="pat-grid">
+        <div class="pat-card"><h3>How far SPY moves in a day</h3><div class="pat-big">${dol(d.range.med)} <span class="small muted">(${P1(d.range.med)})</span></div>
+          <p class="small">On a typical day, the distance from SPY's high to its low is about <b>${dol(d.range.med)}</b> at today's price. 1 day in 4 it's more than <b>${dol(d.range.q75)}</b>, and 1 in 4 it's under ${dol(d.range.q25)}.</p>
+          ${pbars(d.range.dist, P0)}<p class="small muted" style="margin-top:6px">Why it matters: a 0DTE option needs SPY to move. On a quiet day, there may not be enough room for your take-profit.</p></div>
+        ${m ? `<div class="pat-card"><h3>When SPY moves the most</h3><div class="pat-big">${esc(maxBlock.n)}</div>
+          <p class="small">The busiest half hour is <b>${esc(maxBlock.n)}</b> (typical range ${dol(maxBlock.v)}). The quietest is <b>${esc(minBlock.n)}</b> (${dol(minBlock.v)}). Typical high-to-low range in each half hour:</p>
+          ${pbars(m.blocks.map((x) => ({ ...x })), (v) => dol(v), null)}<p class="small muted" style="margin-top:6px">${(() => { const avg = (ks) => ks.reduce((a, k) => a + (m.blocks[k].v || 0), 0) / ks.length, op = avg([0, 1]), mid = avg([4, 5, 6, 7]), cl = avg([11, 12]); return `First hour: ${dol(op)} per half hour. Midday (11:30–1:30): ${dol(mid)}. Last hour: ${dol(cl)}. ` + (mid < op * 0.8 ? "Midday is clearly quieter, so a midday signal has less room to reach your take-profit before time decay eats the option." : "Midday isn't much quieter than the open in this period."); })()}</p></div>` : ""}
+        ${m ? `<div class="pat-card"><h3>When the day's high and low happen</h3><div class="pat-big">${P0(m.firstHourHiLo)}</div>
+          <p class="small">On <b>${P0(m.firstHourHiLo)}</b> of days, the day's high <i>or</i> low was set in the first hour (by 10:30 am). Most often the high came at <b>${esc(hiBlock(m.hiAt).n)}</b> and the low at <b>${esc(hiBlock(m.loAt).n)}</b>.</p>
+          <div class="small" style="margin-top:6px"><b>Where the day's high was set</b></div>${pbars(m.hiAt, P0)}</div>` : ""}
+        <div class="pat-card"><h3>Breaking yesterday's high or low</h3><div class="pat-big">${P0(d.lvl.hiTouch)} / ${P0(d.lvl.loTouch)}</div>
+          <p class="small">SPY traded above yesterday's high on <b>${P0(d.lvl.hiTouch)}</b> of days, but only <b>${P0(d.lvl.hiHold)}</b> of those days <i>closed</i> above it. It went below yesterday's low on ${P0(d.lvl.loTouch)} of days, and ${P0(d.lvl.loHold)} of those closed below it.</p>
+          ${pbars([{ n: "Broke the high", v: d.lvl.hiTouch }, { n: "…and closed above", v: d.lvl.hiTouch * d.lvl.hiHold }, { n: "Broke the low", v: d.lvl.loTouch }, { n: "…and closed below", v: d.lvl.loTouch * d.lvl.loHold }, { n: "Stayed inside", v: d.lvl.inside }], P0)}
+          <p class="small muted" style="margin-top:6px">Why it matters: a break of yesterday's level is common, and holding it is the hard part. That's what your 60-second hold tries to filter.</p></div>
+        ${m ? `<div class="pat-card"><h3>Breaking out of the first 30 minutes</h3><div class="pat-big">${P0(m.or.up)} up · ${P0(m.or.dn)} down</div>
+          <p class="small">After 10:00 am, SPY closed a candle above the first 30 minutes' high first on ${P0(m.or.up)} of days, and below its low first on ${P0(m.or.dn)}. It stayed inside all day on ${P0(m.or.none)}.</p>
+          ${pbars([{ n: "Broke up, closed above", v: m.or.upHold }, { n: "Broke up, then broke down", v: m.or.upFail }, { n: "Broke down, closed below", v: m.or.dnHold }, { n: "Broke down, then broke up", v: m.or.dnFail }], P0)}
+          <p class="small muted" style="margin-top:6px">"Then broke the other way" is a failed breakout. If that number is high, waiting for a hold matters.</p></div>` : ""}
+        <div class="pat-card"><h3>Gaps at the open</h3><div class="pat-big">${P0(gFill)} filled</div><p class="small">Of the ${gDays} days that opened at least 0.2% away from yesterday's close, ${P0(gFill)} came back to it the same day.</p>
+          <p class="small">A gap is when SPY opens away from yesterday's close. A gap is "filled" when price comes back to yesterday's close the same day. Share of gaps filled, by size:</p>
+          ${pbars(d.gaps.map((g) => ({ n: g.n, v: g.fill })), P0)}<p class="small muted" style="margin-top:6px">${d.gaps.map((g) => `${g.n}: ${g.days} days`).join(" · ")}</p></div>
+        <div class="pat-card"><h3>The day after a big day</h3>
+          <p class="small">Chance SPY closes higher the next day, and its typical range:</p>
+          ${pbars(d.after.map((x) => ({ n: x.n, v: x.up })), P0)}<p class="small muted" style="margin-top:6px">${d.after.map((x) => `${x.n.replace("After ", "after ")}: ${x.days} days, typical range ${dol(x.avgRange || 0)}`).join(" · ")}. Big days are usually followed by bigger-than-normal ranges.</p></div>
+        <div class="pat-card"><h3>Day of the week</h3>
+          <p class="small">Chance SPY closes higher, by weekday:</p>${pbars(d.wd.map((x) => ({ n: x.n, v: x.up })), P0)}
+          <p class="small muted" style="margin-top:6px">Typical range: ${d.wd.map((x) => `${x.n} ${dol(x.range || 0)}`).join(" · ")}. Differences of a few percent are usually just noise.</p></div>
+        ${m ? `<div class="pat-card"><h3>Does the first hour predict the rest?</h3><div class="pat-big">${P0(m.firstHour)}</div>
+          <p class="small">On <b>${P0(m.firstHour)}</b> of days, SPY moved the same direction after 10:30 am as it did in the first hour. ${m.firstHour > 0.55 ? "That's a mild tendency to keep going." : m.firstHour < 0.45 ? "That's a mild tendency to reverse." : "That's close to a coin flip, so the first hour alone tells you little."}</p></div>` : ""}
+      </div>
+      <div class="row" style="margin-top:12px"><button class="btn" type="button" id="pat-ask">Explain what this means for my trading</button><span class="small muted">Last run ${esc(new Date(r.ranAt).toLocaleString())}</span></div>
+      <div id="pat-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>
+      <p class="small muted" style="margin-top:8px">Patterns describe the past. Markets change, and a 60% tendency still fails 4 times out of 10. Use them to set expectations, not to predict a single day.</p>`;
+  }
+  function patternBrief(r) {
+    const d = r.daily, m = r.intra, px = d.range.px, dol = (p) => "$" + (p * px).toFixed(2);
+    return [`SPY ${d.days} days ${d.from}..${d.to}; up days ${P0(d.upDays)}.`, `Typical daily range ${dol(d.range.med)} (25-75%: ${dol(d.range.q25)}-${dol(d.range.q75)}).`,
+      `Broke prior high ${P0(d.lvl.hiTouch)} of days, closed above it ${P0(d.lvl.hiHold)} of those; broke prior low ${P0(d.lvl.loTouch)}, closed below ${P0(d.lvl.loHold)}; inside days ${P0(d.lvl.inside)}.`,
+      `Gap fill rates: ${d.gaps.map((g) => `${g.n} ${P0(g.fill)} (${g.days}d)`).join("; ")}.`, `Next-day up%: ${d.after.map((x) => `${x.n} ${P0(x.up)}`).join("; ")}.`, `Weekday up%: ${d.wd.map((x) => `${x.n} ${P0(x.up)}`).join(", ")}.`,
+      m ? `Intraday (${m.days} days, 5-min): typical 30-min range by block ${m.blocks.map((b) => `${b.n} ${dol(b.v)}`).join(", ")}. High or low set in first hour on ${P0(m.firstHourHiLo)} of days. First-30-min breakout: up first ${P0(m.or.up)} (closed above ${P0(m.or.upHold)}, failed other way ${P0(m.or.upFail)}), down first ${P0(m.or.dn)} (closed below ${P0(m.or.dnHold)}, failed ${P0(m.or.dnFail)}), none ${P0(m.or.none)}. First hour direction continued ${P0(m.firstHour)}.` : ""].join("\n");
+  }
+  $("#pat-run").addEventListener("click", async () => {
+    if (!S.mcp) return toast("The pattern finder needs Webull, which isn't available in this view.");
+    const btn = $("#pat-run"), out = $("#pat-out"), per = $("#pat-period").value;
+    btn.disabled = true; btn.textContent = "Working…";
+    try {
+      out.innerHTML = `<div class="empty">Loading SPY's daily history from Webull…</div>`;
+      const all = await loadDailyAll();
+      const D = per === "all" ? all : all.slice(-(+per + 1));
+      const idays = D.slice(1).map((x) => x.date).slice(-Math.min(504, per === "all" ? 504 : +per));
+      const M = await load5m(idays, (a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; });
+      const daily = dailyPatterns(D), intra = M.size >= 20 ? intradayPatterns(M, D) : null;
+      PAT.res = { ranAt: Date.now(), period: per, daily, intra, rangeList: D.slice(1).map((x, i) => (x.h - x.l) / D[i].c) };
+      renderPatterns();
+      if (S.db) S.db.doc("patterns/latest").set({ ranAt: PAT.res.ranAt, period: per, brief: patternBrief(PAT.res) }).catch(() => {});
+    } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
+    finally { btn.disabled = false; btn.textContent = "Find patterns"; }
+  });
+  document.addEventListener("click", async (e) => {
+    if (e.target.id !== "pat-ask" || !PAT.res) return;
+    const box = $("#pat-ai");
+    if (!S.sample) { box.textContent = "Explanations need Claude, which isn't available in this view."; return; }
+    e.target.disabled = true; box.textContent = "Thinking…";
+    const prompt = `You are a patient options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). Their entry rule (V2): a pre-picked level breaks, SPY holds beyond it for 60 seconds, no known opposing news. They exit with a take-profit %, stop %, and time limit.\n\nHere are statistics from SPY's own history:\n${patternBrief(PAT.res)}\n\nIn plain words (under 250 words, short bullets): name the 4-5 most useful patterns for this person, what each means for their rule (which times and levels look better or worse, when to expect enough movement, how often breaks fail), and one thing to test in Practice. Define jargon. Don't promise profits or tell them to buy anything. Say when a difference is too small to matter.`;
+    try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
+    catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get an explanation right now. Try again."; }
+    finally { e.target.disabled = false; }
+  });
+
   // ---------- screenshot reader ----------
   let shotCtx = null;
   const shotCtxFor = (el) => { const pos = el.closest(".pos"); return pos ? { kind: "pos", id: pos.dataset.id, host: pos.querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') }; };
@@ -2856,6 +3035,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (/^(pause|stop|hold on|wait)$/.test(s) && view === "practice") return () => ACT.practice("pause");
     if ((m = /^(?:step|next|forward|\+)\s*(\d+)?\s*(min|mins|minutes?)?$/.exec(s)) && (view === "practice")) return () => ACT.practice("step", +(m[1] || 1));
     if (/^(skip to (next )?signal|fast forward|ff)$/.test(s)) return () => ACT.practice("ff");
+    if (/^(find |show )?(spy )?patterns?( finder)?$/.test(s)) return () => { showView("learn"); $("#pat-run").click(); spotlight("#pat-panel"); return "Finding patterns in SPY's history…"; };
     if (/^(run (the )?(rule )?test|backtest|test (the )?rule)$/.test(s)) return () => { showView("practice"); $("#bt-run").click(); return "Running the rule test on past days…"; };
     // exits and checkpoints
     if ((m = /^(exit|close|sell|get out|cash out)\b(.*)$/.exec(s))) {
