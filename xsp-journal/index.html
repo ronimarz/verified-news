@@ -487,7 +487,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     <div class="panel row" id="lc-more" hidden style="justify-content:space-between"><span class="small">You have a trade open. Focus on managing it. The entry check is hidden.</span><button class="btn" type="button" id="lc-more-btn">Check a new setup</button></div>
     <div class="grid2" id="lc-main" style="align-items: start;">
       <div class="panel">
-        <div class="panel-head"><h2>V2 entry check</h2><button class="btn" id="lc-reset" type="button">Start over</button></div>
+        <div class="panel-head"><h2>Entry check</h2><button class="btn" id="lc-reset" type="button">Start over</button></div>
         <div class="steps">
           <div class="step" id="st1">
             <div class="no">1</div>
@@ -1384,7 +1384,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
     else if (marketOpen() && newsBlock()) { const nb = newsBlock(); c2 = "stop"; verdict = "Wait: news release"; why = `${esc(EVENT_NAME[nb.k])} comes out at ${fmtClock(nb.t)}. Prices jump around for a few minutes, so no new entries until ${fmtClock(nb.t + 10)}.`; }
     else if (activeStrat() && marketOpen() && etParts().min >= activeStrat().rule.until) { c2 = "stop"; verdict = "Outside today's window"; why = `Today's strategy only takes signals before ${fmtClock(activeStrat().rule.until)}. On days like this, later signals didn't work.`; }
-    else { c2 = "go"; verdict = `Qualified · ${activeStrat() ? "today's strategy" : "V2"}`; why = `Buy 1× ${esc(u)} ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is noted in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
+    else { c2 = "go"; verdict = `Qualified · ${activeStrat() ? "today's strategy" : "your rule"}`; why = `Buy 1× ${esc(u)} ${esc(LC.strike)}${LC.dir === "put" ? "P" : "C"} at Ask ${px(s.ask)} (${money(s.ask * 100)}).${LC.opp === "unknown" ? " Some context data is stale. It is noted in the entry." : ""}`; btns = `<button class="btn primary big" type="button" id="lc-log" ${S.db && S.canWrite ? "" : "disabled"}>Log paper entry</button><button class="btn" type="button" id="lc-missed">Skipped it · log as missed</button>`; }
     d.className = "decision " + c2;
     d.innerHTML = `<div class="label">Decision</div><div class="verdict">${verdict}</div><div>${why}</div>${btns ? `<div class="row" style="margin-top:6px">${btns}</div>` : ""}${s.broke ? liveGrade() : ""}`;
     $("#lc-card").innerHTML = [
@@ -1450,14 +1450,14 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       body: ["Trending days reward breakout trades: a break tends to keep going.", "Choppy (two-way) days punish them: breaks often snap back.", "Your scout reports label the regime so you can compare it with how your trades went."],
       yours: () => "Oct 9 was labeled CHANGING / two-way whipsaw in the morning. The 779.63 breakout reversed, and your 12:33 call stalled.", next: ["context", "breakhold"] },
     context: { stage: 0, title: "Breadth, VIX, yields, oil", one: "These are side gauges that tell you whether the broad market agrees with the move.",
-      body: ["Breadth: how many stocks are rising vs falling. Many rising supports calls.", "VIX: expected volatility. Falling VIX usually goes with rising stocks.", "10-year yield and oil: sharply rising rates or oil often weigh on stocks.", "Your V2 rule only needs no known opposing signal. Stale data does not block you."],
+      body: ["Breadth: how many stocks are rising vs falling. Many rising supports calls.", "VIX: expected volatility. Falling VIX usually goes with rising stocks.", "10-year yield and oil: sharply rising rates or oil often weigh on stocks.", "Your entry check only needs no known opposing signal. Stale data does not block you."],
       yours: () => "On Oct 8 the S&P fell while about two-thirds of its stocks rose. Big tech dragged the index while breadth disagreed.", next: ["regime"] },
     levels: { stage: 1, title: "Important levels", one: "A level is a price where the market turned or paused before, so traders watch it.",
       body: ["Common ones: today's high and low, yesterday's close, the opening price, round numbers.", "Pick the level before price gets there. Choosing it after the move is hindsight.", "The Live check suggests today's high, low, open and prior close from Webull."],
       yours: () => "Your Oct 9 call used 780.51, the prior intraday high.", next: ["breakhold"] },
     breakhold: { stage: 1, title: "Break, hold and false breaks", one: "A break is price closing past your level. A hold is it staying there long enough to trust it.",
       body: ["False break: price pokes through, then snaps back. Very common on choppy days.", "Waiting longer filters more false breaks but uses up more of the move.", "V1 waited 3–5 minutes. V2 waits 60 seconds. Your journal tests which works better.", "Auto-watch uses finished 1-minute candles: one closes past the level (break), the next never touches it (hold)."],
-      yours: () => { const m = S.missed[0]; return m ? `On ${dayName(m.date)} you waited for a ~5-minute hold and missed the move: ${money(num(m.hypoPnl), true)} hypothetical. That is why V2 shortened the wait.` : ""; }, next: ["callput", "levels"] },
+      yours: () => { const m = S.missed[0]; return m ? `On ${dayName(m.date)} you waited for a ~5-minute hold and missed the move: ${money(num(m.hypoPnl), true)} hypothetical. That's why the app tests different wait times.` : ""; }, next: ["callput", "levels"] },
     callput: { stage: 2, title: "Calls and puts", one: "A call gains when the price goes up. A put gains when the price goes down.",
       body: ["Buying either one, the most you can lose is what you paid (the premium).", "One contract covers 100 shares, so a $1.15 option costs $115.", "0DTE means it expires at 4:00 pm today. Every minute it gets closer to worthless unless price moves your way."],
       yours: () => "Sep 28 you bought a put for $64 and sold it for $162 four minutes later because the price dropped fast.", next: ["strike", "theta"] },
@@ -2379,7 +2379,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ${noSignal ? `<div class="why" style="margin-top:12px">${noSignal === P.length ? "None" : `${P.length - noSignal} of ${P.length}`} of your practice trades came after a signal from your rule. To test a rule fairly, wait for the coach to say "Signal", then buy. Trades without a signal still count, but they test a different strategy.</div>` : ""}
       <p class="small muted" style="margin-top:8px">Model prices ignore real-world quirks like wider spreads in fast markets. Treat these as practice reps, not proof.</p>`;
     $("#rp-list").innerHTML = `<table><thead><tr><th>Day</th><th>Contract</th><th>In → out</th><th class="n">P/L</th><th>Exit</th><th class="hide-sm">Rule</th><th class="n">30 min later</th><th></th></tr></thead><tbody>${P.slice(0, 25).map((p) =>
-      `<tr><td style="white-space:nowrap">${esc(dayName(p.replayDate).replace(/^\w+, /, ""))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">V2</span>' : ""}</td><td class="mono" style="white-space:nowrap">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="small hide-sm">${esc(ruleOf(p))}</td><td class="n">${after30Of(p) != null ? px(after30Of(p)) : "–"}</td><td style="width:1%"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Delete this practice trade" aria-label="Delete this practice trade">×</button></td></tr>`).join("")}</tbody></table>`;
+      `<tr><td style="white-space:nowrap">${esc(dayName(p.replayDate).replace(/^\w+, /, ""))}</td><td class="mono">${p.strike}${p.dir === "put" ? "P" : "C"} ${p.followed ? '<span class="pill good plain">signal</span>' : ""}</td><td class="mono" style="white-space:nowrap">${esc(p.entryTime)} → ${esc(p.exitTime)}</td><td class="n ${cls(p.pnl)}">${money(p.pnl, true)}</td><td class="small">${esc(reasonName[p.exitReason] || p.exitReason)}</td><td class="small hide-sm">${esc(ruleOf(p))}</td><td class="n">${after30Of(p) != null ? px(after30Of(p)) : "–"}</td><td style="width:1%"><button class="btn sm danger" type="button" data-pdel="${esc(p.id)}" title="Delete this practice trade" aria-label="Delete this practice trade">×</button></td></tr>`).join("")}</tbody></table>`;
   }
   $("#rp-list").addEventListener("click", async (e) => {
     const b = e.target.closest("[data-pdel]"); if (!b) return;
@@ -2586,7 +2586,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const box = $("#pat-ai");
     if (!S.sample) { box.textContent = "Explanations need Claude, which isn't available in this view."; return; }
     e.target.disabled = true; box.textContent = "Thinking…";
-    const prompt = `You are a patient options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). Their entry rule (V2): a pre-picked level breaks, SPY holds beyond it for 60 seconds, no known opposing news. They exit with a take-profit %, stop %, and time limit.\n\nHere are statistics from SPY's own history:\n${patternBrief(PAT.res)}\n\nIn plain words (under 250 words, short bullets): name the 4-5 most useful patterns for this person, what each means for their rule (which times and levels look better or worse, when to expect enough movement, how often breaks fail), and one thing to test in Practice. Define jargon. Don't promise profits or tell them to buy anything. Say when a difference is too small to matter.`;
+    const prompt = `You are a patient options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). Their approach: each morning the app picks a strategy from past days most like today (a level break, an optional wait for a hold, a time window, and take-profit / stop / time-limit exits). V2 (wait 60 seconds) was only their first test rule; don't treat it as the standard.\n\nHere are statistics from SPY's own history:\n${patternBrief(PAT.res)}\n\nIn plain words (under 250 words, short bullets): name the 4-5 most useful patterns for this person, what each means for their rule (which times and levels look better or worse, when to expect enough movement, how often breaks fail), and one thing to test in Practice. Define jargon. Don't promise profits or tell them to buy anything. Say when a difference is too small to matter.`;
     try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
     catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get an explanation right now. Try again."; }
     finally { e.target.disabled = false; }
@@ -2661,7 +2661,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const last30 = closed.slice(-30), net30 = last30.reduce((a, t) => a + (calc(t).pnl || 0) - FEES, 0);
     const reviewed = closed.filter((t) => t.reviewFollowed), followed = reviewed.filter((t) => t.reviewFollowed === "yes").length;
     const last20 = closed.slice(-20), ignored = last20.filter((t) => (t.reviewMistakes || []).includes("ignored")).length;
-    const pr = ls.get("prove.v1", null), proven = pr && pr.days >= 30 && pr.picker > Math.max(pr.v2, pr.fixed, 0);
+    const pr = ls.get("prove.v1", null), proven = pr && pr.days >= 30 && pr.picker > Math.max(pr.typ ?? 0, pr.fixed, 0);
     let peak = -Infinity, dd = 0; for (const p of st.curve) { peak = Math.max(peak, p.value); dd = Math.max(dd, peak - p.value); }
     const start = S.cfg.startBalance || 100;
     const items = [
@@ -2669,7 +2669,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ["Profitable after fees over your last 30 trades", last30.length >= 30 && net30 > 0, last30.length >= 30 ? money0(net30) : `${last30.length} of 30 trades so far`, last30.length >= 30 ? (net30 > 0 ? 1 : 0.3) : last30.length / 30],
       ["Followed your plan on 90% of reviewed trades", reviewed.length >= 20 && followed / reviewed.length >= 0.9, reviewed.length ? `${Math.round((followed / reviewed.length) * 100)}% of ${reviewed.length}` : "no reviews yet", reviewed.length ? Math.min(followed / reviewed.length / 0.9, 1) : 0],
       ["No ignored exits in your last 20 trades", last20.length >= 20 && ignored === 0, `${ignored} ignored`, last20.length >= 20 ? (ignored ? 0.5 : 1) : last20.length / 20],
-      ["Daily picker proven on 30+ replayed days", !!proven, pr ? `${money0(pr.picker)} vs V2 ${money0(pr.v2)} over ${pr.days} days` : "not checked yet", proven ? 1 : pr ? 0.4 : 0],
+      ["Daily picker proven on 30+ replayed days", !!proven, pr ? `${money0(pr.picker)} vs best fixed ${money0(pr.fixed)} over ${pr.days} days` : "not checked yet", proven ? 1 : pr ? 0.4 : 0],
       ["Biggest drop under 25% of your starting balance", closed.length >= 20 && dd < start * 0.25, `${money0(-dd)} (${Math.round((dd / start) * 100)}%)`, dd < start * 0.25 ? 1 : 0.4],
     ];
     const done = items.filter((x) => x[1]).length;
@@ -2927,7 +2927,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const picks = [], seen = new Set();
       for (const x of tried) { const key = x.hold + x.lname; if (seen.has(key)) continue; seen.add(key); picks.push(x); if (picks.length >= 5) break; }
       for (const x of picks) { x.test = summarize(x.te, x.t, x.s, x.m); x.ok = x.test.n >= 10 && x.test.avg > 0 && x.test.avg >= x.train.avg * 0.25 && x.test.win >= 0.4; }
-      const v2 = { ...RULE_BASE, hold: 1 }, v2s = labSignals(LAB.M, LAB.D, v2), v2tr = summarize(v2s.filter((x) => x.date < cut), 50, 40, 30), v2te = summarize(v2s.filter((x) => x.date >= cut), 50, 40, 30);
+      const v2s = labSignals(LAB.M, LAB.D, RULE), v2tr = summarize(v2s.filter((x) => x.date < cut), RULE.t, RULE.s, RULE.m), v2te = summarize(v2s.filter((x) => x.date >= cut), RULE.t, RULE.s, RULE.m);   // baseline: your current rule
       LAB.ideas = { at: Date.now(), tried: tried.length, cut, from: ds[0], to: ds[ds.length - 1], picks, v2: { train: v2tr, test: v2te } };
       renderIdeas();
       if (S.db) S.db.doc("patterns/ideas").set({ ranAt: Date.now(), brief: ideasBrief() }).catch(() => {});
@@ -2938,25 +2938,26 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const statLine = (a) => `${a.n} trades · ${P0(a.win)} won · ${money0(a.avg)}/trade`;
   function ideasBrief() {
     const I = LAB.ideas; if (!I) return "";
-    return `Tested ${I.tried} rule variations on ${I.from}..${I.cut} (training), checked on ${I.cut}..${I.to} (test).\nCurrent V2 default: training ${statLine(I.v2.train)}; test ${statLine(I.v2.test)}.\n` + I.picks.map((x, i) => `Idea ${i + 1}: ${ideaText(x)} Training ${statLine(x.train)}; test ${statLine(x.test)}; ${x.ok ? "held up" : "did not hold up"}.`).join("\n");
+    return `Tested ${I.tried} rule variations on ${I.from}..${I.cut} (training), checked on ${I.cut}..${I.to} (test).\nTheir current rule (${ruleName(RULE)}): training ${statLine(I.v2.train)}; test ${statLine(I.v2.test)}.\n` + I.picks.map((x, i) => `Idea ${i + 1}: ${ideaText(x)} Training ${statLine(x.train)}; test ${statLine(x.test)}; ${x.ok ? "held up" : "did not hold up"}.`).join("\n");
   }
   function renderIdeas() {
     const I = LAB.ideas, out = $("#lab-out"); if (!I) return;
-    const okN = I.picks.filter((x) => x.ok).length, v2t = I.v2.test.avg ?? -999;
+    const okN = I.picks.filter((x) => x.ok).length, v2t = Math.max(I.v2.test.avg ?? 0, 0), cur = RULE;
     const good = I.picks.map((x, i) => ({ x, i })).filter((o) => o.x.ok).sort((a, b) => b.x.test.avg - a.x.test.avg)[0];
     let rec;
     if (good && good.x.test.n >= 15 && good.x.test.avg > v2t + 3) {
       const x = good.x, ch = [];
-      if (x.hold !== 1) ch.push(x.hold === 0 ? "buy right on the break instead of waiting 1 minute" : `wait ${x.hold} minutes instead of 1`);
+      if (x.hold !== cur.hold) ch.push(x.hold === 0 ? "buy right on the break" : `wait ${x.hold} minute${x.hold > 1 ? "s" : ""} for a hold`);
       if (x.lname !== "All the usual lines") ch.push(`watch only ${x.lname.toLowerCase()}`);
-      if (x.until !== 930) ch.push(`only take signals ${x.wname}`);
-      if (x.t !== 50 || x.s !== 40 || x.m !== 30) ch.push(`sell at +${x.t}% / −${x.s}% / ${x.m} min instead of +50% / −40% / 30 min`);
-      rec = `<div class="lab-idea ok"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Try this change:</b> ${esc(ch.join("; ") || "same as V2")}.</p>
-        <p class="small">On days the search never saw, it made <b>${money0(x.test.avg)}</b> per trade (${x.test.n} trades, ${P0(x.test.win)} won) vs <b>${money0(I.v2.test.avg)}</b> for your V2 rule. Practice it on 20+ replays before using it live.</p>
-        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" data-idea="${good.i}">Try it in Practice</button><button class="btn" type="button" data-keepv2>Keep V2</button></div></div>`;
-    } else rec = `<div class="lab-idea"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Keep V2.</b> Nothing beat it on days the search never saw, so the "better" rules were probably luck.</p><p class="small">That's a good result: it means your rule isn't obviously worse than the alternatives. Keep practicing it and re-run this in a few weeks.</p><div class="row" style="margin-top:8px"><button class="btn" type="button" data-keepv2>Practice V2</button></div></div>`;
+      if (x.until !== cur.until) ch.push(`only take signals ${x.wname}`);
+      if (x.t !== cur.t || x.s !== cur.s || x.m !== cur.m) ch.push(`sell at +${x.t}% / −${x.s}% / ${x.m} min`);
+      rec = `<div class="lab-idea ok"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Try this change:</b> ${esc(ch.join("; ") || "same as your current rule")}.</p>
+        <p class="small">On days the search never saw, it made <b>${money0(x.test.avg)}</b> per trade (${x.test.n} trades, ${P0(x.test.win)} won) vs <b>${money0(I.v2.test.avg)}</b> for your current rule and $0 for sitting out. Practice it on 20+ replays before using it live.</p>
+        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" data-idea="${good.i}">Try it in Practice</button><button class="btn" type="button" data-keepv2>Keep my current rule</button></div></div>`;
+    } else if ((I.v2.test.avg ?? 0) > 0) rec = `<div class="lab-idea"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Keep your current rule.</b> Nothing beat it on days the search never saw, so the "better" rules were probably luck.</p><p class="small">Keep practicing it and re-run this in a few weeks.</p><div class="row" style="margin-top:8px"><button class="btn" type="button" data-keepv2>Keep my current rule</button></div></div>`;
+    else rec = `<div class="lab-idea"><div class="label">Recommendation</div><p style="margin:6px 0"><b>No single rule held up.</b> Nothing here made money on the newer days, including your current rule.</p><p class="small">That's an honest answer: one rule for every day doesn't seem to work in this stretch. Rely on <b>Today's strategy</b>, which is picked fresh each morning, and sit out on the days it says to.</p></div>`;
     out.innerHTML = `${rec}<details style="margin-top:10px"><summary class="small" style="cursor:pointer">Show the evidence</summary><div class="bt-answer" style="margin-top:8px">Tried <b>${I.tried}</b> rule variations on older days (${esc(dayName(I.from))} – ${esc(dayName(I.cut))}), then checked the top ${I.picks.length} on newer days they never saw (${esc(dayName(I.cut))} – ${esc(dayName(I.to))}). <b>${okN ? `${okN} held up` : "None held up"}</b>${okN ? "" : ", which is common and a useful answer in itself: the best-looking rules were probably luck"}.</div>
-      <p class="small" style="margin-top:8px">For comparison, your <b>V2 default</b> (wait 1 minute, +50% / −40% / 30 min): older days ${statLine(I.v2.train)} → newer days ${statLine(I.v2.test)}.</p>
+      <p class="small" style="margin-top:8px">For comparison, your <b>current rule</b> (${esc(ruleName(RULE))}): older days ${statLine(I.v2.train)} → newer days ${statLine(I.v2.test)}.</p>
       ${I.picks.map((x, i) => `<div class="lab-idea${x.ok ? " ok" : ""}"><div class="row" style="justify-content:space-between"><b>Idea ${i + 1}</b><span class="pill ${x.ok ? "good" : "warn"}">${x.ok ? "Held up on new days" : "Did not hold up"}</span></div>
         <p class="small" style="margin:6px 0">${esc(ideaText(x))}</p>
         <div class="small">Older days (where it was found): ${statLine(x.train)}</div><div class="small">Newer days (the real test): <b>${statLine(x.test)}</b></div>
@@ -2966,7 +2967,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div id="lab-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>`;
   }
   document.addEventListener("click", async (e) => {
-    if (e.target.closest("[data-keepv2]")) { setRule({ ...RULE_BASE, hold: 1 }); showView("practice"); spotlight("#rp-rule"); toast("Practicing V2: wait 60 seconds."); return; }
+    if (e.target.closest("[data-keepv2]")) { toast("Keeping your current rule."); return; }
     const b = e.target.closest("[data-idea]");
     if (b && LAB.ideas) {
       const x = LAB.ideas.picks[+b.dataset.idea];
@@ -2978,7 +2979,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const box = $("#lab-ai");
     if (!S.sample) { box.textContent = "Suggestions need Claude, which isn't available in this view."; return; }
     e.target.disabled = true; box.textContent = "Thinking…";
-    const prompt = `You are a careful, honest options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). A strategy lab replayed real SPY minute data with modelled option prices. Results:\n${ideasBrief()}\n${PAT.res ? "Market patterns:\n" + patternBrief(PAT.res) + "\n" : ""}${LAB.test ? `Their current practice rule (${LAB.test.name}) over ${LAB.days} days: ${statLine(LAB.test.sum)}.\n` : ""}\nIn plain words, under 260 words: (1) say which idea, if any, is worth practicing and why, judged mainly on the newer-days test, not the older days; (2) suggest one concrete strategy to practice next (entry, which lines, time window, exits) built from what held up, or say to keep V2 if nothing beat it; (3) list 2 reasons this could still fail live (small samples, model prices, changing markets); (4) how many practice trades to do before trusting it. Define jargon. No promises of profit.`;
+    const prompt = `You are a careful, honest options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). A strategy lab replayed real SPY minute data with modelled option prices. Results:\n${ideasBrief()}\n${PAT.res ? "Market patterns:\n" + patternBrief(PAT.res) + "\n" : ""}${LAB.test ? `Their current practice rule (${LAB.test.name}) over ${LAB.days} days: ${statLine(LAB.test.sum)}.\n` : ""}\nIn plain words, under 260 words: (1) say which idea, if any, is worth practicing and why, judged mainly on the newer-days test, not the older days; (2) suggest one concrete strategy to practice next (entry, which lines, time window, exits) built from what held up, or say to rely on the daily pick / sit out if nothing held up; (3) list 2 reasons this could still fail live (small samples, model prices, changing markets); (4) how many practice trades to do before trusting it. Define jargon. No promises of profit.`;
     try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
     catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get a suggestion right now. Try again."; }
     finally { e.target.disabled = false; }
@@ -3136,6 +3137,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     });
     return cands.sort((a, b) => b.score - a.score);
   }
+  // Benchmark: the average of 162 strategies (every wait, line set and window with three exit styles), i.e. what a random pick would make.
+  const RAND = []; for (const hold of [0, 1, 3]) for (let li = 0; li < 6; li++) for (const [, until] of [["", 660], ["", 780], ["", 930]]) for (const [t, s2, m] of [[30, 25, 15], [50, 40, 30], [100, 60, 60]]) RAND.push({ li, rule: { hold, until, t, s: s2, m } });
   const baseRule = (hold, li) => ({ ...RULE_BASE, lv: { ...NO_LINES, ...LINE_SETS[li][1] }, hold, dirs: "both", until: 930 });
   async function pickStrategy(like, D, say) {
     const live = like.live, nowM = live && marketOpen() ? etParts().min : 570;
@@ -3166,7 +3169,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     stratSync(); applyStrat();
     return pick;
   }
-  // Nightly scorecard: what each day's pick actually would have made on that day (and V2, for comparison).
+  // Nightly scorecard: what each day's pick actually would have made on that day (and a typical strategy, for comparison).
   async function scorePastPicks(D) {
     const hist = ls.get("strat.hist", {}), today = etParts().date, after = !marketOpen() && etParts().min >= 965;
     const todo = Object.keys(hist).filter((d) => !hist[d].score && (d < today || (d === today && after)));
@@ -3175,17 +3178,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (const d of todo) {
       const B = M.get(d); if (!B) continue;
       const one = new Map([[d, B]]), sum = (rs) => rs.reduce((a, x) => a + x.pnl, 0);
-      const v2 = summarize(labSignals(one, D, { ...RULE_BASE, hold: 1 }), 50, 40, 30).rs;
       const r = hist[d].noTrade || !hist[d].rule ? [] : summarize(labSignals(one, D, hist[d].rule), hist[d].rule.t, hist[d].rule.s, hist[d].rule.m).rs;
-      hist[d].score = { pnl: Math.round(sum(r) * 100) / 100, n: r.length, v2: Math.round(sum(v2) * 100) / 100 };
+      const sg = new Map(); for (let li = 0; li < 6; li++) for (const h of [0, 1, 3]) sg.set(h + ":" + li, labSignals(one, D, baseRule(h, li)));
+      const typ = RAND.reduce((a, c) => a + sum(summarize(sg.get(c.rule.hold + ":" + c.li).filter((x) => x.m < c.rule.until), c.rule.t, c.rule.s, c.rule.m).rs), 0) / RAND.length;
+      hist[d].score = { pnl: Math.round(sum(r) * 100) / 100, n: r.length, typ: Math.round(typ * 100) / 100 };
     }
     ls.set("strat.hist", hist); stratSync();
   }
   function scorecardTxt() {
     const hist = ls.get("strat.hist", {}), done = Object.entries(hist).filter(([, h]) => h.score).sort();
     if (!done.length) return "";
-    const tot = done.reduce((a, [, h]) => a + h.score.pnl, 0), v2 = done.reduce((a, [, h]) => a + h.score.v2, 0), win = done.filter(([, h]) => h.score.pnl > 0).length;
-    return `Scorecard so far: daily picks made <b class="${cls(tot)}">${money0(tot)}</b> over ${done.length} day${done.length > 1 ? "s" : ""} (${win} up) vs <b>${money0(v2)}</b> for always-V2 on the same days.`;
+    const tot = done.reduce((a, [, h]) => a + h.score.pnl, 0), typ = done.reduce((a, [, h]) => a + (h.score.typ ?? 0), 0), win = done.filter(([, h]) => h.score.pnl > 0).length;
+    return `Scorecard so far: daily picks made <b class="${cls(tot)}">${money0(tot)}</b> over ${done.length} day${done.length > 1 ? "s" : ""} (${win} up) vs <b>${money0(typ)}</b> for a typical strategy and $0 for sitting out.`;
   }
   // Prove it: replay the daily picker on past days, using only information from before each day.
   async function provePicker(nTest, say) {
@@ -3198,7 +3202,6 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const sd = [0, 1, 2, 3].map((j) => { const v = dates.map((d) => F.get(d)[j]), mu = v.reduce((a, b) => a + b, 0) / v.length; return Math.sqrt(v.reduce((a, b) => a + (b - mu) ** 2, 0) / v.length) || 1; });
     say("Preparing signals…"); await new Promise((r) => setTimeout(r, 0));
     const all = new Map(); for (const h of [0, 1, 3]) LINE_SETS.forEach((_, li) => { const by = new Map(); for (const x of labSignals(LAB.M, D, baseRule(h, li))) (by.get(x.date) || by.set(x.date, []).get(x.date)).push(x); all.set(h + ":" + li, by); });
-    const v2by = new Map(); for (const x of labSignals(LAB.M, D, { ...RULE_BASE, hold: 1 })) (v2by.get(x.date) || v2by.set(x.date, []).get(x.date)).push(x);
     const sigsOn = (h, li, ds) => ds.flatMap((d) => all.get(h + ":" + li).get(d) || []);
     const tradeDay = (c, d) => { if (!c) return { pnl: 0, n: 0 }; const rs = summarize((all.get(c.rule.hold + ":" + c.li).get(d) || []).filter((x) => x.m < c.rule.until), c.rule.t, c.rule.s, c.rule.m).rs; return { pnl: rs.reduce((a, x) => a + x.pnl, 0), n: rs.length }; };
     const test = dates.slice(-nTest), pre = dates.filter((d) => d < test[0]);
@@ -3214,21 +3217,21 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const cands = gridScore((h, li) => sigsOn(h, li, near), rank, 570, { minHalf: 4 });
       let best = null; for (const c of cands.slice(0, 8)) { const g = summarize(sigsOn(c.rule.hold, c.li, pool), c.rule.t, c.rule.s, c.rule.m); if (g.n >= 15 && g.avg < -3) continue; best = c; break; }
       const sit = !best || best.base <= 0, p = tradeDay(sit ? null : best, d), f = tradeDay(fixed, d);
-      const v = summarize(v2by.get(d) || [], 50, 40, 30).rs;
-      rows.push({ d, pick: sit ? "Sit out" : stratText(best), sit, pnl: p.pnl, n: p.n, fixed: f.pnl, v2: v.reduce((a, x) => a + x.pnl, 0), ev: evD });
+      const typ = RAND.reduce((a, c) => a + tradeDay(c, d).pnl, 0) / RAND.length;
+      rows.push({ d, pick: sit ? "Sit out" : stratText(best), sit, pnl: p.pnl, n: p.n, fixed: f.pnl, typ, ev: evD });
     }
-    const tot = (k) => rows.reduce((a, r) => a + r[k], 0), res = { at: Date.now(), days: rows.length, from: rows[0]?.d, to: rows[rows.length - 1]?.d, picker: tot("pnl"), fixed: tot("fixed"), v2: tot("v2"), trades: tot("n"), sat: rows.filter((r) => r.sit).length, upDays: rows.filter((r) => r.pnl > 0).length, fixedText: fixed ? stratText(fixed) : "", rows };
+    const tot = (k) => rows.reduce((a, r) => a + r[k], 0), res = { at: Date.now(), days: rows.length, from: rows[0]?.d, to: rows[rows.length - 1]?.d, picker: tot("pnl"), fixed: tot("fixed"), typ: tot("typ"), trades: tot("n"), sat: rows.filter((r) => r.sit).length, upDays: rows.filter((r) => r.pnl > 0).length, fixedText: fixed ? stratText(fixed) : "", rows };
     ls.set("prove.v1", { ...res, rows: undefined }); stratSync();
     return res;
   }
   function renderProof(r) {
-    const best = Math.max(r.fixed, r.v2, 0), wins = r.picker > best && r.picker > 0;
-    const verdict = wins && r.days < 30 ? `<b style="color:var(--warn)">Promising, but too few days to tell.</b> It beat the alternatives over ${r.days} days; it needs 30+ to count. Choose 1 year and run it again.` : wins ? `<b style="color:var(--good)">The daily picker has an edge so far.</b> It beat always-V2, the best fixed rule and sitting out.` : r.picker > 0 ? `<b style="color:var(--warn)">Not proven.</b> The daily picker made money, but ${r.v2 >= r.fixed ? "always-V2" : "a single fixed rule"} did as well or better. Picking daily may be adding noise.` : `<b style="color:var(--bad)">Not working yet.</b> Picking by look-alike days lost money over this stretch. Treat its picks as practice ideas only.`;
+    const best = Math.max(r.fixed, r.typ, 0), wins = r.picker > best && r.picker > 0;
+    const verdict = wins && r.days < 30 ? `<b style="color:var(--warn)">Promising, but too few days to tell.</b> It beat the alternatives over ${r.days} days; it needs 30+ to count. Choose 1 year and run it again.` : wins ? `<b style="color:var(--good)">The daily picker has an edge so far.</b> It beat the best fixed rule, a typical strategy and sitting out.` : r.picker > 0 ? `<b style="color:var(--warn)">Not proven.</b> The daily picker made money, but ${r.typ >= r.fixed ? "a typical strategy picked at random" : "a single fixed rule"} did as well or better. Picking daily may be adding noise.` : `<b style="color:var(--bad)">Not working yet.</b> Picking by look-alike days lost money over this stretch. Treat its picks as practice ideas only.`;
     $("#lab-out").innerHTML = `<div class="bt-answer">${verdict}</div>
       <p class="small" style="margin-top:8px">Replayed <b>${r.days} days</b> (${esc(dayName(r.from))} – ${esc(dayName(r.to))}). Each morning it picked a strategy using <b>only earlier days</b>, exactly like it does for you now, then traded that day with your realistic settings.</p>
-      <div class="pat-bars" style="margin-top:8px">${[["Daily picker", r.picker], ["Best fixed rule", r.fixed], ["Always V2", r.v2], ["Sit out", 0]].map(([n, v]) => `<span>${n}</span><div class="track"><div class="fill${n === "Daily picker" ? " hi" : ""}" style="width:${Math.max(0, v) / Math.max(1, r.picker, r.fixed, r.v2) * 100}%"></div></div><span class="v ${cls(v)}">${money0(v)}</span>`).join("")}</div>
-      <p class="small muted" style="margin-top:6px">Daily picker: ${r.trades} trades, sat out ${r.sat} day${r.sat === 1 ? "" : "s"}, finished up on ${r.upDays} of ${r.days} days. Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}</p>
-      <details style="margin-top:8px"><summary class="small" style="cursor:pointer">Day by day</summary><table class="lab-tbl" style="width:100%; margin-top:6px"><thead><tr><th>Day</th><th>Pick</th><th class="n">Picker</th><th class="n">V2</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td style="white-space:nowrap">${esc(dayName(x.d).replace(/^\w+, /, ""))}${x.ev ? ` <span class="pill warn plain">${esc(x.ev)}</span>` : ""}</td><td class="small">${esc(x.pick.slice(0, 80))}${x.pick.length > 80 ? "…" : ""}</td><td class="n ${cls(x.pnl)}">${money0(x.pnl)}</td><td class="n ${cls(x.v2)}">${money0(x.v2)}</td></tr>`).join("")}</tbody></table></details>
+      <div class="pat-bars" style="margin-top:8px">${[["Daily picker", r.picker], ["Best fixed rule", r.fixed], ["Typical strategy", r.typ], ["Sit out", 0]].map(([n, v]) => `<span>${n}</span><div class="track"><div class="fill${n === "Daily picker" ? " hi" : ""}" style="width:${Math.max(0, v) / Math.max(1, r.picker, r.fixed, r.typ) * 100}%"></div></div><span class="v ${cls(v)}">${money0(v)}</span>`).join("")}</div>
+      <p class="small muted" style="margin-top:6px">Daily picker: ${r.trades} trades, sat out ${r.sat} day${r.sat === 1 ? "" : "s"}, finished up on ${r.upDays} of ${r.days} days. Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}. "Typical strategy" is the average of 162 different strategies, i.e. what picking one at random would make.</p>
+      <details style="margin-top:8px"><summary class="small" style="cursor:pointer">Day by day</summary><table class="lab-tbl" style="width:100%; margin-top:6px"><thead><tr><th>Day</th><th>Pick</th><th class="n">Picker</th><th class="n">Typical</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td style="white-space:nowrap">${esc(dayName(x.d).replace(/^\w+, /, ""))}${x.ev ? ` <span class="pill warn plain">${esc(x.ev)}</span>` : ""}</td><td class="small">${esc(x.pick.slice(0, 80))}${x.pick.length > 80 ? "…" : ""}</td><td class="n ${cls(x.pnl)}">${money0(x.pnl)}</td><td class="n ${cls(x.typ)}">${money0(x.typ)}</td></tr>`).join("")}</tbody></table></details>
       <p class="small muted" style="margin-top:8px">A real edge should show up here before you trust the daily pick. ${r.days < 40 ? "This is a short stretch; " : ""}Re-run it every couple of weeks: the nightly scorecard adds real days on top.</p>`;
   }
   // Keep strategy state the same on every device (stored in the journal's database).
@@ -3251,7 +3254,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   function proofTxt() {
     const pr = ls.get("prove.v1", null), sc = scorecardTxt();
-    const p = pr ? `Picker check (${pr.days} past days replayed): picker ${money0(pr.picker)} vs always-V2 ${money0(pr.v2)} vs best fixed rule ${money0(pr.fixed)}${pr.picker > Math.max(pr.v2, pr.fixed, 0) && pr.days >= 30 ? " · <b style=\"color:var(--good)\">has an edge so far</b>" : " · <b style=\"color:var(--warn)\">not proven yet</b>"}.` : `Not proven yet: run <b>Prove the daily picker</b> in Learn → Strategy lab.`;
+    const p = pr ? `Picker check (${pr.days} past days replayed): picker ${money0(pr.picker)} vs best fixed rule ${money0(pr.fixed)} vs typical strategy ${money0(pr.typ ?? 0)}${pr.picker > Math.max(pr.typ ?? 0, pr.fixed, 0) && pr.days >= 30 ? " · <b style=\"color:var(--good)\">has an edge so far</b>" : " · <b style=\"color:var(--warn)\">not proven yet</b>"}.` : `Not proven yet: run <b>Prove the daily picker</b> in Learn → Strategy lab.`;
     return `<div class="small" style="margin-top:6px">${p}${sc ? `<br>${sc}` : ""}</div>`;
   }
   function stratHtml() {
@@ -3824,7 +3827,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       { name: "set_plan", description: "Set the trade plan: take-profit percent, stop-loss percent, time stop in minutes, and a one-line reason.", inputSchema: { type: "object", properties: { take_profit_pct: { type: "number" }, stop_pct: { type: "number" }, time_stop_min: { type: "number" }, why: { type: "string" } } }, execute: (i) => ACT.setPlan(num(i.take_profit_pct), num(i.stop_pct), num(i.time_stop_min), i.why || null) },
       { name: "save_checkpoint", description: "Record the open position's current option Bid (and optional Ask, underlying price) the user stated.", inputSchema: { type: "object", properties: { bid: { type: "number" }, ask: { type: "number" }, underlying: { type: "number" } }, required: ["bid"] }, execute: (i) => write(`Save checkpoint: Bid ${i.bid}${i.ask != null ? `, Ask ${i.ask}` : ""}`, () => ACT.checkpoint(num(i.bid), num(i.ask), num(i.underlying))) },
       { name: "exit_position", description: "Close the open paper position at the Bid the user stated. In practice mode bid can be omitted.", inputSchema: { type: "object", properties: { bid: { type: "number" }, ask: { type: "number" }, underlying: { type: "number" } } }, execute: (i) => write(view === "practice" && RP.pos ? "Sell the practice position" : `Close the open position at Bid ${i.bid ?? "?"}`, () => ACT.exit(num(i.bid), num(i.ask), num(i.underlying))) },
-      { name: "log_entry", description: "Log the paper entry from the Live check (or buy in practice). Only works if the V2 checklist is complete.", execute: () => write(view === "practice" ? "Buy in practice" : "Log the paper entry", () => ACT.enter()) },
+      { name: "log_entry", description: "Log the paper entry from the Live check (or buy in practice). Only works if the entry checklist is complete.", execute: () => write(view === "practice" ? "Buy in practice" : "Log the paper entry", () => ACT.enter()) },
       { name: "guide_step", description: "Act on the step-by-step guide: done marks the current step complete, skip skips it, show takes the user to it.", inputSchema: { type: "object", properties: { action: { type: "string", enum: ["done", "skip", "show"] } }, required: ["action"] }, execute: (i) => ACT.guide(i.action) },
       { name: "open_tab", description: "Open a tab: dashboard, live, practice, journal, news, learn.", inputSchema: { type: "object", properties: { tab: { type: "string" } }, required: ["tab"] }, execute: (i) => ACT.tab(String(i.tab).toLowerCase()) },
       { name: "open_lesson", description: "Open a lesson about a concept (delta, theta, spread, levels, false breaks, IV, exit plan, vertical spreads, stats...).", inputSchema: { type: "object", properties: { topic: { type: "string" } }, required: ["topic"] }, execute: (i) => ACT.lesson(String(i.topic)) },
@@ -3940,10 +3943,10 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   ];
   function progressReqs() {
     const P = S.practice, byPlan = P.filter((p) => p.followed && ["target", "stop", "time", "plan", "close"].includes(p.exitReason)).length;
-    const live = S.trades.filter((t) => t.status === "official" && t.version === "V2" && !calc(t).open), liveOk = live.filter((t) => t.reviewFollowed === "yes").length;
+    const live = S.trades.filter((t) => t.status === "official" && t.version !== "V1" && t.date >= "2026-10-09" && !calc(t).open), liveOk = live.filter((t) => t.reviewFollowed === "yes").length;
     return {
-      2: [{ label: "Practice trades", have: P.length, need: 20 }, { label: "Practice on a V2 signal and closed by your plan", have: P.length ? Math.round((byPlan / P.length) * 100) : 0, need: 80, unit: "%" }, { label: "Quiz answers right", have: S.quiz?.correct || 0, need: 10 }],
-      3: [{ label: "Practice trades", have: P.length, need: 30 }, { label: "Closed V2 live trades", have: live.length, need: 5 }, { label: "Live trades where you followed your plan", have: live.length ? Math.round((liveOk / live.length) * 100) : 0, need: 80, unit: "%" }, { label: "Drill answers right", have: S.drill?.right || 0, need: 20 }],
+      2: [{ label: "Practice trades", have: P.length, need: 20 }, { label: "Practice trades on a signal and closed by your plan", have: P.length ? Math.round((byPlan / P.length) * 100) : 0, need: 80, unit: "%" }, { label: "Quiz answers right", have: S.quiz?.correct || 0, need: 10 }],
+      3: [{ label: "Practice trades", have: P.length, need: 30 }, { label: "Closed live paper trades", have: live.length, need: 5 }, { label: "Live trades where you followed your plan", have: live.length ? Math.round((liveOk / live.length) * 100) : 0, need: 80, unit: "%" }, { label: "Drill answers right", have: S.drill?.right || 0, need: 20 }],
     };
   }
   const met = (list) => list.every((r) => r.have >= r.need);
