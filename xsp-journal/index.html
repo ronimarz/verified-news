@@ -198,6 +198,8 @@ textarea { min-height: 90px; resize: vertical; }
 .rule-lv { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 4px 12px; font-size: 13px; margin-top: 4px; }
 .rule-lv label { display: flex; gap: 6px; align-items: center; } .rule-lv input { width: auto; }
 .be-box { margin-top: 8px; padding: 8px 10px; border-radius: 6px; background: var(--info-bg); }
+.paste-zone { border: 2px dashed var(--accent); border-radius: 8px; padding: 18px 12px; text-align: center; color: var(--muted); min-height: 60px; outline: none; -webkit-user-select: text; user-select: text; }
+.paste-zone:focus { background: var(--info-bg); }
 .why { font-size: 13px; color: var(--muted); border-left: 3px solid var(--line); padding: 2px 0 2px 10px; }
 
 /* Open position */
@@ -316,6 +318,7 @@ details p { white-space: pre-wrap; margin: 8px 0 0; font-size: 13px; color: var(
 .shot-list { display: grid; gap: 4px; max-height: 220px; overflow: auto; }
 .shot-row { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-size: 13px; padding: 4px 6px; border-radius: 4px; }
 .shot-row:nth-child(odd) { background: var(--panel-2); }
+@media (max-width: 600px) { .shot-row { grid-template-columns: 56px 1fr; } .shot-row > :last-child { grid-column: 1 / -1; justify-self: start; } }
 .quiz-opt { text-align: left; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 10px 12px; cursor: pointer; width: 100%; }
 .quiz-opt:hover:not(:disabled) { border-color: var(--accent); }
 .quiz-opt.right { border-color: var(--good); background: var(--good-bg); }
@@ -526,7 +529,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
               <h3>Fresh option chain <button class="learn-link" type="button" data-learn="delta">How to pick a strike</button></h3>
               <p class="small muted">Open the SPY 0DTE chain in your broker app. Paste a screenshot of it here (or pick the image) and Claude reads the numbers, or type them in.</p>
               <div class="shot" data-shot="live">
-                <div class="row"><button class="btn" type="button" data-shot-pick>Read a screenshot</button><span class="small muted">or press Ctrl/Cmd+V on this tab</span></div>
+                <div class="row"><button class="btn primary" type="button" data-shot-paste>Paste screenshot</button><button class="btn" type="button" data-shot-pick>Choose a photo</button></div>
+                <p class="small muted" style="margin-top:4px">Fastest: take a screenshot, tap its preview, choose <b>Copy</b> (iPhone: Copy and Delete), then tap Paste screenshot. On a computer you can also drag an image here or press Ctrl/Cmd+V.</p>
                 <div class="shot-out small"></div>
               </div>
               <div class="fields">
@@ -766,7 +770,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 </main>
 
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
-<input type="file" id="shot-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
+<input type="file" id="shot-file" accept="image/*" hidden>
 <div class="toast" id="toast" hidden></div>
 <div class="rp-mini" id="rp-mini" hidden><span id="rp-mini-text"></span><button type="button" id="rp-mini-go">Steps ↑</button></div>
 <div class="alertbar" id="alertbar" role="alert" hidden></div>
@@ -1101,7 +1105,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="field"><label for="${where}-ca-${id}">Buy Ask</label><input id="${where}-ca-${id}" data-k="ask" type="number" step="0.01" inputmode="decimal"></div>
       </div>
       <div class="shot" data-shot="pos" data-tid="${id}"><div class="shot-out small"></div></div>
-      <div class="row"><button class="btn" type="button" data-shot-pick data-shot-for="${id}">Read a screenshot</button><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
+      <div class="row"><button class="btn" type="button" data-shot-paste data-shot-for="${id}">Paste screenshot</button><button class="btn" type="button" data-shot-pick data-shot-for="${id}">Choose a photo</button><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
     </div>`;
   }
   let lcShowWhileOpen = false;
@@ -2437,15 +2441,45 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   // ---------- screenshot reader ----------
   let shotCtx = null;
+  const shotCtxFor = (el) => { const pos = el.closest(".pos"); return pos ? { kind: "pos", id: pos.dataset.id, host: pos.querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') }; };
+  const imageFrom = (dt) => [...(dt?.files || [])].find((x) => x.type.startsWith("image/")) || [...(dt?.items || [])].find((x) => x.kind === "file" && x.type.startsWith("image/"))?.getAsFile() || null;
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shot-pick]"); if (!b) return;
-    shotCtx = b.dataset.shotFor ? { kind: "pos", id: b.dataset.shotFor, host: b.closest(".pos").querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') };
+    shotCtx = shotCtxFor(b);
     $("#shot-file").value = ""; $("#shot-file").click();
   });
+  // One tap: read the image straight from the clipboard. If the browser won't allow that, show a box to long-press and paste into.
+  document.addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-shot-paste]"); if (!b) return;
+    const ctx = shotCtxFor(b);
+    try {
+      if (!navigator.clipboard?.read) throw new Error("no clipboard api");
+      // Some browsers ask for permission or never answer; fall back to the paste box after a short wait.
+      ctx.host.innerHTML = `<span class="muted">Checking your clipboard… allow it if your browser asks.</span>`;
+      const items = await Promise.race([navigator.clipboard.read(), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 4000))]);
+      for (const it of items) {
+        const type = it.types.find((t) => t.startsWith("image/"));
+        if (type) { const blob = await it.getType(type); return readShot(new File([blob], "screenshot." + type.split("/")[1], { type }), ctx); }
+      }
+      ctx.host.innerHTML = `<span style="color:var(--warn)">There's no picture on your clipboard yet. Take a screenshot, tap its preview, choose <b>Copy</b>, then tap Paste screenshot again.</span>`;
+    } catch {
+      ctx.host.innerHTML = `<div class="paste-zone" contenteditable="true" role="textbox" aria-label="Paste your screenshot here">Long-press here and tap <b>Paste</b> (or press Ctrl/Cmd+V)</div>`;
+      const z = $(".paste-zone", ctx.host); z.focus();
+    }
+  });
+  document.addEventListener("paste", (e) => {
+    const z = e.target.closest?.(".paste-zone"); if (!z) return;
+    e.preventDefault(); e.stopPropagation();
+    const f = imageFrom(e.clipboardData), ctx = shotCtxFor(z);
+    if (f) readShot(f, ctx); else z.innerHTML = "That wasn't a picture. Copy the screenshot itself, then long-press here and tap <b>Paste</b>.";
+  }, true);
+  // Drag and drop an image onto the chain step or a position card.
+  document.addEventListener("dragover", (e) => { if (e.target.closest?.('[data-shot="live"], .pos')) e.preventDefault(); });
+  document.addEventListener("drop", (e) => { const t = e.target.closest?.('[data-shot="live"], .pos'); if (!t) return; const f = imageFrom(e.dataTransfer); if (!f) return; e.preventDefault(); readShot(f, shotCtxFor(t)); });
   $("#shot-file").addEventListener("change", () => { const f = $("#shot-file").files[0]; if (f && shotCtx) readShot(f, shotCtx); });
   document.addEventListener("paste", (e) => {
     if (dlg.open || !["live", "dash"].includes(view)) return;
-    const f = [...(e.clipboardData?.files || [])].find((x) => x.type.startsWith("image/")); if (!f) return;
+    const f = imageFrom(e.clipboardData); if (!f) return;
     e.preventDefault();
     const open = S.trades.filter((t) => calc(t).open && t.status === "official");
     const host = view === "live" && !open.length ? $('[data-shot="live"] .shot-out') : null;
@@ -2608,7 +2642,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       { id: "break", title: "Wait for the break", detail: `Auto-watch is on. It marks the break when a 1-minute candle closes ${side} ${L}. Don't enter early. Most of the time nothing happens, and that's fine.`, target: "#st2", lesson: "breakhold" },
       { id: "hold", title: "Break! Now wait for the hold", detail: `Broke at ${esc(s.breakET || "–")}. Wait for one full candle that stays ${side} ${L}. If price comes back across, the count resets.`, target: "#st2", lesson: "breakhold" },
       { id: "context", title: s.stop ? "Opposing signal: no trade" : "Check the news context", detail: s.stop ? "Skip this one. Optionally log it as a missed setup, then press Start over and watch again." : `Read the scout card. Is anything clearly against a ${LC.dir === "put" ? "put" : "call"}? Choose Nothing opposing, Some data stale, or Opposing signal.`, target: "#st3", lesson: "regime" },
-      { id: "chain", title: "Get real option prices", detail: "Open your broker's SPY 0DTE chain. Find a strike with an Ask near $1.00. Paste a screenshot here (Ctrl/Cmd+V) or type Strike, Bid and Ask.", target: "#st4", lesson: "delta" },
+      { id: "chain", title: "Get real option prices", detail: "Open your broker's SPY 0DTE chain. Find a strike with an Ask near $1.00. Tap Paste screenshot (after copying your screenshot) or type Strike, Bid and Ask.", target: "#st4", lesson: "delta" },
       { id: "plan", title: "Set your plan", detail: "Take-profit %, stop % and time stop. The app turns them into exact prices and warns you when to get out.", target: "#lc-plan-panel", lesson: "exit" },
       { id: "enter", title: "Log the paper entry", detail: "Everything checks out. Press Log paper entry now. Prices move, so don't wait long.", target: "#lc-decision", lesson: "spread" },
       { id: "manage", title: "Manage the trade", detail: "Every few minutes, enter the current Bid and Ask (or paste a screenshot) and press Save checkpoint. Don't move your stop.", target: "#live-open", lesson: "exit" },
