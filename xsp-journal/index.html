@@ -1809,21 +1809,26 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   const pastDates = () => HIST.daily.map((d) => d.date).filter((d) => d < etParts().date || (d === etParts().date && !marketOpen() && etParts().min >= 960));
   const prevDay = (date) => { const i = HIST.daily.findIndex((d) => d.date === date); return i > 0 ? HIST.daily[i - 1] : null; };
-  async function dayBars(date) {
-    if (HIST.dayCache.has(date)) return HIST.dayCache.get(date);
-    const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(date + "T12:00:00Z"), end_time: Date.parse(date + "T22:00:00Z"), count: 420, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+  // A day of candles is only usable if it starts at the open. Webull returns the newest candles first, so a request that
+  // asks for too many gets cut off at the start of the day (a "day" that begins at 3:30 pm).
+  const fullDay = (bars) => !!bars && bars.length >= 200 && Math.min(...bars.map((b) => b.m ?? barMin(b))) <= 572;
+  const weekdaysBetween = (a, b) => { let n = 0; for (let t = Date.parse(a + "T12:00:00Z"); t <= Date.parse(b + "T12:00:00Z"); t += 86400000) if (new Date(t).getUTCDay() % 6) n++; return n; };
+  async function dayBars(date, force) {
+    if (!force && fullDay(HIST.dayCache.get(date))) return HIST.dayCache.get(date);
+    const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(date + "T12:00:00Z"), end_time: Date.parse(date + "T22:00:00Z"), count: 420, trading_sessions: "RTH", real_time_required: false }, force ? { cache: false } : LONG_CACHE);
     const bars = toBars(r.payload?.result?.[0]?.result).filter((b) => barDate(b) === date && barMin(b) >= 570 && barMin(b) < 960);
-    if (date < etParts().date) HIST.dayCache.set(date, bars);
+    if (date < etParts().date && fullDay(bars)) HIST.dayCache.set(date, bars);
     return bars;
   }
   async function manyDays(dates, onProgress) {
-    const out = new Map(), need = dates.filter((d) => !HIST.dayCache.has(d)).sort();
-    // group dates that sit close together, so scattered days each get their own request
-    const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && c.length < 4 && (Date.parse(d) - Date.parse(c[c.length - 1])) / 86400000 <= 4) c.push(d); else chunks.push([d]); }
+    const out = new Map(), need = dates.filter((d) => !fullDay(HIST.dayCache.get(d))).sort();
+    // one request covers at most 4 weekdays in a row (4 × 390 = 1,560 candles, under Webull's 1,650 limit)
+    const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && c.length < 4 && weekdaysBetween(c[0], d) <= 4) c.push(d); else chunks.push([d]); }
     let done = 0;
     for (const chunk of chunks) {
       const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1650, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
-      for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; if (!HIST.dayCache.has(d)) HIST.dayCache.set(d, []); HIST.dayCache.get(d).push(b); }
+      const got = new Map(); for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (got.get(d) || got.set(d, []).get(d)).push(b); }
+      for (const d of chunk) { const bars = got.get(d); if (fullDay(bars)) HIST.dayCache.set(d, bars); else if (d < etParts().date) await dayBars(d, true).catch(() => {}); }   // cut off? fetch that day alone
       done += chunk.length; onProgress?.(done, need.length);
     }
     for (const d of dates) out.set(d, HIST.dayCache.get(d) || []);
@@ -1985,8 +1990,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const d = $("#rp-date").value; if (!d || !S.mcp || !/^\d{4}-/.test(d)) return;
     rpPause(); $("#rp-coach").innerHTML = `<div class="small">Loading ${esc(dayName(d))}…</div>`; RP.coachKey = "";
     try {
-      const bars = await dayBars(d);
-      if (bars.length < 30) { $("#rp-coach").innerHTML = `<div class="small">Webull returned too few candles for that day. Try another.</div>`; return; }
+      let bars = await dayBars(d);
+      if (!fullDay(bars)) bars = await dayBars(d, true);   // never start a replay part-way through the day
+      if (!fullDay(bars)) { $("#rp-coach").innerHTML = `<div class="small">Webull didn't send the start of ${esc(dayName(d))}${bars.length ? ` (its candles begin at ${fmtClock(barMin(bars[0]))})` : ""}. Try another day.</div>`; return; }
       Object.assign(RP, { date: d, bars, idx: -1, sub: 0, since: {}, phase: "watch", signal: null, skipped: null, tab: "chain", ticket: null, orders: [], positions: [], result: null, coachKey: "", bodyKey: "" });
       rpRender(); rpPlay();
     } catch (e) { $("#rp-coach").innerHTML = `<div class="small">${esc(liveErr(e))}</div>`; }
@@ -2422,15 +2428,20 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   // 5-minute regular-hours candles per day, cached in this browser so later runs are fast.
   async function load5m(dates, onProgress) {
     let cache = {}; try { cache = JSON.parse(localStorage.getItem("pat.m5." + U()) || "{}"); } catch {}
-    const need = dates.filter((d) => !cache[d]);
-    for (let i = 0; i < need.length; i += 15) {
-      const chunk = need.slice(i, i + 15);
+    const ok5 = (rows) => !!rows && rows.length >= 40 && Math.min(...rows.map((x) => x[0])) <= 575;
+    for (const k of Object.keys(cache)) if (!ok5(cache[k])) delete cache[k];   // drop days that were cut off
+    const need = dates.filter((d) => !cache[d]).sort();
+    // one request covers at most 15 weekdays in a row (15 × 78 = 1,170 candles, under the 1,200 limit)
+    const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && weekdaysBetween(c[0], d) <= 15) c.push(d); else chunks.push([d]); }
+    let done = 0;
+    for (const chunk of chunks) {
       const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
-      for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (cache[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
-      onProgress?.(Math.min(i + 15, need.length), need.length);
+      const got = {}; for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (got[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
+      for (const d of chunk) if (ok5(got[d])) cache[d] = got[d];
+      done += chunk.length; onProgress?.(done, need.length);
     }
-    try { const keep = Object.keys(cache).filter((k) => cache[k].length >= 70).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
-    return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 60));
+    try { const keep = Object.keys(cache).filter((k) => ok5(cache[k])).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
+    return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 40 && v[0].m <= 575));
   }
   const pctOf = (a, n) => (n ? a / n : null);
   const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), i = s.length / 2; return s.length % 2 ? s[Math.floor(i)] : (s[i - 1] + s[i]) / 2; };
@@ -2703,11 +2714,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   async function loadM1(dates, onProgress) {
     const missing = dates.filter((d) => !HIST.dayCache.has(d));
     const cached = await idbGetMany(missing.map((d) => `m1:${U()}:${d}`));
-    for (const [k, v] of cached) HIST.dayCache.set(k.split(":").pop(), v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })));
-    const fetchNow = dates.filter((d) => !HIST.dayCache.has(d));
+    for (const [k, v] of cached) { const bars = v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })); if (fullDay(bars)) HIST.dayCache.set(k.split(":").pop(), bars); }
+    const fetchNow = dates.filter((d) => !fullDay(HIST.dayCache.get(d)));
     await manyDays(fetchNow, onProgress);
-    await idbPutMany(fetchNow.filter((d) => (HIST.dayCache.get(d)?.length || 0) >= 380).map((d) => [`m1:${U()}:${d}`, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
-    return new Map(dates.map((d) => [d, (HIST.dayCache.get(d) || []).map((b) => ({ ...b, m: barMin(b) })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 300));
+    await idbPutMany(fetchNow.filter((d) => fullDay(HIST.dayCache.get(d))).map((d) => [`m1:${U()}:${d}`, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
+    return new Map(dates.map((d) => [d, (HIST.dayCache.get(d) || []).map((b) => ({ ...b, m: barMin(b) })).sort((a, b) => a.m - b.m)]).filter(([, v]) => fullDay(v)));
   }
 
   // ---------- strategy lab: replay a rule over many days with model option prices ----------
