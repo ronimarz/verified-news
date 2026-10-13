@@ -466,6 +466,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
     <div class="panel" id="plan-card" hidden></div>
+    <div class="panel" id="pchk-card" hidden></div>
     <div class="panel" id="routine"></div>
     <div class="kpis" id="kpis"></div>
     <div id="dash-open"></div>
@@ -2862,6 +2863,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         const ivR = impliedVol(t.dir, S0, num(t.strike), 960 - m, (bid + ask) / 2); if (ivR) { out.push(ivR / ivM); by[t.dir]?.push(ivR / ivM); }
       }
     }
+    for (const q of ls.get("pricecheck.v1", [])) {
+      const di = idx.get(q.date) ?? (q.date > D[D.length - 1].date ? D.length : null); if (di == null || di < 11) continue;
+      const R = D.slice(di - 10, di).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), ivM = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
+      for (const dir of ["call", "put"]) { const ivR = impliedVol(dir, q.S, q.K, 960 - q.m, q[dir]); if (ivR) { out.push(ivR / ivM); by[dir].push(ivR / ivM); } }
+    }
     const lim = (x) => Math.min(3, Math.max(0.5, x)), ivMul = out.length >= 3 ? lim(median(out)) : 1;
     const mc = by.call.length >= 3 ? median(by.call) : null, mp = by.put.length >= 3 ? median(by.put) : null;
     const call = lim(mc ?? (mp != null ? mp / SKEW0 : ivMul / Math.sqrt(SKEW0))), put = lim(mp ?? (mc != null ? mc * SKEW0 : ivMul * Math.sqrt(SKEW0)));
@@ -3427,12 +3433,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   let syncT = null;
   function stratSync() {
     if (!S.db) return; clearTimeout(syncT);
-    syncT = setTimeout(() => { const at = Date.now(); ls.set("strat.syncAt", at); S.db.doc("strategy/state").set({ updatedAt: at, today: ls.get("strat.today", null), lib: ls.get("strat.lib", {}), hist: ls.get("strat.hist", {}), real: ls.get("real.v1", {}), prove: ls.get("prove.v1", null), auto: ls.get("strat.auto", true) }).catch(() => {}); }, 800);
+    syncT = setTimeout(() => { const at = Date.now(); ls.set("strat.syncAt", at); S.db.doc("strategy/state").set({ updatedAt: at, today: ls.get("strat.today", null), lib: ls.get("strat.lib", {}), hist: ls.get("strat.hist", {}), real: ls.get("real.v1", {}), prove: ls.get("prove.v1", null), auto: ls.get("strat.auto", true), pchk: ls.get("pricecheck.v1", []) }).catch(() => {}); }, 800);
   }
   function stratFromDb(d) {
     if (!d || !(d.updatedAt > (ls.get("strat.syncAt", 0) || 0))) return;
-    for (const [k, key] of [["today", "strat.today"], ["lib", "strat.lib"], ["hist", "strat.hist"], ["real", "real.v1"], ["prove", "prove.v1"], ["auto", "strat.auto"]]) if (d[k] !== undefined && d[k] !== null) ls.set(key, d[k]);
-    ls.set("strat.syncAt", d.updatedAt); applyStrat(); renderPlan(); renderRule();
+    for (const [k, key] of [["today", "strat.today"], ["lib", "strat.lib"], ["hist", "strat.hist"], ["real", "real.v1"], ["prove", "prove.v1"], ["auto", "strat.auto"], ["pchk", "pricecheck.v1"]]) if (d[k] !== undefined && d[k] !== null) ls.set(key, d[k]);
+    ls.set("strat.syncAt", d.updatedAt); applyStrat(); renderPlan(); renderPchk(); renderRule();
   }
   // Put today's strategy to work: Practice rule, Live check hold and exits.
   function applyStrat() {
@@ -3493,7 +3499,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       PLAN.intra = M5.size >= 20 ? intradayPatterns(M5, D) : null;
       PLAN.at = Date.now(); PLAN.msg = "";
     } catch (e) { PLAN.msg = liveErr(e); }
-    finally { PLAN.building = false; renderPlan(); }
+    finally { PLAN.building = false; renderPlan(); renderPchk(); }
   }
   function renderPlan() {
     const el = $("#plan-card"); if (!el) return;
@@ -3530,7 +3536,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const gapL = Math.abs(L.fToday[0]) >= 0.002 ? ` The opening gap filled the same day on ${Math.round(gf * 100)}% of them.` : "";
     el.innerHTML = head + newsBanner() + stratHtml() + `<div class="small" style="margin:10px 0 6px"><b>Lines to watch</b> (graded by how ${activeStrat() ? "today's strategy" : "your rule"} did on them)</div>
       ${rows.length ? rows.map((x) => `<div class="plan-lv">${gradeBadge(x.gr)}<div style="min-width:0"><b class="mono">${x.L.toFixed(2)}</b> · ${esc(x.name)} · ${x.dir === "call" ? "↑ call if it breaks up" : "↓ put if it breaks down"}<div class="small muted">${x.gr ? `${x.gr.line}. ${esc(x.gr.advice)} ${tpill(x.gr.t)}` : x.e?.generic ? "Your rule doesn't watch this line, so it can't be graded. Add it in Practice → Change the rule." : "Not enough past signals on this line to grade it."}</div></div><button class="btn sm" type="button" data-plan-watch="${x.L.toFixed(2)}" data-dir="${x.dir}" data-why="${esc(x.name)}">Watch</button></div>`).join("") : `<p class="small muted">SPY is already past the usual lines. Wait for a new high or low to form.</p>`}
-      <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">${win}${room}<li><b>Today's lean:</b> ${lean}${gapL}</li></ul>
+      <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">${win}${room}<li><b>Today's lean:</b> ${lean}${gapL}</li>${(() => { const q = pchkList().filter((x) => x.date === etParts().date).pop(); if (!q) return `<li><b>Option prices:</b> not checked yet. <a href="#pchk-card" data-pchk-go>Check if options are cheap today</a> (30 seconds).</li>`; const v = pchkVerdict(q); return `<li><b>Option prices:</b> <span class="pill ${v.cls}">${v.word}</span> at ${fmtClock(q.m)}. ${esc(v.todo.split(". ")[0])}.</li>`; })()}</ul>
       <p class="small muted" style="margin-top:8px">These are leans from history, not predictions. ${activeStrat() ? "Today's strategy" : "Your rule"} still decides each entry.</p>`;
   }
   document.addEventListener("click", (e) => {
@@ -3542,7 +3548,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   // ---------- screenshot reader ----------
   let shotCtx = null;
-  const shotCtxFor = (el) => { const pos = el.closest(".pos"); return pos ? { kind: "pos", id: pos.dataset.id, host: pos.querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') }; };
+  const shotCtxFor = (el) => { if (el.closest("#pchk-card")) return { kind: "pchk", host: $("#pchk-card .shot-out") }; const pos = el.closest(".pos"); return pos ? { kind: "pos", id: pos.dataset.id, host: pos.querySelector(".shot-out") } : { kind: "live", host: $('[data-shot="live"] .shot-out') }; };
   const imageFrom = (dt) => [...(dt?.files || [])].find((x) => x.type.startsWith("image/")) || [...(dt?.items || [])].find((x) => x.kind === "file" && x.type.startsWith("image/"))?.getAsFile() || null;
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-shot-pick]"); if (!b) return;
@@ -3600,6 +3606,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       const cs = (Array.isArray(r?.contracts) ? r.contracts : []).filter((c) => num(c.strike) != null && (num(c.bid) != null || num(c.ask) != null));
       if (!cs.length) { host.innerHTML = `<span style="color:var(--warn)">Couldn't find option prices in that image. Try a tighter screenshot of the chain rows.</span>`; return; }
       host.dataset.shot = JSON.stringify({ ...r, contracts: cs });
+      if (ctx.kind === "pchk") { const q = pchkFromShot({ ...r, contracts: cs }); if (q.err) host.innerHTML = `<span style="color:var(--warn)">${esc(q.err)}</span>`; else runPchk(q); return; }
       const want = ctx.kind === "pos" ? S.trades.find((t) => t.id === ctx.id) : null;
       host.innerHTML = `<div class="small muted" style="margin-bottom:4px">Read from screenshot${r.time ? ` (${esc(r.time)})` : ""}${num(r.underlyingPrice) != null ? ` · ${esc(r.underlying || "")} ${esc(r.underlyingPrice)}` : ""}. Check the numbers before using them.</div><div class="shot-list">${cs.map((c, i) => {
         const match = want && +c.strike === +want.strike && (c.type || want.dir) === want.dir;
@@ -3624,6 +3631,78 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     else { if (c.type === "call" || c.type === "put") LC.dir = c.type; put("lc-strike", "strike", c.strike); put("lc-bid", "bid", c.bid); put("lc-ask", "ask", c.ask); put("lc-delta", "delta", c.delta); if (c.iv != null) LC.iv = String(c.iv); }
     saveLC(); renderLive(); toast("Filled in from the screenshot. Check the numbers.");
   });
+
+  // ---------- price check: are options cheap or expensive today? ----------
+  // An at-the-money call + put (a "straddle") pays |SPY at the close − strike|. Its price is the move the market is charging for.
+  // Compare it with what that same straddle would actually have paid, bought at this time, on the days most like today.
+  const pchkList = () => ls.get("pricecheck.v1", []);
+  function straddlePaid(L, S, K, m) {
+    const pays = [];
+    for (const c of L?.near || []) { const B = c.bars; if (!B?.length) continue; const at = B.filter((b) => b.m <= m).pop() || B[0], end = B[B.length - 1].c; pays.push(Math.abs(S * (end / at.c) - K)); }
+    return pays.length >= 15 ? { avg: pays.reduce((a, b) => a + b, 0) / pays.length, med: median(pays), n: pays.length, over: (x) => pays.filter((p) => p > x).length / pays.length } : null;
+  }
+  function priceCheck(q) {
+    const L = PLAN.like; if (!L) return { err: "Build today's game plan first (it finds the days like today). Tap Refresh on the game plan." };
+    const m = Math.max(570, Math.min(etParts().min, 945)), K = q.K, S = q.S, cost = q.call + q.put;
+    if (!(cost > 0) || !(S > 0) || !(K > 0)) return { err: "Enter both prices, the strike and SPY's price." };
+    if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
+    const h = straddlePaid(L, S, K, m); if (!h) return { err: "Not enough look-alike days loaded yet. Refresh the game plan and try again." };
+    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: h.avg, med: h.med, n: h.n, ratio: cost / h.avg, beat: h.over(cost), at: Date.now() };
+    const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync();
+    return r;
+  }
+  function pchkVerdict(r) {
+    return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than days like today delivered. Sit out, take only your best (A-grade) setups, or take profits sooner." }
+      : r.ratio <= 0.85 ? { k: "go", cls: "good", word: "Cheap", todo: "Options look cheap for a day like this. Buying has better odds than usual, so your plan's signals are worth taking." }
+      : { k: "info", cls: "", word: "About fair", todo: "Normal pricing. Trade your plan as usual." };
+  }
+  function renderPchk() {
+    const el = $("#pchk-card"); if (!el) return;
+    if (!S.mcp) { el.hidden = true; return; } el.hidden = false;
+    const today = pchkList().filter((x) => x.date === etParts().date), last = today[today.length - 1], P = LIVE.snap ? +LIVE.snap.price : null;
+    const keep = (id) => $("#" + id)?.value ?? "";
+    let res = "";
+    if (last) {
+      const v = pchkVerdict(last);
+      res = todoBox(`Options are <span class="pill ${v.cls}">${v.word}</span> right now`, [
+        { k: v.k, h: v.todo },
+        { k: "info", h: `The ${last.K} call + put cost $${last.cost.toFixed(2)}. That's the move the market is charging for, from ${fmtClock(last.m)} to the close.`, p: `Bought at this time on the ${last.n} days most like today, the same pair would have paid back $${last.paid.toFixed(2)} on average (half the days under $${last.med.toFixed(2)}). It paid more than it cost on ${Math.round(last.beat * 100)}% of them.` },
+      ], `Checked at ${fmtClock(last.m)}. Prices change during the day; re-check before trading the afternoon. A small sample of look-alike days, so read it as a lean.`);
+    }
+    const hist = pchkList(), days = [...new Map(hist.map((x) => [x.date, x])).values()];
+    const histTxt = days.length >= 5 ? `<p class="small muted" style="margin-top:8px">Your last ${Math.min(days.length, 30)} checked days: options were expensive on ${days.slice(-30).filter((x) => x.ratio >= 1.2).length}, fair on ${days.slice(-30).filter((x) => x.ratio > 0.85 && x.ratio < 1.2).length}, cheap on ${days.slice(-30).filter((x) => x.ratio <= 0.85).length}.</p>` : "";
+    el.innerHTML = `<div class="panel-head"><div><h2>Are options cheap today?</h2><p class="small muted" style="margin-top:4px">Most of the time options are priced for more movement than really happens, which is why buyers lose on average. This checks today's prices against the days most like today.</p></div></div>
+      ${res}
+      <details${last ? "" : " open"}><summary class="small" style="cursor:pointer">${last ? "Check again" : "How to check (30 seconds)"}</summary>
+        <p class="small" style="margin:6px 0">In the option chain, find the strike closest to SPY's price. Enter the <b>call</b> and the <b>put</b> at that strike (the middle of Bid and Ask, or just the Ask). Or paste a chain screenshot below.</p>
+        <div class="fields" style="grid-template-columns: repeat(auto-fit, minmax(110px, 1fr))">
+          <div class="field"><label for="pc-k">Strike</label><input id="pc-k" type="number" step="1" value="${esc(keep("pc-k") || (P ? Math.round(P) : ""))}"></div>
+          <div class="field"><label for="pc-c">Call price</label><input id="pc-c" type="number" step="0.01" min="0" value="${esc(keep("pc-c"))}"></div>
+          <div class="field"><label for="pc-p">Put price</label><input id="pc-p" type="number" step="0.01" min="0" value="${esc(keep("pc-p"))}"></div>
+        </div>
+        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="pc-run">Check</button><button class="btn" type="button" data-shot-paste>Paste chain screenshot</button><button class="btn" type="button" data-shot-pick>Choose a photo</button></div>
+        <div class="shot-out small" style="margin-top:8px"></div>
+      </details>${histTxt}`;
+  }
+  function runPchk(q) {
+    const r = priceCheck(q);
+    if (r.err) { const o = $("#pchk-card .shot-out"); if (o) o.innerHTML = `<span style="color:var(--warn)">${esc(r.err)}</span>`; else toast(r.err); return; }
+    renderPchk(); renderPlan(); spotlight("#pchk-card");
+  }
+  document.addEventListener("click", (e) => { if (e.target.closest("[data-pchk-go]")) { e.preventDefault(); const d = $("#pchk-card details"); if (d) d.open = true; spotlight("#pchk-card"); } });
+  document.addEventListener("click", (e) => {
+    if (e.target.id !== "pc-run") return;
+    runPchk({ K: num($("#pc-k").value), call: num($("#pc-c").value), put: num($("#pc-p").value), S: LIVE.snap ? +LIVE.snap.price : num($("#pc-k").value) });
+  });
+  // a chain screenshot: use the strike nearest SPY that has both a call and a put
+  function pchkFromShot(r) {
+    const S0 = num(r.underlyingPrice) ?? (LIVE.snap ? +LIVE.snap.price : null), mid = (c) => (num(c.bid) != null && num(c.ask) != null ? (c.bid + c.ask) / 2 : num(c.ask) ?? num(c.bid));
+    const by = new Map(); for (const c of r.contracts || []) { const k = +c.strike, t = c.type === "put" ? "put" : c.type === "call" ? "call" : null; if (!t || mid(c) == null) continue; (by.get(k) || by.set(k, {}).get(k))[t] = mid(c); }
+    const both = [...by.entries()].filter(([, v]) => v.call != null && v.put != null);
+    if (!both.length || S0 == null) return { err: "The screenshot needs a call and a put at the same strike, plus SPY's price. Try a screenshot that shows both sides of the chain." };
+    const [K, v] = both.sort((a, b) => Math.abs(a[0] - S0) - Math.abs(b[0] - S0))[0];
+    return { K, call: v.call, put: v.put, S: S0 };
+  }
 
   // ---------- quiz ----------
   function quizBank() {
@@ -4300,7 +4379,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   (async () => {
     const mcp = await use("mcp");
     if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); rpInitDates(); return; }
-    S.mcp = mcp; schedulePoll(0); setTimeout(() => buildPlan(), 4000);
+    S.mcp = mcp; schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000);
     if (view === "practice") rpInitDates();
   })();
 })();
