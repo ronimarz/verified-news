@@ -209,6 +209,16 @@ textarea { min-height: 90px; resize: vertical; }
 .pat-bars .fill { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; }
 .pat-bars .fill.hi { background: var(--ink); }
 .pat-bars .v { font-family: var(--mono); color: var(--ink); text-align: right; }
+.todo { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 0 8px 8px 0; padding: 12px 14px; margin-bottom: 12px; background: var(--panel-2); }
+.todo h3 { font-size: 15px; margin: 0 0 10px; }
+.todo ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.todo li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 14px; }
+.todo li .small { margin-top: 2px; color: var(--muted); }
+.todo .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.todo .ic.good { background: var(--good-bg); color: var(--good); } .todo .ic.bad { background: var(--bad-bg); color: var(--bad); } .todo .ic.warn { background: var(--warn-bg); color: var(--warn); } .todo .ic.info { background: var(--info-bg); color: var(--accent); }
+.todo .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.pat-do { font-size: 13.5px; margin: 8px 0 0; padding: 7px 9px; background: var(--panel-2); border-radius: 6px; }
+details.nums { margin-top: 8px; } details.nums > summary { font-size: 12.5px; color: var(--muted); cursor: pointer; } details.nums[open] > summary { margin-bottom: 6px; }
 .pat-today { border-left: 3px solid var(--accent); background: var(--info-bg); padding: 10px 12px; border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 14px; }
 .trust { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; margin-left: 4px; white-space: nowrap; font-family: var(--sans, inherit); background: var(--panel-2); color: var(--muted); }
 .trust.strong { background: var(--good-bg); color: var(--good); } .trust.weak { background: var(--warn-bg); color: var(--warn); }
@@ -2513,57 +2523,95 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   const pbars = (items, fmt, hiN) => { const max = Math.max(...items.map((x) => x.v || 0), 1e-9); return `<div class="pat-bars">${items.map((x) => `<span>${esc(x.n)}</span><div class="track" title="${esc(x.n)}: ${x.v != null ? fmt(x.v) : "–"}"><div class="fill${x === hiN ? " hi" : ""}" style="width:${((x.v || 0) / max) * 100}%"></div></div><span class="v">${x.v != null ? fmt(x.v) : "–"}${tpill(x.tr)}</span>`).join("")}</div>`; };
   const P0 = (v) => v == null ? "–" : Math.round(v * 100) + "%", P1 = (v) => v == null ? "–" : (v * 100).toFixed(1) + "%";
+  // "What to do" box: a short list of takeaways, each with an optional button.
+  const TODO_IC = { go: ["✓", "good"], avoid: ["✕", "bad"], wait: ["⏱", "warn"], info: ["i", "info"] };
+  function todoBox(title, items, foot = "") {
+    if (!items.length) return "";
+    return `<div class="todo"><h3>${title}</h3><ol>${items.map((x) => { const [ic, c] = TODO_IC[x.k] || TODO_IC.info; return `<li><span class="ic ${c}" aria-hidden="true">${ic}</span><div><b>${x.h}</b>${x.p ? `<div class="small">${x.p}</div>` : ""}${x.acts?.length ? `<div class="acts">${x.acts.map(([lab, attrs]) => `<button class="btn sm" type="button" ${attrs}>${esc(lab)}</button>`).join("")}</div>` : ""}</div></li>`; }).join("")}</ol>${foot ? `<p class="small muted" style="margin-top:8px">${foot}</p>` : ""}</div>`;
+  }
+  const numbers = (inner, label = "Show the numbers") => `<details class="nums"><summary>${label}</summary>${inner}</details>`;
+  const soLine = (t) => `<p class="pat-do"><b>So:</b> ${t}</p>`;
+  // buttons in the pattern finder that change the Practice rule or jump somewhere
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-pact]"); if (!b) return;
+    const [k, v] = b.dataset.pact.split(":");
+    if (k === "until" || k === "hold") { setRule({ [k]: +v }); showView("practice"); $("#rp-rule-edit").open = true; spotlight("#rp-rule"); toast(k === "until" ? `Practice rule: no new trades after ${fmtClock(+v)}. Replay a few days to see if it helps.` : `Practice rule: wait ${v} minute${+v === 1 ? "" : "s"} for a hold. Replay a few days to see if it helps.`); }
+    else if (k === "tab") { showView("learn"); $(`[data-pt="${v}"]`).click(); spotlight("#pat-panel"); }
+    else if (k === "run") { const btn = $("#" + v); if (btn) { const sec = btn.closest("[id^=pat-sec-]"); if (sec?.hidden) $(`[data-pt="${sec.id.slice(8)}"]`).click(); btn.click(); } }
+    else if (k === "dash") { showView("dash"); spotlight("#plan-card"); }
+  });
+  function patternActions(r) {
+    const d = r.daily, m = r.intra, px = d.range.px, dol = (p) => "$" + (p * px).toFixed(2), A = [];
+    const sn = LIVE.snap, lt = sn && +sn.last_trade_time, live = sn && lt && etParts(new Date(lt)).date === etParts().date;
+    // today first: the gap and yesterday's size
+    if (live) {
+      const gap = +sn.open / +sn.pre_close - 1, g = d.gaps.find((x) => gap >= x.a && gap < x.b), pc = +sn.pre_close;
+      if (g && g.a !== -0.002 && g.days >= 15 && g.fill != null) A.push({ k: g.fill >= 0.5 ? "info" : "wait", h: `Today opened ${gap >= 0 ? "up" : "down"} ${Math.abs(gap * 100).toFixed(2)}%. Gaps like this came back to yesterday's close ($${pc.toFixed(2)}) ${P0(g.fill)} of the time.`,
+        p: g.fill >= 0.5 ? `Treat $${pc.toFixed(2)} as a likely target: if you hold a ${gap >= 0 ? "put" : "call"}, it's a natural place to take profit. A ${gap >= 0 ? "call" : "put"} is fighting that pull.` : `Most gaps this size did not come back, so don't count on a return to $${pc.toFixed(2)}.` });
+    }
+    const last = d.after && r.lastChg != null ? r.lastChg : null;
+    if (last != null && Math.abs(last) > 0.01) { const a = d.after[last < 0 ? 0 : 2]; A.push({ k: "info", h: `On the last full day SPY ${last < 0 ? "fell" : "rose"} ${Math.abs(last * 100).toFixed(1)}%. Days after a big day usually move more (typical ${dol(a.avgRange || 0)}).`, p: "Expect bigger swings both ways: take-profits get hit more often, and so do stops." }); }
+    A.push({ k: "info", h: `A normal day moves about ${dol(d.range.med)} from high to low.`, p: `If your take-profit needs SPY to go much more than ${dol(d.range.med / 2)} past your entry line, it's asking for half the day's movement. Pick nearer targets on quiet days.` });
+    if (m) {
+      const avgB = (ks) => ks.reduce((a, k) => a + (m.blocks[k].v || 0), 0) / ks.length, op = avgB([0, 1]), mid = avgB([4, 5, 6, 7]);
+      if (mid < op * 0.8) A.push({ k: "avoid", h: "Be picky between 11:30 am and 1:30 pm.", p: `Midday moves about ${dol(mid)} per half hour vs ${dol(op)} in the first hour, so a midday signal has less room before time decay eats the option.`, acts: RULE.until > 660 ? [["Practice with no trades after 11:00", 'data-pact="until:660"']] : [] });
+      const fails = m.orN.up + m.orN.dn ? (m.or.upFail * m.orN.up + m.or.dnFail * m.orN.dn) / (m.orN.up + m.orN.dn) : null;
+      if (fails != null && fails >= 0.25) A.push({ k: "wait", h: `About ${P0(fails)} of first breakouts from the first 30 minutes turned around and broke the other side.`, p: "Wait for SPY to stay past the line before buying, rather than jumping on the first touch.", acts: RULE.hold < 1 ? [["Practice with a 1-minute hold", 'data-pact="hold:1"']] : [] });
+      if (m.firstHour != null) { const t = trust(m.firstN.same, m.firstN.n); if ((t.k === "strong" || t.k === "weak") && Math.abs(m.firstHour - 0.5) > 0.05) A.push(m.firstHour > 0.5 ? { k: "go", h: `Favor signals in the first hour's direction after 10:30 am.`, p: `SPY kept the first hour's direction ${P0(m.firstHour)} of the time. A signal against it needs to be extra clean.` } : { k: "wait", h: "Be careful chasing the morning's move after 10:30 am.", p: `SPY reversed the first hour's direction ${P0(1 - m.firstHour)} of the time.` });
+        else if (t.k === "luck" || t.k === "few") A.push({ k: "avoid", h: "Don't assume the morning's direction will continue.", p: `After 10:30 am SPY kept the first hour's direction only ${P0(m.firstHour)} of the time, about a coin flip. Trade the signals, not the morning's mood.` }); }
+    }
+    if (d.lvl.hiHold != null && d.lvl.hiHold < 0.6) A.push({ k: "wait", h: `Breaking yesterday's high is common (${P0(d.lvl.hiTouch)} of days), but it closed above it only ${P0(d.lvl.hiHold)} of the time.`, p: `Don't hold a call all day just because the high broke. Take your profit at your target. The same goes for yesterday's low: it held ${P0(d.lvl.loHold)} of the time.` });
+    return A.slice(0, 6);
+  }
   function renderPatterns() {
     const r = PAT.res, out = $("#pat-out"); if (!r) return;
     const d = r.daily, m = r.intra, px = d.range.px, dol = (pct) => "$" + (pct * px).toFixed(2), dO = r.dOld, dN = r.dNew, mO = r.iOld, mN = r.iNew;
     const maxBlock = m ? m.blocks.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a)) : null, minBlock = m ? m.blocks.reduce((a, b) => ((b.v ?? 9) < (a.v ?? 9) ? b : a)) : null;
     const hiBlock = (arr) => arr.reduce((a, b) => ((b.v || 0) > (a.v || 0) ? b : a));
     const realGaps = d.gaps.filter((g) => g.a !== -0.002), gDays = realGaps.reduce((a, g) => a + g.days, 0), gFill = gDays ? realGaps.reduce((a, g) => a + (g.fill || 0) * g.days, 0) / gDays : null;
-    // today vs history
-    let today = "";
     const sn = LIVE.snap, lt = sn && +sn.last_trade_time;
-    if (sn && lt && etParts(new Date(lt)).date === etParts().date) {
-      const gap = +sn.open / +sn.pre_close - 1, g = d.gaps.find((x) => gap >= x.a && gap < x.b), rs = (+sn.high - +sn.low) / +sn.pre_close;
-      today = `<div class="pat-today"><b>Today so far:</b> SPY opened ${gap >= 0 ? "up" : "down"} ${Math.abs(gap * 100).toFixed(2)}% (${g ? esc(g.n.toLowerCase()) : ""}). In the past, ${g && g.days ? `<b>${P0(g.fill)}</b> of gaps like this were filled the same day` : "there were too few gaps like this to say"}. Today's range so far is <b>$${(+sn.high - +sn.low).toFixed(2)}</b>; ${P0(pctOf(r.rangeList.filter((x) => x > rs).length, r.rangeList.length))} of past days ended with a bigger range than that.</div>`;
-    }
-    out.innerHTML = `${today}
-      <div class="why" style="margin-bottom:10px">How sure is each number? <span class="trust strong">strong</span> very unlikely to be chance · <span class="trust weak">weak</span> some evidence · <span class="trust luck">could be luck</span> too close to normal · <span class="trust few">too few days</span>. "Held up" means the pattern was about the same on older and recent days. Tap a label for details.</div>
-      <p class="small muted" style="margin-bottom:10px">Daily patterns: ${d.days.toLocaleString()} days (${esc(dayName(d.from))} – ${esc(dayName(d.to))}).${m ? ` Intraday patterns: ${m.days} days of 5-minute candles.` : ""} SPY closed higher on ${P0(d.upDays)} of these days.</p>
-      <div class="pat-grid">
-        <div class="pat-card"><h3>How far SPY moves in a day</h3><div class="pat-big">${dol(d.range.med)} <span class="small muted">(${P1(d.range.med)})</span></div>
-          <p class="small">On a typical day, the distance from SPY's high to its low is about <b>${dol(d.range.med)}</b> at today's price. 1 day in 4 it's more than <b>${dol(d.range.q75)}</b>, and 1 in 4 it's under ${dol(d.range.q25)}.</p>
-          ${pbars(d.range.dist, P0)}<p class="small muted" style="margin-top:6px">Why it matters: a 0DTE option needs SPY to move. On a quiet day, there may not be enough room for your take-profit.</p></div>
-        ${m ? `<div class="pat-card"><h3>When SPY moves the most</h3><div class="pat-big">${esc(maxBlock.n)}</div>
-          <p class="small">The busiest half hour is <b>${esc(maxBlock.n)}</b> (typical range ${dol(maxBlock.v)}). The quietest is <b>${esc(minBlock.n)}</b> (${dol(minBlock.v)}). Typical high-to-low range in each half hour:</p>
-          ${pbars(m.blocks.map((x) => ({ ...x })), (v) => dol(v), null)}<p class="small muted" style="margin-top:6px">${(() => { const avg = (ks) => ks.reduce((a, k) => a + (m.blocks[k].v || 0), 0) / ks.length, op = avg([0, 1]), mid = avg([4, 5, 6, 7]), cl = avg([11, 12]); return `First hour: ${dol(op)} per half hour. Midday (11:30–1:30): ${dol(mid)}. Last hour: ${dol(cl)}. ` + (mid < op * 0.8 ? "Midday is clearly quieter, so a midday signal has less room to reach your take-profit before time decay eats the option." : "Midday isn't much quieter than the open in this period."); })()}</p></div>` : ""}
-        ${m ? `<div class="pat-card"><h3>When the day's high and low happen</h3><div class="pat-big">${P0(m.firstHourHiLo)}</div>
-          <p class="small">On <b>${P0(m.firstHourHiLo)}</b> of days, the day's high <i>or</i> low was set in the first hour (by 10:30 am). Most often the high came at <b>${esc(hiBlock(m.hiAt).n)}</b> and the low at <b>${esc(hiBlock(m.loAt).n)}</b>.</p>
-          <div class="small" style="margin-top:6px"><b>Where the day's high was set</b></div>${pbars(m.hiAt, P0)}</div>` : ""}
-        <div class="pat-card"><h3>Breaking yesterday's high or low</h3><div class="pat-big">${P0(d.lvl.hiTouch)} / ${P0(d.lvl.loTouch)}</div>
-          <p class="small">SPY traded above yesterday's high on <b>${P0(d.lvl.hiTouch)}</b> of days, but only <b>${P0(d.lvl.hiHold)}</b> of those days <i>closed</i> above it. It went below yesterday's low on ${P0(d.lvl.loTouch)} of days, and ${P0(d.lvl.loHold)} of those closed below it.</p>
-          ${pbars([{ n: "Broke high: closed above", v: d.lvl.hiHold, tr: trust(d.lvl.hiHits, d.lvl.hiN) }, { n: "Broke low: closed below", v: d.lvl.loHold, tr: trust(d.lvl.loHits, d.lvl.loN) }, { n: "Stayed inside (all days)", v: d.lvl.inside }], P0)}
-          ${heldUp(dO?.lvl.hiHold, dN?.lvl.hiHold)}
-          <p class="small muted" style="margin-top:6px">Why it matters: a break of yesterday's level is common, and holding it is the hard part. That's what your 60-second hold tries to filter.</p></div>
-        ${m ? `<div class="pat-card"><h3>Breaking out of the first 30 minutes</h3><div class="pat-big">${P0(m.or.up)} up · ${P0(m.or.dn)} down</div>
-          <p class="small">After 10:00 am, SPY closed a candle above the first 30 minutes' high first on ${P0(m.or.up)} of days, and below its low first on ${P0(m.or.dn)}. It stayed inside all day on ${P0(m.or.none)}.</p>
-          ${pbars([{ n: "Broke up, closed above", v: m.or.upHold, tr: trust(m.orN.upHold, m.orN.up) }, { n: "Broke up, then broke down", v: m.or.upFail }, { n: "Broke down, closed below", v: m.or.dnHold, tr: trust(m.orN.dnHold, m.orN.dn) }, { n: "Broke down, then broke up", v: m.or.dnFail }], P0)}
-          ${heldUp(mO?.or.upHold, mN?.or.upHold)}
-          <p class="small muted" style="margin-top:6px">"Then broke the other way" is a failed breakout. If that number is high, waiting for a hold matters.</p></div>` : ""}
-        <div class="pat-card"><h3>Gaps at the open</h3><div class="pat-big">${P0(gFill)} filled</div><p class="small">Of the ${gDays} days that opened at least 0.2% away from yesterday's close, ${P0(gFill)} came back to it the same day.</p>
-          <p class="small">A gap is when SPY opens away from yesterday's close. A gap is "filled" when price comes back to yesterday's close the same day. Share of gaps filled, by size:</p>
-          ${pbars(d.gaps.map((g) => ({ n: g.n, v: g.fill, tr: g.a === -0.002 ? null : trust(Math.round((g.fill || 0) * g.days), g.days) })), P0)}<p class="small muted" style="margin-top:6px">${d.gaps.map((g) => `${g.n}: ${g.days} days`).join(" · ")}</p></div>
-        <div class="pat-card"><h3>The day after a big day</h3>
-          <p class="small">Chance SPY closes higher the next day, and its typical range:</p>
-          ${pbars(d.after.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) })), P0)}<p class="small muted" style="margin-top:6px">${d.after.map((x) => `${x.n.replace("After ", "after ")}: ${x.days} days, typical range ${dol(x.avgRange || 0)}`).join(" · ")}. Big days are usually followed by bigger-than-normal ranges.</p></div>
-        <div class="pat-card"><h3>Day of the week</h3>
-          <p class="small">Chance SPY closes higher, by weekday:</p>${pbars(d.wd.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) })), P0)}
-          <p class="small muted" style="margin-top:6px">Typical range: ${d.wd.map((x) => `${x.n} ${dol(x.range || 0)}`).join(" · ")}. Differences of a few percent are usually just noise.</p></div>
-        ${m ? `<div class="pat-card"><h3>Does the first hour predict the rest?</h3><div class="pat-big">${P0(m.firstHour)} ${tpill(trust(m.firstN.same, m.firstN.n))}</div>
-          <p class="small">On <b>${P0(m.firstHour)}</b> of days, SPY moved the same direction after 10:30 am as it did in the first hour. ${m.firstHour > 0.55 ? "That's a mild tendency to keep going." : m.firstHour < 0.45 ? "That's a mild tendency to reverse." : "That's close to a coin flip, so the first hour alone tells you little."}</p></div>` : ""}
-      </div>
+    const rangeNow = sn && lt && etParts(new Date(lt)).date === etParts().date ? `Today's range so far is $${(+sn.high - +sn.low).toFixed(2)}; ${P0(pctOf(r.rangeList.filter((x) => x > (+sn.high - +sn.low) / +sn.pre_close).length, r.rangeList.length))} of past days ended with a bigger range than that.` : "";
+    const fails = m && m.orN.up + m.orN.dn ? (m.or.upFail * m.orN.up + m.or.dnFail * m.orN.dn) / (m.orN.up + m.orN.dn) : null;
+    const avgB = m ? (ks) => ks.reduce((a, k) => a + (m.blocks[k].v || 0), 0) / ks.length : null;
+    const noisy = (arr) => arr.every((x) => !x.tr || x.tr.k === "luck" || x.tr.k === "few");
+    const afterRows = d.after.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) })), wdRows = d.wd.map((x) => ({ n: x.n, v: x.up, tr: trust(Math.round((x.up || 0) * x.days), x.days, d.upDays) }));
+    const cards = [
+      `<div class="pat-card"><h3>How far SPY moves in a day</h3><div class="pat-big">${dol(d.range.med)}</div>
+        <p class="small">A typical day's high-to-low distance. 1 day in 4 moves more than ${dol(d.range.q75)}; 1 in 4 moves less than ${dol(d.range.q25)}.${rangeNow ? " " + rangeNow : ""}</p>
+        ${soLine(`a 0DTE option needs SPY to move. On a quiet day there may not be room for a big take-profit, so aim nearer.`)}
+        ${numbers(`<p class="small">Share of days by size of range (${P1(d.range.med)} of SPY's price is typical):</p>${pbars(d.range.dist, P0)}`)}</div>`,
+      m ? `<div class="pat-card"><h3>Best and worst times to trade</h3><div class="pat-big">${esc(maxBlock.n)}</div>
+        <p class="small">The busiest half hour is <b>${esc(maxBlock.n)}</b> (about ${dol(maxBlock.v)}); the quietest is <b>${esc(minBlock.n)}</b> (${dol(minBlock.v)}).</p>
+        ${soLine(avgB([4, 5, 6, 7]) < avgB([0, 1]) * 0.8 ? `signals in the first hour and last hour have the most room. Be picky from 11:30 am to 1:30 pm.` : "midday isn't much quieter than the open lately, so time of day matters less right now.")}
+        ${numbers(`<p class="small">Typical high-to-low move in each half hour:</p>${pbars(m.blocks.map((x) => ({ ...x })), (v) => dol(v), null)}`)}</div>` : "",
+      m ? `<div class="pat-card"><h3>When the day's high and low are set</h3><div class="pat-big">${P0(m.firstHourHiLo)} by 10:30</div>
+        <p class="small">On ${P0(m.firstHourHiLo)} of days, the day's high <i>or</i> low was already in by 10:30 am. The high came most often at ${esc(hiBlock(m.hiAt).n)}, the low at ${esc(hiBlock(m.loAt).n)}.</p>
+        ${soLine("mark the first hour's high and low. Often one of them ends up as the day's extreme, so a later break past it means SPY is going somewhere new.")}
+        ${numbers(`<div class="small"><b>Where the day's high was set</b></div>${pbars(m.hiAt, P0)}<div class="small" style="margin-top:6px"><b>Where the day's low was set</b></div>${pbars(m.loAt, P0)}`)}</div>` : "",
+      `<div class="pat-card"><h3>Breaking yesterday's high or low</h3><div class="pat-big">${P0(d.lvl.hiHold)} held</div>
+        <p class="small">SPY went above yesterday's high on ${P0(d.lvl.hiTouch)} of days, but only ${P0(d.lvl.hiHold)} of those closed above it. Below yesterday's low: ${P0(d.lvl.loTouch)} of days, ${P0(d.lvl.loHold)} closed below.</p>
+        ${soLine(d.lvl.hiHold < 0.6 ? "the break is common, holding it is not. Take profits at your target instead of riding it to the close." : "breaks of yesterday's levels have mostly held lately, so they're worth trading with your normal exits.")}
+        ${numbers(`${pbars([{ n: "Broke high: closed above", v: d.lvl.hiHold, tr: trust(d.lvl.hiHits, d.lvl.hiN) }, { n: "Broke low: closed below", v: d.lvl.loHold, tr: trust(d.lvl.loHits, d.lvl.loN) }, { n: "Stayed inside (all days)", v: d.lvl.inside }], P0)}${heldUp(dO?.lvl.hiHold, dN?.lvl.hiHold)}`)}</div>`,
+      m ? `<div class="pat-card"><h3>Breaking out of the first 30 minutes</h3><div class="pat-big">${P0(fails)} turned around</div>
+        <p class="small">After 10:00 am SPY broke above the first 30 minutes' range first on ${P0(m.or.up)} of days and below it first on ${P0(m.or.dn)}. About ${P0(fails)} of those first breaks reversed and broke the other side.</p>
+        ${soLine(fails >= 0.25 ? "wait for SPY to stay past the line for a minute or more before buying." : "first breakouts mostly kept going, so a long wait may cost you the move.")}
+        ${numbers(`${pbars([{ n: "Broke up, closed above", v: m.or.upHold, tr: trust(m.orN.upHold, m.orN.up) }, { n: "Broke up, then broke down", v: m.or.upFail }, { n: "Broke down, closed below", v: m.or.dnHold, tr: trust(m.orN.dnHold, m.orN.dn) }, { n: "Broke down, then broke up", v: m.or.dnFail }], P0)}${heldUp(mO?.or.upHold, mN?.or.upHold)}<p class="small muted">Stayed inside the first 30 minutes all day: ${P0(m.or.none)}.</p>`)}</div>` : "",
+      gDays < 15 ? "" : `<div class="pat-card"><h3>Gaps at the open</h3><div class="pat-big">${P0(gFill)} filled</div>
+        <p class="small">When SPY opens at least 0.2% away from yesterday's close (a "gap"), it came back to that close the same day ${P0(gFill)} of the time (${gDays} days).</p>
+        ${soLine(gFill >= 0.5 ? "yesterday's close is a common target on gap days. Use it as a take-profit spot when your trade points toward it." : "most gaps didn't fill, so don't count on a return to yesterday's close.")}
+        ${numbers(`<p class="small">Share filled, by gap size:</p>${pbars(d.gaps.map((g) => ({ n: g.n, v: g.fill, tr: g.a === -0.002 ? null : trust(Math.round((g.fill || 0) * g.days), g.days) })), P0)}<p class="small muted">${d.gaps.map((g) => `${g.n}: ${g.days} days`).join(" · ")}</p>`)}</div>`,
+      m ? `<div class="pat-card"><h3>Does the morning predict the afternoon?</h3><div class="pat-big">${P0(m.firstHour)} ${tpill(trust(m.firstN.same, m.firstN.n))}</div>
+        <p class="small">On ${P0(m.firstHour)} of days SPY kept moving the first hour's direction after 10:30 am.</p>
+        ${soLine(m.firstHour > 0.55 ? "a mild tendency to keep going. Signals in the morning's direction are a bit better." : m.firstHour < 0.45 ? "a mild tendency to reverse. Be careful chasing the morning's move." : "about a coin flip. Don't pick calls or puts based on the morning alone.")}</div>` : "",
+    ].filter(Boolean);
+    const minor = `<div class="pat-card"><h3>The day after a big day</h3>${soLine(noisy(afterRows) ? "direction after a big day is close to normal; ignore it. Ranges are bigger, though." : "there is some lean here; see the labels.")}${numbers(`${pbars(afterRows, P0)}<p class="small muted">${d.after.map((x) => `${x.n.replace("After ", "after ")}: ${x.days} days, typical range ${dol(x.avgRange || 0)}`).join(" · ")}</p>`, "Chance of closing higher")}</div>
+      <div class="pat-card"><h3>Day of the week</h3>${soLine(noisy(wdRows) ? "no weekday is reliably better. Ignore it." : "one weekday stands out; see the labels.")}${numbers(`${pbars(wdRows, P0)}<p class="small muted">Typical range: ${d.wd.map((x) => `${x.n} ${dol(x.range || 0)}`).join(" · ")}</p>`, "Chance of closing higher")}</div>`;
+    out.innerHTML = `${todoBox("What to do with this", patternActions(r), `From ${d.days.toLocaleString()} days (${esc(dayName(d.from))} – ${esc(dayName(d.to))}). These are tendencies: a 60% pattern still fails 4 days in 10.`)}
+      <div class="pat-grid">${cards.join("")}</div>
+      <details class="nums" style="margin-top:12px"><summary>Patterns that turned out to be mostly noise</summary><div class="pat-grid" style="margin-top:8px">${minor}</div></details>
+      <details class="nums" style="margin-top:6px"><summary>What the labels mean</summary><p class="small"><span class="trust strong">strong</span> very unlikely to be chance · <span class="trust weak">weak</span> some evidence · <span class="trust luck">could be luck</span> too close to normal to mean much · <span class="trust few">too few days</span>. "Held up" means older and recent days agree. Tap a label for details.</p></details>
       <div class="row" style="margin-top:12px"><button class="btn" type="button" id="pat-ask">Explain what this means for my trading</button><span class="small muted">Last run ${esc(new Date(r.ranAt).toLocaleString())}</span></div>
-      <div id="pat-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>
-      <p class="small muted" style="margin-top:8px">Patterns describe the past. Markets change, and a 60% tendency still fails 4 times out of 10. Use them to set expectations, not to predict a single day.</p>`;
+      <div id="pat-ai" class="small" style="margin-top:8px; white-space:pre-wrap"></div>`;
   }
   function patternBrief(r) {
     const d = r.daily, m = r.intra, px = d.range.px, dol = (p) => "$" + (p * px).toFixed(2);
@@ -2577,7 +2625,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $$("#pat-tabs [data-pt]").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
     for (const k of ["pat", "like", "lab", "news"]) { const sec = $("#pat-sec-" + k); if (sec) sec.hidden = k !== b.dataset.pt; }
     if (b.dataset.pt === "lab") renderReal();
-    if (b.dataset.pt === "news") renderNews();
+    if (b.dataset.pt === "news") renderNewsDays();
   });
   $("#pat-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("The pattern finder needs Webull, which isn't available in this view.");
@@ -2591,7 +2639,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const M = await load5m(idays, (a, b) => { out.innerHTML = `<div class="empty">Loading 5-minute candles… ${a} of ${b} days</div>`; });
       const daily = dailyPatterns(D), intra = M.size >= 20 ? intradayPatterns(M, D) : null;
       const cut = Math.floor(D.length * 2 / 3), Me = [...M.entries()], mc = Math.floor(Me.length * 2 / 3);
-      PAT.res = { ranAt: Date.now(), period: per, daily, intra, rangeList: D.slice(1).map((x, i) => (x.h - x.l) / D[i].c),
+      PAT.res = { ranAt: Date.now(), period: per, daily, intra, lastChg: all.length > 1 ? all[all.length - 1].c / all[all.length - 2].c - 1 : null, rangeList: D.slice(1).map((x, i) => (x.h - x.l) / D[i].c),
         dOld: D.length > 60 ? dailyPatterns(D.slice(0, cut)) : null, dNew: D.length > 60 ? dailyPatterns(D.slice(cut - 1)) : null,
         iOld: Me.length > 60 ? intradayPatterns(new Map(Me.slice(0, mc)), D) : null, iNew: Me.length > 60 ? intradayPatterns(new Map(Me.slice(mc)), D) : null };
       renderPatterns();
@@ -2648,17 +2696,27 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (r.strat && r.stratNormal && r.strat.n >= 6 && r.strat.avg > r.stratNormal.avg + 5) tips.push(`Your strategy did better on these days (${money0(r.strat.avg)} vs ${money0(r.stratNormal.avg)}/trade).`);
     return tips;
   }
-  function renderNews() {
+  function renderNewsDays() {
     const N = PAT.news, out = $("#news-out"); if (!out) return;
     const up = upcomingEvents(6);
     const upTxt = up.length ? `<div class="pat-today"><b>Coming up:</b> ${up.map((x) => `${esc(EVENT_NAME[x.k])} ${esc(dayName(x.d).replace(/, \w+ \d+$/, ""))} ${esc(dayName(x.d).replace(/^\w+, /, ""))} at ${fmtClock(toMin(x.t))}`).join(" · ")}</div>` : "";
     if (!N) { out.innerHTML = upTxt + `<div class="empty">Press <b>Analyze news days</b> to see how SPY behaved on each kind of release day.</div>`; return; }
-    out.innerHTML = upTxt + `<p class="small muted" style="margin-bottom:8px">Compared with ${N.normalN} normal days since ${esc(dayName(N.from))}. "1.4×" means 40% more movement than a normal day. Release dates come from the official BLS, Fed and BEA calendars.</p>
-      <div class="pat-grid">${N.rows.map((r) => `<div class="pat-card"><h3>${esc(EVENT_NAME[r.k])} <span class="small muted">· ${r.n} days${r.n < 10 ? " (small sample)" : ""} · ${fmtClock(toMin(r.time))}</span></h3>
-        <div class="pat-bars">${[["Whole-day range", r.range], [toMin(r.time) < 570 ? "Gap at the open" : null, r.gap], [`First 30 min after ${toMin(r.time) < 570 ? "the open" : "the release"}`, r.after], [r.before != null ? "Hour before the release" : null, r.before]].filter((x) => x[0] && x[1] != null).map(([n, v]) => `<span>${esc(n)}</span><div class="track"><div class="fill${v >= 1.2 ? " hi" : ""}" style="width:${Math.min(v / 2.5, 1) * 100}%"></div></div><span class="v">${v.toFixed(1)}×</span>`).join("")}</div>
-        <p class="small" style="margin-top:6px">Closed higher on ${Math.round(r.up * 100)}% of these days${r.reversal != null ? `; the first move after the release reversed ${Math.round(r.reversal * 100)}% of ${r.revN} times` : ""}.${r.strat ? ` Today's strategy here: ${r.strat.n} trades, ${money0(r.strat.avg)}/trade.` : ""}</p>
-        ${newsAdvice(r).length ? `<ul class="small" style="margin:6px 0 0 18px">${newsAdvice(r).map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}</div>`).join("")}</div>
-      <p class="small muted" style="margin-top:8px">Look-alike matching now pairs news days with the same kind of news day, and the game plan warns you around release times.</p>`;
+    // the next release, with what to do about it
+    const nx = up[0], nr = nx && N.rows.find((r) => r.k === nx.k), A = [];
+    if (nx && nr) {
+      const past = nx.d === etParts().date && toMin(nx.t) < etParts().min, when = past ? `came out today at ${fmtClock(toMin(nx.t))}` : `${nx.d === etParts().date ? "today" : dayName(nx.d)} at ${fmtClock(toMin(nx.t))}`, intra = toMin(nx.t) >= 570 && !past;
+      if (intra) A.push({ k: "avoid", h: `No new trades from ${fmtClock(toMin(nx.t) - 10)} to ${fmtClock(toMin(nx.t) + 10)}.`, p: "The app blocks entries in that window. If you're in a trade, consider closing before the release: prices can jump either way in seconds." });
+      for (const t of newsAdvice(nr)) A.push({ k: /worse|sit out|wait/i.test(t) ? "wait" : "info", h: esc(t.split(": ")[0]) + ".", p: t.includes(": ") ? esc(t.split(": ").slice(1).join(": ").replace(/^./, (c) => c.toUpperCase())) : "" });
+      if (!newsAdvice(nr).length) A.push({ k: "info", h: "Past days like this weren't very different from normal days.", p: "Trade your plan as usual." });
+      out.innerHTML = upTxt + todoBox(`Next: ${esc(EVENT_NAME[nx.k])} ${esc(when)}`, A, `From ${nr.n} past ${esc(EVENT_NAME[nx.k])} days${nr.n < 10 ? " (a small sample)" : ""}.`);
+    } else out.innerHTML = upTxt;
+    out.innerHTML += `<p class="small muted" style="margin:10px 0 8px">Each kind of release day compared with ${N.normalN} normal days since ${esc(dayName(N.from))}.</p>
+      <div class="pat-grid">${N.rows.map((r) => { const tips = newsAdvice(r); return `<div class="pat-card"><h3>${esc(EVENT_NAME[r.k])} <span class="small muted">· ${fmtClock(toMin(r.time))}</span></h3>
+        <div class="pat-big">${r.range != null ? `${r.range.toFixed(1)}× ${r.range >= 1.2 ? "bigger" : r.range < 0.9 ? "smaller" : "normal"}` : "–"}</div><p class="small muted">Day's movement vs a normal day (${r.n} days${r.n < 10 ? ", small sample" : ""})</p>
+        ${tips.length ? `<ul class="small" style="margin:6px 0 0 18px">${tips.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : soLine("not much different from a normal day. Trade your plan as usual.")}
+        ${numbers(`<div class="pat-bars">${[["Whole-day range", r.range], [toMin(r.time) < 570 ? "Gap at the open" : null, r.gap], [`First 30 min after ${toMin(r.time) < 570 ? "the open" : "the release"}`, r.after], [r.before != null ? "Hour before the release" : null, r.before]].filter((x) => x[0] && x[1] != null).map(([n, v]) => `<span>${esc(n)}</span><div class="track"><div class="fill${v >= 1.2 ? " hi" : ""}" style="width:${Math.min(v / 2.5, 1) * 100}%"></div></div><span class="v">${v.toFixed(1)}×</span>`).join("")}</div>
+        <p class="small" style="margin-top:6px">"1.4×" means 40% more movement than a normal day. Closed higher on ${Math.round(r.up * 100)}% of these days${r.reversal != null ? `; the first move after the release reversed ${Math.round(r.reversal * 100)}% of ${r.revN} times` : ""}.${r.strat ? ` Today's strategy here: ${r.strat.n} trades, ${money0(r.strat.avg)}/trade.` : ""}</p>`)}</div>`; }).join("")}</div>
+      <p class="small muted" style="margin-top:8px">Release dates come from the official BLS, Fed and BEA calendars.</p>`;
   }
   // no new entries in the 10 minutes either side of a release during market hours
   function newsBlock() {
@@ -2886,19 +2944,26 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const best = flagged;
     const stressed = withReal({ delayExtra: 2, slipExtra: 0.03 }, () => summarize(labSignals(LAB.M, LAB.D, RULE), RULE.t, RULE.s, RULE.m));
     const stressTxt = `<p class="small" style="margin-top:6px"><b>Stress check:</b> if you were 2 more minutes late and every fill was $0.03 worse: ${stressed.n} trades, ${money0(stressed.avg)}/trade → <b style="color:${stressed.avg > 0 ? "var(--good)" : "var(--bad)"}">${stressed.avg > 0 ? "still works" : "breaks"}</b>${stressed.avg > 0 ? "" : ". The edge is thin: speed and good fills matter a lot for this rule"}.</p>`;
-    out.innerHTML = `<div class="bt-answer"><b>${esc(r.name)}</b> over ${LAB.days} days: <b>${all.n}</b> trades, won <b>${P0(all.win)}</b>, average <b class="${cls(all.avg)}">${money0(all.avg)}</b> per trade after fees${all.n ? `, total ${money0(all.avg * all.n)}` : ""}.</div>
-      <p class="small" style="margin-top:8px">Older days: ${o.n} trades, ${P0(o.win)} won, ${money0(o.avg)}/trade → recent days: ${nw.n} trades, ${P0(nw.win)} won, ${money0(nw.avg)}/trade · ${(() => { const st = (o.avg > 0) !== (nw.avg > 0) ? ["Changed recently", "var(--warn)"] : Math.abs(nw.avg) < Math.abs(o.avg) / 2 ? ["Weaker recently", "var(--warn)"] : ["Held up", "var(--good)"]; return `<b style="color:${st[1]}">${st[0]}</b>`; })()}</p>
-      ${survivalHtml(survival(all.rs, acctSize()))}
-      <div class="small" style="margin-top:8px"><b>Conditions that stand out</b> (ideas to test in Practice, not rules yet):</div>
-      ${best.length ? `<ul class="small" style="margin:4px 0 0 18px; display:grid; gap:3px">${best.map((x) => `<li>${x.tt > 0 ? "Better" : "Worse"}: <b>${esc(x.k)}</b> <span class="muted">(${esc(x.t.toLowerCase())})</span>, ${money0(x.avg)}/trade over ${x.n} trades</li>`).join("")}</ul>` : `<p class="small muted">None stood out beyond what chance would produce. With ~20 splits, one or two always look good by luck, so the app only flags strong differences.</p>`}
-      <details style="margin-top:10px"><summary class="small" style="cursor:pointer">Show all the breakdowns</summary><div class="grid2" style="gap:14px">${ctx.map((c) => ctxTable(c, all.win)).join("")}</div></details>${stressTxt}
-      <p class="small muted" style="margin-top:10px">How this works: one signal per line per day, the strike with an Ask nearest $1.00, your take-profit, stop and time limit, $1.30 fees per round trip. Option prices come from the Black-Scholes model with volatility estimated from the past 10 days. Real fills can be worse, especially in fast markets. Labels compare each row with your rule's overall win rate.</p>`;
+    const recent = (o.avg > 0) !== (nw.avg > 0) ? "changed" : Math.abs(nw.avg) < Math.abs(o.avg) / 2 ? "weaker" : "held";
+    const sv = survival(all.rs, acctSize()), ci = sv?.ci, A = [];
+    if (!all.n || all.avg <= 0) A.push({ k: "avoid", h: `Don't use this rule as it is. It ${(all.avg || 0) < 0 ? `lost $${Math.abs(Math.round(all.avg))}` : "made nothing"} per trade.`, p: "Look for a better version, or follow Today's strategy, which is picked fresh each morning.", acts: [["Find strategy ideas", 'data-pact="run:lab-ideas"'], ["See today's strategy", 'data-pact="dash"']] });
+    else if (ci && ci.lo > 0 && recent === "held") A.push({ k: "go", h: `Keep practicing it. It made ${money0(all.avg)} per trade and held up on recent days.`, p: "Next step: 20+ practice trades with it before trusting it with real money." });
+    else A.push({ k: "wait", h: `Promising, not proven: ${money0(all.avg)} per trade${recent !== "held" ? `, but it got ${recent === "changed" ? "worse" : "weaker"} recently` : ""}.`, p: ci && ci.lo <= 0 ? "Its likely range still includes losing money. Keep paper trading and re-test in a few weeks." : "Keep paper trading it and re-test in a few weeks." });
+    for (const x of best.slice(0, 3)) A.push(x.tt > 0 ? { k: "go", h: `Works best: ${esc(x.k)} (${esc(x.t.toLowerCase())})`, p: `${money0(x.avg)}/trade over ${x.n} trades. Focus your practice there.` } : { k: "avoid", h: `Skip: ${esc(x.k)} (${esc(x.t.toLowerCase())})`, p: `${money0(x.avg)}/trade over ${x.n} trades. Pass on signals like these.` });
+    if (all.avg > 0 && stressed.avg <= 0) A.push({ k: "wait", h: "Enter fast or not at all.", p: "Two minutes late and slightly worse fills turn this rule into a loser. If you're slow on a signal, let it go." });
+    if (sv) A.push({ k: "info", h: `In your ${money0(sv.account).replace("+", "")} account: expect drops of up to $${Math.round(sv.dd).toLocaleString()} and ${sv.worstStreak} losses in a row.`, p: "That's normal for this rule. Decide now that it won't make you quit or double up." });
+    out.innerHTML = `${todoBox(`Verdict on ${esc(r.name)}`, A, `${all.n} trades over ${LAB.days} days, ${P0(all.win)} won, after fees.`)}
+      ${numbers(`<p class="small">Older days: ${o.n} trades, ${P0(o.win)} won, ${money0(o.avg)}/trade → recent days: ${nw.n} trades, ${P0(nw.win)} won, ${money0(nw.avg)}/trade · <b style="color:${recent === "held" ? "var(--good)" : "var(--warn)"}">${recent === "held" ? "Held up" : recent === "changed" ? "Changed recently" : "Weaker recently"}</b></p>
+      ${survivalHtml(sv)}${stressTxt}
+      ${best.length ? "" : `<p class="small muted" style="margin-top:6px">No time, line or direction stood out beyond what chance would produce. With ~20 splits, one or two always look good by luck, so the app only flags strong differences.</p>`}
+      <details style="margin-top:10px"><summary class="small" style="cursor:pointer">Every breakdown (time, line, direction…)</summary><div class="grid2" style="gap:14px">${ctx.map((c) => ctxTable(c, all.win)).join("")}</div></details>
+      <p class="small muted" style="margin-top:10px">How this works: one signal per line per day, the strike with an Ask nearest $1.00, your take-profit, stop and time limit, $1.30 fees per round trip. Option prices come from the Black-Scholes model with volatility estimated from the past 10 days. Real fills can be worse, especially in fast markets.</p>`)}`;
   }
   document.addEventListener("click", (e) => { if (e.target.closest("[data-go-lab]")) { showView("learn"); $('[data-pt="lab"]').click(); spotlight("#pat-panel"); } });
   $("#news-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("This needs Webull, which isn't available in this view.");
     const btn = $("#news-run"), out = $("#news-out"); btn.disabled = true; btn.textContent = "Analyzing…";
-    try { await newsImpact((m) => { out.innerHTML = `<div class="empty">${esc(m)}</div>`; }); renderNews(); renderPlan(); }
+    try { await newsImpact((m) => { out.innerHTML = `<div class="empty">${esc(m)}</div>`; }); renderNewsDays(); renderPlan(); }
     catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
     finally { btn.disabled = false; btn.textContent = "Analyze news days"; }
   });
@@ -3050,21 +3115,40 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderLike(L) {
     const out = $("#like-out"); if (!L) { out.innerHTML = `<div class="empty">Not enough history loaded yet to compare.</div>`; return; }
     const { K, fToday, useOR, cnt, upN, hiB, loB, orU, orD, px0, subj, live } = L;
-    let ruleLine = "";
-    const ed = edgeLoad();
-    if (ed) { const set = new Set(L.near.map((c) => c.date)), g = ed.rs.filter((x) => set.has(x.date)); if (g.length) { const w = g.filter((x) => x.pnl > 0).length; ruleLine = `<li>Your rule (${esc(ed.rule)}) on these days: <b>${g.length}</b> signals, won <b>${Math.round((w / g.length) * 100)}%</b>, ${money0(g.reduce((a, x) => a + x.pnl, 0) / g.length)}/trade ${tpill(trust(w, g.length, ed.win))}.</li>`; } }
-    out.innerHTML = `<div class="bt-answer">Compared <b>${esc(subj.label)}</b> with ${L.n} past days and picked the <b>${K} most similar</b>, matching: opened ${fToday[0] >= 0 ? "up" : "down"} ${Math.abs(fToday[0] * 100).toFixed(2)}%, the day before ${fToday[1] >= 0 ? "rose" : "fell"} ${Math.abs(fToday[1] * 100).toFixed(1)}%, the market's been ${fToday[2] > 1.15 ? "busier than usual" : fToday[2] < 0.85 ? "calmer than usual" : "about as busy as usual"}, SPY is ${fToday[3] >= 0 ? "above" : "below"} its 20-day average${useOR ? `, and the first 30 minutes moved ${fToday[4] >= 0 ? "up" : "down"} ${Math.abs(fToday[4] * 100).toFixed(2)}%` : ""}.</div>
-      <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">
-        <li>${useOR ? "From 10:00 to the close" : "Over the day"}, SPY finished <b>${upN >= K / 2 ? "higher" : "lower"}</b> on ${Math.round((Math.max(upN, K - upN) / K) * 100)}% of these days ${tpill(trust(Math.max(upN, K - upN), K))}.</li>
-        <li>Typical range ${useOR ? "after 10:00" : "for the day"}: <b>$${(L.medRng * px0).toFixed(2)}</b>. That's how much room there usually was to move.</li>
-        <li>Broke yesterday's high on ${Math.round((hiB / K) * 100)}%; ${hiB ? `held above it at the close on <b>${Math.round((cnt((x) => x.hiHold) / hiB) * 100)}%</b> of those` : "–"}. Broke yesterday's low on ${Math.round((loB / K) * 100)}%; ${loB ? `held below on <b>${Math.round((cnt((x) => x.loHold) / loB) * 100)}%</b>` : "–"}.</li>
+    const ed = edgeLoad(), A = [];
+    // direction lean
+    const upMore = upN >= K / 2, lean = Math.max(upN, K - upN), lt = trust(lean, K);
+    if (lt.k === "strong" || lt.k === "weak") A.push({ k: "go", h: `Leans ${upMore ? "higher" : "lower"}: ${Math.round((lean / K) * 100)}% of these days finished ${upMore ? "up" : "down"} ${tpill(lt)}`, p: `Calls on up-breaks ${upMore ? "had the wind behind them" : "fought the trend"} on these days. Still take your signals both ways, but be pickier with ${upMore ? "puts" : "calls"}.` });
+    else A.push({ k: "info", h: "No clear direction on days like this.", p: `${upN} of ${K} finished higher, about a coin flip. Take your signals both ways and don't guess.` });
+    // how much room
+    const allR = []; for (let i = Math.max(1, L.D.length - 504); i < L.D.length; i++) allR.push((L.D[i].h - L.D[i].l) / L.D[i - 1].c);
+    const normR = median(allR), ratio = normR ? L.medRng / normR : 1, roomD = "$" + (L.medRng * px0).toFixed(2);
+    A.push(ratio >= 1.2 ? { k: "info", h: `Expect a busy day: about ${roomD} of movement${useOR ? " after 10:00" : ""}, more than normal.`, p: "Take-profits are easier to reach, and so are stops. Don't widen your stop to make up for it." }
+      : ratio <= 0.8 && !useOR ? { k: "avoid", h: `Expect a quiet day: about ${roomD} of movement, less than normal.`, p: "There's less room for a take-profit before time decay eats the option. Take fewer trades, or aim for a smaller target." }
+      : { k: "info", h: `Expect about ${roomD} of movement${useOR ? " from 10:00 to the close" : ""}.`, p: useOR ? "That's what's usually left after the first 30 minutes." : "About a normal day." });
+    // yesterday's levels, with watch buttons
+    const pd = L.D[subj.di - 1];
+    if (pd) for (const [n, brk, hold, lvl, dir, word] of [[hiB, hiB, cnt((x) => x.hiHold), pd.h, "call", "high"], [loB, loB, cnt((x) => x.loHold), pd.l, "put", "low"]]) {
+      if (n < 8 || (live && (dir === "call" ? px0 > lvl : px0 < lvl))) continue;
+      const hr = hold / brk;
+      A.push({ k: hr >= 0.6 ? "go" : "wait", h: `If SPY breaks yesterday's ${word} ($${lvl.toFixed(2)}): it ${hr >= 0.6 ? "kept going" : "often faded"} on these days (held to the close ${Math.round(hr * 100)}% of ${brk} times).`,
+        p: hr >= 0.6 ? `A ${dir} on that break had room to run on days like this.` : `If you buy the ${dir}, take profit at your target rather than hoping it runs.`, acts: live ? [[`Watch $${lvl.toFixed(2)} in Live check`, `data-plan-watch="${lvl.toFixed(2)}" data-dir="${dir}" data-why="Yesterday's ${word} (days like today)"`]] : [] });
+    }
+    // how the rule did here
+    if (ed) { const set = new Set(L.near.map((c) => c.date)), g = ed.rs.filter((x) => set.has(x.date)); if (g.length >= 5) { const w = g.filter((x) => x.pnl > 0).length, avg = g.reduce((a, x) => a + x.pnl, 0) / g.length;
+      A.push(avg > 0 ? { k: "go", h: `Your rule made ${money0(avg)}/trade on these days (${g.length} signals, ${Math.round((w / g.length) * 100)}% won).`, p: "A good sign for today, not a promise." } : { k: "avoid", h: `Your rule lost $${Math.abs(Math.round(avg))}/trade on these days (${g.length} signals).`, p: "Follow Today's strategy on the dashboard, which is picked from these same days, or practice only.", acts: [["See today's strategy", 'data-pact="dash"']] }); } }
+    const first = L.near[0]?.date;
+    A.push({ k: "info", h: "Rehearse first: replay the closest match in Practice.", p: "You'll see how a day like this played out, minute by minute.", acts: first ? [[`Replay ${dayName(first).replace(/^\w+, /, "")} ${first.slice(0, 4)}`, `data-like-day="${first}"`]] : [] });
+    out.innerHTML = `${todoBox(`What this means for ${esc(subj.label.startsWith("today") ? "today" : subj.label)}`, A, `Based on the ${K} past days most like ${esc(subj.label)}. ${K} days is a small sample, so read these as leans, not certainties.${live && !useOR ? (etParts().min < 600 ? " Run this again after 10:00 am: it will also match the first 30 minutes and get sharper." : " Today's first 30 minutes couldn't be loaded, so this matched on the open only.") : ""}`)}
+      ${numbers(`<p class="small">Matched on: opened ${fToday[0] >= 0 ? "up" : "down"} ${Math.abs(fToday[0] * 100).toFixed(2)}%, the day before ${fToday[1] >= 0 ? "rose" : "fell"} ${Math.abs(fToday[1] * 100).toFixed(1)}%, the market's been ${fToday[2] > 1.15 ? "busier than usual" : fToday[2] < 0.85 ? "calmer than usual" : "about as busy as usual"}, SPY is ${fToday[3] >= 0 ? "above" : "below"} its 20-day average${useOR ? `, and the first 30 minutes moved ${fToday[4] >= 0 ? "up" : "down"} ${Math.abs(fToday[4] * 100).toFixed(2)}%` : ""}. Out of ${L.n} past days.</p>
+      <ul class="small" style="margin:8px 0 0 18px; display:grid; gap:4px">
+        <li>Broke yesterday's high on ${Math.round((hiB / K) * 100)}%; held above it at the close on ${hiB ? Math.round((cnt((x) => x.hiHold) / hiB) * 100) : 0}% of those. Broke yesterday's low on ${Math.round((loB / K) * 100)}%; held below on ${loB ? Math.round((cnt((x) => x.loHold) / loB) * 100) : 0}%.</li>
         ${useOR ? `<li>First-30-minute breakout: up first on ${Math.round((orU / K) * 100)}% (held to the close ${orU ? Math.round((cnt((x) => x.orUp && x.orUpHold) / orU) * 100) : 0}%), down first on ${Math.round((orD / K) * 100)}% (held ${orD ? Math.round((cnt((x) => x.orDn && x.orDnHold) / orD) * 100) : 0}%).</li>` : ""}
         <li>The opening gap filled the same day on ${Math.round((cnt((x) => x.fill) / K) * 100)}% of these days.</li>
-        ${ruleLine || (ed ? "" : `<li class="muted">Run <b>Test my rule</b> in the Strategy lab to also see how your rule did on these days.</li>`)}
+        ${ed ? "" : `<li class="muted">Run <b>Test my rule</b> in the Strategy lab to also see how your rule did on these days.</li>`}
       </ul>
-      <div class="small" style="margin-top:10px"><b>Closest matches</b> (tap to replay in Practice):</div>
-      <div class="like-days">${L.near.slice(0, 10).map((c) => `<button class="btn sm" type="button" data-like-day="${c.date}">${esc(dayName(c.date).replace(/^\w+, /, ""))} ${c.date.slice(0, 4)}</button>`).join("")}</div>
-      <p class="small muted" style="margin-top:10px">${K} days is a small sample, so read these as "leans", not certainties. ${live && !useOR ? (etParts().min < 600 ? "After 10:00 am, run this again: it will also match the first 30 minutes and get sharper." : "Today's first 30 minutes couldn't be loaded, so this matched on the open only.") : ""}</p>`;
+      <div class="small" style="margin-top:10px"><b>Other close matches</b> (tap to replay in Practice):</div>
+      <div class="like-days">${L.near.slice(0, 10).map((c) => `<button class="btn sm" type="button" data-like-day="${c.date}">${esc(dayName(c.date).replace(/^\w+, /, ""))} ${c.date.slice(0, 4)}</button>`).join("")}</div>`, "Show the details and other matching days")}`;
   }
   $("#like-run").addEventListener("click", async () => {
     if (!S.mcp) return toast("This needs Webull, which isn't available in this view.");
@@ -3202,15 +3286,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (!sv) return "";
     const ci = sv.ci, rng = ci ? `${money0(ci.lo)} to ${money0(ci.hi)} per day` : "not enough days";
     const edge = ci && ci.lo > 0 ? `<b style="color:var(--good)">likely real</b>` : ci && ci.hi < 0 ? `<b style="color:var(--bad)">likely losing</b>` : `<b style="color:var(--warn)">can't tell yet</b>`;
-    return `<div class="surv"><div class="label">${esc(title)} (${money0(sv.account).replace("+", "")})</div>
-      <div class="surv-grid">
+    const plain = `About <b class="${cls(sv.perDay)}">${money0(sv.perDay)}</b> per trading day on average (edge ${edge}). Worst drop ${money0(-sv.dd)} (${Math.round(sv.ddPct * 100)}% of the account), up to ${sv.worstStreak} losses in a row.`;
+    return `<div class="surv"><div class="label">${esc(title)} (${money0(sv.account).replace("+", "")})</div><p class="small" style="margin:4px 0 0">${plain}</p>
+      <details class="nums"><summary>All the account numbers</summary><div class="surv-grid">
         <div><span>Average per trading day</span><b class="${cls(sv.perDay)}">${money0(sv.perDay)}</b><em>likely range ${rng} · edge ${edge}</em></div>
         <div><span>Profit factor</span><b>${sv.pf === Infinity ? "∞" : sv.pf.toFixed(2)}</b><em>$ won per $1 lost${sv.pf < 1 ? " · under 1 loses money" : ""}</em></div>
         <div><span>Avg win ÷ avg loss</span><b>${sv.payoff != null ? sv.payoff.toFixed(2) : "–"}</b><em>${P0(sv.win)} of trades won</em></div>
         <div><span>Biggest drop</span><b class="down">${money0(-sv.dd)}</b><em>${Math.round(sv.ddPct * 100)}% of the account</em></div>
         <div><span>Longest losing streak</span><b>${sv.worstStreak}</b><em>worst day ${money0(sv.worstDay)}</em></div>
         <div><span>Risk of ruin (next 100 trades)</span><b class="${sv.ruin > 0.05 ? "down" : ""}">${sv.ruin < 0.001 ? "<0.1%" : (sv.ruin * 100).toFixed(1) + "%"}</b><em>chance of not affording a contract · ${Math.round(sv.half * 100)}% chance of losing half</em></div>
-      </div></div>`;
+      </div></details></div>`;
   }
   // ----- live pick -----
   async function pickStrategy(like, D, say) {
@@ -3308,7 +3393,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const verdict = r.verdict === "edge" ? `<b style="color:var(--good)">The daily picker shows a real edge so far.</b> Its likely range per day is above $0 and it beat ${Math.round(r.luck * 100)}% of random picks.`
       : r.verdict === "promising" ? `<b style="color:var(--warn)">Promising, not proven.</b> It made money and beat ${Math.round(r.luck * 100)}% of random picks, but ${r.days < 60 ? `${r.days} days is too few` : "the likely range still includes losing"}. Keep paper trading and re-run in a few weeks.`
       : `<b style="color:var(--bad)">No proven edge.</b> ${r.picker <= 0 ? "The daily picker lost money over this stretch." : `It only beat ${Math.round(r.luck * 100)}% of random picks, which is what luck looks like.`} Treat its picks as practice ideas, and sitting out as a fine choice.`;
+    const todo = r.verdict === "edge" ? "Follow Today's strategy on the days it says to trade, one contract at a time, and keep logging results."
+      : r.verdict === "promising" ? "Keep paper trading the daily pick at one contract. Don't size up until this says \"real edge\"."
+      : "Use the daily picks as practice ideas only. Sitting out is a fine choice; re-run this in a few weeks.";
     $("#lab-out").innerHTML = `<div class="bt-answer">${verdict}</div>
+      <p class="pat-do" style="margin-top:8px"><b>What to do:</b> ${todo}</p>
+      <details class="nums"><summary>Show the evidence</summary>
       <p class="small" style="margin-top:8px">Replayed <b>${r.days} days</b> (${esc(dayName(r.from))} – ${esc(dayName(r.to))}) with the exact decision the app makes for you each morning, using <b>only earlier days</b>, with your realistic settings.</p>
       <div class="pat-bars" style="margin-top:8px">${[["Daily picker", r.picker], ["Best fixed rule", r.fixed], ["Typical strategy", r.typ], ["Sit out", 0]].map(([n, v]) => `<span>${n}</span><div class="track"><div class="fill${n === "Daily picker" ? " hi" : ""}" style="width:${Math.max(0, v) / Math.max(1, r.picker, r.fixed, r.typ) * 100}%"></div></div><span class="v ${cls(v)}">${money0(v)}</span>`).join("")}</div>
       <ul class="small" style="margin:8px 0 0 18px; display:grid; gap:3px">
@@ -3320,7 +3410,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       </ul>
       ${survivalHtml(r.sv, "The picker's trades in your account")}
       <details style="margin-top:8px"><summary class="small" style="cursor:pointer">Day by day</summary><table class="lab-tbl" style="width:100%; margin-top:6px"><thead><tr><th>Day</th><th>Pick</th><th class="n">Picker</th><th class="n">Typical</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td style="white-space:nowrap">${esc(dayName(x.d).replace(/^\w+, /, ""))}${x.ev ? ` <span class="pill warn plain">${esc(x.ev)}</span>` : ""}</td><td class="small">${esc(x.pick.slice(0, 80))}${x.pick.length > 80 ? "…" : ""}</td><td class="n ${cls(x.pnl)}">${money0(x.pnl)}</td><td class="n ${cls(x.typ)}">${money0(x.typ)}</td></tr>`).join("")}</tbody></table></details>
-      <p class="small muted" style="margin-top:8px">Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}. "Typical strategy" is the average of all 162 strategies. Choose 1 year for 120+ replayed days.</p>`;
+      <p class="small muted" style="margin-top:8px">Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}. "Typical strategy" is the average of all 162 strategies. Choose 1 year for 120+ replayed days.</p></details>`;
   }
   // Keep strategy state the same on every device (stored in the journal's database).
   let syncT = null;
