@@ -1875,7 +1875,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   // Model quote for one contract, rounded to cents like a real chain.
   function rpQuote(type, K, S) {
     S = S ?? rpPrice(); if (S == null || K == null) return null;
-    const r = bs(type, S, K, num($("#rp-iv").value) || 15, rpMinsLeft()), hs = r.price < 3 ? 0.01 : 0.02;
+    const r = bs(type, S, K, (num($("#rp-iv").value) || 15) * skewF(type), rpMinsLeft()), hs = r.price < 3 ? 0.01 : 0.02;
     return { mid: r.price, bid: Math.max(Math.floor((r.price - hs) * 100) / 100, 0), ask: Math.max(Math.ceil((r.price + hs) * 100) / 100, 0.01), delta: r.delta, S };
   }
   // How many SPY points the option needs so its Bid reaches `price`, from the current price and time.
@@ -2111,7 +2111,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     RP.positions = RP.positions.filter((x) => x !== p);
     const qty = p.closed, exitPx = p.proceeds / qty, pnl = +((exitPx - p.avg) * 100 * qty).toFixed(2), exitMin = Math.floor(rpMinute());
     const later = exitMin + 30 <= 960 ? RP.bars.find((b) => barMin(b) + 1 >= exitMin + 30) : null;
-    const iv = num($("#rp-iv").value) || 15;
+    const iv = (num($("#rp-iv").value) || 15) * skewF(p.dir);
     const after30 = later ? +Math.max(bs0(p.dir, later.c, p.strike, iv, Math.max(960 - (barMin(later) + 1), 0.01)) - 0.01, 0).toFixed(2) : null;
     const ignored = p.alertAt != null && rpMinute() - p.alertAt > 2 && reason !== "close";
     const doc = { replayDate: RP.date, at: Date.now(), rule: p.rule, ruleCfg: p.ruleCfg, dir: p.dir, strike: p.strike, qty, level: p.signal?.L ?? null, levelName: p.signal?.name || "", followed: p.followed, falseBreaks: p.signal?.resets || 0,
@@ -2842,9 +2842,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function realCfg() { const r = { on: true, delay: null, slip: 0.02, maxDay: 2, stopLoss: true, ...ls.get("real.v1", {}), ...(REAL_OVER || {}) }; r.delayNow = r.on ? (r.delay ?? measuredDelay()) + (r.delayExtra || 0) : 0; return r; }
   const withReal = (over, fn) => { REAL_OVER = over; try { return fn(); } finally { REAL_OVER = null; } };
   // Model check: compare the option model with real quotes you saved (checkpoints and entries).
+  // Real 0DTE puts cost more than calls the same distance away (people pay up for crash protection).
+  // Until you've saved a few real quotes of each kind, assume puts run about 13% higher than calls.
+  var SKEW0 = 1.13;   // var: Practice can price options before this part of the script runs
+  var calMemo = null;
+  // how much more (puts) or less (calls) than the middle of the two
+  function skewF(dir) { const c = calibration(), mid = Math.sqrt(c.call * c.put); return (dir === "put" ? c.put : c.call) / mid; }
   function calibration() {
-    const D = PAT.daily; if (!D) return { ivMul: 1, n: 0 };
-    const idx = new Map(D.map((d, i) => [d.date, i])), out = [];
+    const D = PAT.daily; if (!D) return { ivMul: 1, n: 0, call: 1 / Math.sqrt(SKEW0), put: Math.sqrt(SKEW0), nCall: 0, nPut: 0 };
+    if (calMemo && calMemo.D === D && calMemo.T === S.trades && Date.now() - calMemo.at < 2000) return calMemo.r;
+    const idx = new Map(D.map((d, i) => [d.date, i])), out = [], by = { call: [], put: [] };
     for (const t of S.trades) {
       if (uOf(t) !== "SPY" || num(t.strike) == null || !t.dir) continue;
       const di = idx.get(t.date); if (di == null || di < 11) continue;
@@ -2852,25 +2859,29 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const ivM = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
       for (const cp of t.checkpoints || []) {
         const bid = num(cp.bid), ask = num(cp.ask), S0 = num(cp.xsp), m = toMin(cp.t); if (bid == null || ask == null || S0 == null || m == null || ask > 20 || ask < bid) continue;
-        const ivR = impliedVol(t.dir, S0, num(t.strike), 960 - m, (bid + ask) / 2); if (ivR) out.push(ivR / ivM);
+        const ivR = impliedVol(t.dir, S0, num(t.strike), 960 - m, (bid + ask) / 2); if (ivR) { out.push(ivR / ivM); by[t.dir]?.push(ivR / ivM); }
       }
     }
-    return { ivMul: out.length >= 3 ? Math.min(3, Math.max(0.5, median(out))) : 1, n: out.length, raw: out.length ? median(out) : null };
+    const lim = (x) => Math.min(3, Math.max(0.5, x)), ivMul = out.length >= 3 ? lim(median(out)) : 1;
+    const mc = by.call.length >= 3 ? median(by.call) : null, mp = by.put.length >= 3 ? median(by.put) : null;
+    const call = lim(mc ?? (mp != null ? mp / SKEW0 : ivMul / Math.sqrt(SKEW0))), put = lim(mp ?? (mc != null ? mc * SKEW0 : ivMul * Math.sqrt(SKEW0)));
+    const r = { ivMul, n: out.length, raw: out.length ? median(out) : null, call, put, nCall: by.call.length, nPut: by.put.length };
+    calMemo = { D, T: S.trades, at: Date.now(), r }; return r;
   }
   // All signals for a rule over many days, with context tags.
   function labSignals(M, D, rule) {
-    const delay = realCfg().delayNow, ivMul = calibration().ivMul;
+    const delay = realCfg().delayNow, cal = calibration();
     const idx = new Map(D.map((d, i) => [d.date, i])), out = [], ranges = D.map((d, i) => i ? (d.h - d.l) / D[i - 1].c : null);
     for (const [date, B] of M) {
       const di = idx.get(date); if (di == null || di < 21) continue;
       const prev = D[di - 1], avgR = ranges.slice(di - 10, di).reduce((a, b) => a + b, 0) / 10, sma20 = D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20;
-      const iv = ivFromRange(avgR) * ivMul, gap = B[0].o / prev.c - 1;
+      const iv0 = ivFromRange(avgR), gap = B[0].o / prev.c - 1;
       for (const ln of dayLines(B, prev, rule.lv)) {
         if (rule.dirs !== "both" && ln.dir !== rule.dirs) continue;
         const sg = scanLine(B, ln, rule.hold, rule.until); if (!sg) continue;
         const want = B[sg.i].m + delay; let ei = sg.i; while (ei < B.length - 1 && B[ei].m < want) ei++;   // you enter a few minutes after the signal
         if (ei >= B.length || B[ei].m >= 955) continue;
-        const op = optPath(B, ei, ln.dir, iv);
+        const op = optPath(B, ei, ln.dir, iv0 * cal[ln.dir]);
         out.push({ date, m: B[sg.i].m + 1, em: B[ei].m + 1, dir: ln.dir, g: ln.g, line: ln.name, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down", ev: eventsOn(date) });
       }
     }
@@ -2906,7 +2917,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderReal() {
     const el = $("#lab-real"); if (!el) return;
     const R = realCfg(), cal = calibration(), md = measuredDelay(), sel = (id, opts, v) => `<select id="${id}" style="width:auto">${opts.map(([val, l]) => `<option value="${val}"${String(v) === String(val) ? " selected" : ""}>${l}</option>`).join("")}</select>`;
-    el.innerHTML = `<div class="why">${R.on ? `<b>Tested the way you trade:</b> you enter <b>${R.delayNow} min</b> after the signal${R.delay == null ? " (measured from your Live check trades)" : ""}, fills are <b>$${R.slip.toFixed(2)}</b> worse each way, <b>${R.maxDay ? `max ${R.maxDay} trade${R.maxDay > 1 ? "s" : ""} a day` : "no daily limit"}</b>${R.stopLoss ? ", <b>stop for the day after a loss</b>" : ""}, one position at a time.` : "<b>Perfect-world testing</b> (instant entries, exact prices, no limits). Results will look better than real life."} ${cal.n >= 3 ? `Model check: ${cal.n} of your real quotes ran ${cal.raw.toFixed(2)}× the model's volatility, so tests are adjusted ${cal.ivMul.toFixed(2)}×.` : "Model check: save a few checkpoints with SPY's price in live trades and the option model will tune itself to real quotes."}
+    el.innerHTML = `<div class="why">${R.on ? `<b>Tested the way you trade:</b> you enter <b>${R.delayNow} min</b> after the signal${R.delay == null ? " (measured from your Live check trades)" : ""}, fills are <b>$${R.slip.toFixed(2)}</b> worse each way, <b>${R.maxDay ? `max ${R.maxDay} trade${R.maxDay > 1 ? "s" : ""} a day` : "no daily limit"}</b>${R.stopLoss ? ", <b>stop for the day after a loss</b>" : ""}, one position at a time.` : "<b>Perfect-world testing</b> (instant entries, exact prices, no limits). Results will look better than real life."} ${cal.n >= 3 ? `Model check: ${cal.n} of your real quotes ran ${cal.raw.toFixed(2)}× the model's volatility, so tests are adjusted (calls ${cal.call.toFixed(2)}×, puts ${cal.put.toFixed(2)}×).` : "Model check: save a few checkpoints with SPY's price in live trades and the option model will tune itself to real quotes."} ${cal.nCall >= 3 && cal.nPut >= 3 ? `Puts vs calls: from your own quotes, puts ran ${Math.round((cal.put / cal.call - 1) * 100)}% higher.` : "Puts are priced about 13% higher than calls (real puts cost more), until you've saved 3+ real quotes of each."}
       <details style="margin-top:6px"><summary style="cursor:pointer">Change</summary><div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap">
         <label class="row" style="gap:4px"><input type="checkbox" id="rl-on" style="width:auto"${R.on ? " checked" : ""}> Realistic</label>
         <label>Entry delay ${sel("rl-delay", [["auto", `Auto (${md} min)`], [0, "0"], [1, "1 min"], [2, "2 min"], [3, "3 min"], [5, "5 min"]], R.delay ?? "auto")}</label>
@@ -3166,7 +3177,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   });
 
   // ---------- edge: how your rule did in past situations like this one ----------
-  const settingsKey = () => { const r = realCfg(); return [r.on, r.delayNow, r.slip, r.maxDay, r.stopLoss, calibration().ivMul.toFixed(2)].join("|"); };
+  const settingsKey = () => { const r = realCfg(); return [r.on, r.delayNow, r.slip, r.maxDay, r.stopLoss, calibration().call.toFixed(2), calibration().put.toFixed(2)].join("|"); };
   function edgeSave(rule, sum, excl = 0) {
     const rs = sum.rs.map((x) => ({ date: x.date, m: x.m, g: x.g, dir: x.dir, pnl: Math.round(x.pnl * 100) / 100 }));
     try { localStorage.setItem("edge.v1", JSON.stringify({ at: Date.now(), key: settingsKey(), excl, rule, win: sum.win, avg: sum.avg, n: sum.n, rs })); } catch {}
