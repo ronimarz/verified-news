@@ -2425,7 +2425,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const EV_FIRST = EVENT_RAW.slice(0, 10);
   const PAT = { daily: null, m5: null, res: null };
   async function loadDailyAll() {
-    if (PAT.daily) return PAT.daily;
+    const dkey = etParts().date + (marketOpen() ? "open" : etParts().min >= 960 ? "after" : "before");
+    if (PAT.daily && PAT.dailyKey === dkey) return PAT.daily;
     const rows = new Map(); let end = Date.now();
     for (let k = 0; k < 6; k++) {
       const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "D", count: 1200, end_time: end }, LONG_CACHE);
@@ -2433,7 +2434,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       for (const x of got) rows.set(String(x.time).slice(0, 10), { date: String(x.time).slice(0, 10), o: +x.open, h: +x.high, l: +x.low, c: +x.close });
       const oldest = Math.min(...got.map((x) => Date.parse(x.time))); if (got.length < 1200 || !(oldest < end)) break; end = oldest - 1;
     }
-    PAT.daily = [...rows.values()].filter((d) => d.date < etParts().date || !marketOpen()).sort((a, b) => a.date.localeCompare(b.date));
+    PAT.daily = [...rows.values()].filter((d) => d.date < etParts().date || !marketOpen()).sort((a, b) => a.date.localeCompare(b.date)); PAT.dailyKey = dkey;
     return PAT.daily;
   }
   // 5-minute regular-hours candles per day, cached in this browser so later runs are fast.
@@ -3216,7 +3217,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const ts = e.tstat, t = Math.abs(ts) >= 2.6 && e.n >= 40 ? { k: "strong", label: "strong", why: `Based on ${e.n} signals. Very unlikely to be chance.` } : Math.abs(ts) >= 1 ? { k: "weak", label: "weak", why: `Based on ${e.n} signals. Some evidence, but it could still be chance.` } : { k: "luck", label: "could be luck", why: `Based on ${e.n} signals. The average could easily be chance.` };
     const L = e.avg >= 12 && ts >= 2 ? "A" : e.avg >= 4 && ts >= 1 ? "B" : e.avg <= -4 && ts <= -1 ? "D" : "C";
     const advice = { A: "Strong setup in the past. Normal size.", B: "Decent setup in the past.", C: "No clear edge in the past. Only take it if everything else is clean.", D: "Weak setup in the past. Consider skipping it." }[L];
-    return { L, advice, t, line: `${activeStrat() ? "Today's strategy" : "Your rule"} on ${esc(e.scope)}: won ${Math.round(e.win * 100)}% of ${e.n} past signals, ${money0(e.avg)}/trade` };
+    return { L, advice, t, line: `${planRuleWho().replace(/^./, (c) => c.toUpperCase())} on ${esc(e.scope)}: won ${Math.round(e.win * 100)}% of ${e.n} past signals, ${money0(e.avg)}/trade` };
   }
   const gradeBadge = (g) => g ? `<span class="grade g${g.L}" title="${esc(g.advice)}">${g.L}</span>` : "";
   const gOfWhy = (why) => /yesterday's high/i.test(why) ? "ph" : /yesterday's low/i.test(why) ? "pl" : /yesterday's close|prior close/i.test(why) ? "pc" : /today's (high|low)/i.test(why) ? "day" : /15/.test(why) ? "or15" : /30/.test(why) ? "or30" : null;
@@ -3236,6 +3237,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function stratAuto() { return ls.get("strat.auto", true) !== false; }
   function stratToday() { const t = ls.get("strat.today", null); return t && t.date === etParts().date ? t : null; }
   function activeStrat() { const t = stratToday(); return t && !t.noTrade && stratAuto() ? t : null; }
+  function planRule() { const t = stratAuto() ? stratToday() : null; return t?.rule ? { ...t.rule, lv: { ...t.rule.lv } } : RULE; }
+  function planRuleWho() { const t = stratAuto() ? stratToday() : null; return !t?.rule ? "your practice rule" : t.noTrade ? "today's best-looking strategy" : "today's strategy"; }
   function holdN() { return activeStrat()?.rule.hold ?? 1; }
   const stratText = (c) => `When SPY breaks ${c.lname}, ${c.rule.hold ? `wait ${c.rule.hold === 1 ? "1 minute" : c.rule.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down), ${c.wname}. Sell at +${c.rule.t}%, −${c.rule.s}%, or after ${c.rule.m} minutes.`;
   function stratRecord(name) {
@@ -3475,7 +3478,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   });
 
   // ---------- today's game plan (dashboard) ----------
-  const PLAN = { like: null, intra: null, at: 0, building: false, msg: "" };
+  const PLAN = { like: null, intra: null, at: 0, building: false, msg: "", tried: 0 };
+  // Should the game plan be (re)built now? A new day, a failed build, or the open / 10:00 passing since it was built.
+  function planDue() {
+    if (!S.mcp || PLAN.building || Date.now() - PLAN.tried < 90000) return false;
+    if (!PLAN.at || !PLAN.like) return true;
+    const b = etParts(new Date(PLAN.at)), n = etParts();
+    if (b.date !== n.date) return true;
+    return marketOpen() && ((b.min < 570 && n.min >= 572) || (b.min < 600 && n.min >= 601));
+  }
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && planDue()) buildPlan(true); });
   function tpMove(S, minsLeft, t, mHold, iv) {
     let best = null; for (let K = Math.floor(S) - 5; K <= Math.ceil(S) + 5; K++) { const a = qAsk(bs0("call", S, K, iv, minsLeft)); if (!best || Math.abs(a - 1) < Math.abs(best.a - 1)) best = { K, a }; }
     const tgt = best.a * (1 + t / 100), ml = Math.max(minsLeft - mHold, 1), bidAt = (m) => qBid(bs0("call", S + m, best.K, iv, ml));
@@ -3483,18 +3495,20 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   async function buildPlan(force) {
     if (!S.mcp || PLAN.building) return;
+    PLAN.tried = Date.now();
     if (!force && PLAN.at && Date.now() - PLAN.at < 30 * 60000 && !(etParts(new Date(PLAN.at)).min < 600 && etParts().min >= 572 && marketOpen())) return;
     PLAN.building = true; PLAN.msg = "Building today's game plan…"; renderPlan();
     try {
       const D = await loadDailyAll(), say = (m) => { PLAN.msg = m; renderPlan(); };
-      if (!LAB.M || LAB.M.size < 100) { const M = await loadM1(D.map((d) => d.date).slice(-126), (a, b) => say(`Loading 6 months of minute candles… ${a} of ${b} (only slow the first time)`)); Object.assign(LAB, { M, D, days: M.size }); }
+      if (!LAB.M || LAB.M.size < 100 || LAB.forDay !== etParts().date) { const M = await loadM1(D.map((d) => d.date).slice(-126), (a, b) => say(`Loading 6 months of minute candles… ${a} of ${b} (only slow the first time)`)); Object.assign(LAB, { M, D, days: M.size, forDay: etParts().date }); }
       say("Finding days like today…");
       PLAN.like = await computeLike((a, b) => say(`Loading 5-minute candles… ${a} of ${b}`), 504);
       await scorePastPicks(D).catch(() => {});
       if (PLAN.like) await pickStrategy(PLAN.like, D, say);
       const ed = edgeLoad();
       const used = new Set(activeStrat()?.simAll || []);   // grade only on days the pick wasn't chosen from
-      if (!ed || ed.rule !== ruleName(RULE) || ed.key !== settingsKey() || ed.excl !== used.size || Date.now() - ed.at > 20 * 3600000) { say("Grading lines for today's strategy…"); edgeSave(ruleName(RULE), summarize(labSignals(new Map([...LAB.M].filter(([d]) => !used.has(d))), D, RULE), RULE.t, RULE.s, RULE.m), used.size); }
+      const pr = planRule();
+      if (!ed || ed.rule !== ruleName(pr) || ed.key !== settingsKey() || ed.excl !== used.size || Date.now() - ed.at > 20 * 3600000) { say("Grading lines for today's strategy…"); edgeSave(ruleName(pr), summarize(labSignals(new Map([...LAB.M].filter(([d]) => !used.has(d))), D, pr), pr.t, pr.s, pr.m), used.size); }
       const M5 = await load5m(D.map((d) => d.date).slice(-252));
       PLAN.intra = M5.size >= 20 ? intradayPatterns(M5, D) : null;
       PLAN.at = Date.now(); PLAN.msg = "";
@@ -3505,9 +3519,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const el = $("#plan-card"); if (!el) return;
     if (!S.mcp) { el.hidden = true; return; }
     el.hidden = false;
-    const head = `<div class="panel-head"><div><h2>Today's game plan</h2><p class="small muted" style="margin-top:4px">${PLAN.at ? `Built ${esc(fmtClock(etParts(new Date(PLAN.at)).min))} ET from SPY's history${activeStrat() ? " and the days most like today" : ` and your rule (${esc(edgeLoad()?.rule || ruleName(RULE))})`}.` : "Built from SPY's history and the days most like today."}</p></div><button class="btn sm" type="button" id="plan-refresh"${PLAN.building ? " disabled" : ""}>Refresh</button></div>`;
+    const head = `<div class="panel-head"><div><h2>Today's game plan</h2><p class="small muted" style="margin-top:4px">${PLAN.at ? `Built ${esc(fmtClock(etParts(new Date(PLAN.at)).min))} ET from SPY's history and the days most like today.` : "Built from SPY's history and the days most like today."}</p></div><button class="btn sm" type="button" id="plan-refresh"${PLAN.building ? " disabled" : ""}>Refresh</button></div>`;
     if (!PLAN.at || !PLAN.like || !PAT.daily) { el.innerHTML = head + `<div class="empty">${esc(PLAN.msg || (PLAN.building ? "Building…" : "Getting today's plan ready… (or press Refresh)"))}</div>`; return; }
-    const D = PAT.daily, y = D[D.length - 1], L = PLAN.like, ed = edgeLoad();
+    const D = PAT.daily, y = D[D.length - 1], L = PLAN.like, ed = edgeLoad(), pr = planRule();
     const live = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === etParts().date ? LIVE.snap : null;
     const P = live ? +live.price : y.c, nowM = live && marketOpen() ? etParts().min : 600;
     // levels worth watching, graded by how your rule did on them
@@ -3525,16 +3539,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       if (tb.length >= 2) { const b = tb[0], w = tb[tb.length - 1]; win = `<li><b>Best window:</b> ${b.k} (your rule won ${P0(b.win)}, ${money0(b.avg)}/trade). <b>${w.avg < 0 ? "Sit out" : "Weakest"}:</b> ${w.k} (${money0(w.avg)}/trade).</li>`; } }
     // room to move vs what the take-profit needs
     const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
-    const need = tpMove(P, 960 - Math.max(nowM, 600), RULE.t, RULE.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
+    const need = tpMove(P, 960 - Math.max(nowM, 600), pr.t, pr.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
     const typ30 = blk?.v != null ? blk.v * P : null;
-    const acct = acctSize(), riskTrade = 1.0 * 100 * (RULE.s / 100) + FEES + 2 * (realCfg().slip || 0) * 100;
-    const riskLine = `<li><b>Risk per trade:</b> a ~$1.00 contract with a −${RULE.s}% stop risks about <b>$${riskTrade.toFixed(0)}</b>, ${((riskTrade / acct) * 100).toFixed(1)}% of your ${money0(acct).replace("+", "")} account${riskTrade / acct > 0.03 ? " (above the usual 2% guideline)" : " (within the usual 1–2% guideline)"}.</li>`;
-    const room = riskLine + `<li><b>Room to move:</b> days like today ranged about <b>$${(L.medRng * L.px0).toFixed(2)}</b>${L.useOR ? " after 10:00" : " for the day"}. ${need != null ? `Your +${RULE.t}% take-profit needs SPY to move about <b>$${need.toFixed(2)}</b> your way within ${RULE.m} min${typ30 != null ? `; a typical half hour ${live && marketOpen() ? "right now" : "after 10:00"} spans $${typ30.toFixed(2)} high-to-low` : ""}.` : ""} ${!activeStrat() && need != null && typ30 != null && need > typ30 * 0.9 ? "<b>That's a stretch</b>: consider a smaller take-profit today." : ""}</li>`;
+    const acct = acctSize(), riskTrade = 1.0 * 100 * (pr.s / 100) + FEES + 2 * (realCfg().slip || 0) * 100;
+    const riskLine = `<li><b>Risk per trade:</b> a ~$1.00 contract with a −${pr.s}% stop risks about <b>$${riskTrade.toFixed(0)}</b>, ${((riskTrade / acct) * 100).toFixed(1)}% of your ${money0(acct).replace("+", "")} account${riskTrade / acct > 0.03 ? " (above the usual 2% guideline)" : " (within the usual 1–2% guideline)"}.</li>`;
+    const room = riskLine + `<li><b>Room to move:</b> days like today ranged about <b>$${(L.medRng * L.px0).toFixed(2)}</b>${L.useOR ? " after 10:00" : " for the day"}. ${need != null ? `Your +${pr.t}% take-profit needs SPY to move about <b>$${need.toFixed(2)}</b> your way within ${pr.m} min${typ30 != null ? `; a typical half hour ${live && marketOpen() ? "right now" : "after 10:00"} spans $${typ30.toFixed(2)} high-to-low` : ""}.` : ""} ${!activeStrat() && need != null && typ30 != null && need > typ30 * 0.9 ? "<b>That's a stretch</b>: consider a smaller take-profit today." : ""}</li>`;
     // lean from similar days
     const upT = trust(Math.max(L.upN, L.K - L.upN), L.K), gf = L.cnt((x) => x.fill) / L.K;
     const lean = upT.k === "strong" || upT.k === "weak" ? `Days like today leaned <b>${L.upN >= L.K / 2 ? "higher" : "lower"}</b> (${Math.round((Math.max(L.upN, L.K - L.upN) / L.K) * 100)}% of ${L.K}) ${tpill(upT)}. Favor ${L.upN >= L.K / 2 ? "calls" : "puts"}, but still wait for your signal.` : `Days like today had <b>no clear direction</b>. Trade both sides, only on clean signals.`;
     const gapL = Math.abs(L.fToday[0]) >= 0.002 ? ` The opening gap filled the same day on ${Math.round(gf * 100)}% of them.` : "";
-    el.innerHTML = head + newsBanner() + stratHtml() + `<div class="small" style="margin:10px 0 6px"><b>Lines to watch</b> (graded by how ${activeStrat() ? "today's strategy" : "your rule"} did on them)</div>
+    el.innerHTML = head + newsBanner() + stratHtml() + `<div class="small" style="margin:10px 0 6px"><b>Lines to watch</b> (graded by how ${planRuleWho()} did on them${stratToday()?.noTrade && stratAuto() ? "; practice only today" : ""})</div>
       ${rows.length ? rows.map((x) => `<div class="plan-lv">${gradeBadge(x.gr)}<div style="min-width:0"><b class="mono">${x.L.toFixed(2)}</b> · ${esc(x.name)} · ${x.dir === "call" ? "↑ call if it breaks up" : "↓ put if it breaks down"}<div class="small muted">${x.gr ? `${x.gr.line}. ${esc(x.gr.advice)} ${tpill(x.gr.t)}` : x.e?.generic ? "Your rule doesn't watch this line, so it can't be graded. Add it in Practice → Change the rule." : "Not enough past signals on this line to grade it."}</div></div><button class="btn sm" type="button" data-plan-watch="${x.L.toFixed(2)}" data-dir="${x.dir}" data-why="${esc(x.name)}">Watch</button></div>`).join("") : `<p class="small muted">SPY is already past the usual lines. Wait for a new high or low to form.</p>`}
       <ul class="small" style="margin:10px 0 0 18px; display:grid; gap:4px">${win}${room}<li><b>Today's lean:</b> ${lean}${gapL}</li>${(() => { const q = pchkList().filter((x) => x.date === etParts().date).pop(); if (!q) return `<li><b>Option prices:</b> not checked yet. <a href="#pchk-card" data-pchk-go>Check if options are cheap today</a> (30 seconds).</li>`; const v = pchkVerdict(q); return `<li><b>Option prices:</b> <span class="pill ${v.cls}">${v.word}</span> at ${fmtClock(q.m)}. ${esc(v.todo.split(". ")[0])}.</li>`; })()}</ul>
       <p class="small muted" style="margin-top:8px">These are leans from history, not predictions. ${activeStrat() ? "Today's strategy" : "Your rule"} still decides each entry.</p>`;
@@ -4351,7 +4365,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // ---------- boot ----------
   showView(["dash", "live", "practice", "journal", "news", "learn"].includes(view) ? view : "dash");
   fillPlanDefaults();
-  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") { renderRoutine(); if (PLAN.at && marketOpen() && ((etParts(new Date(PLAN.at)).min < 570 && etParts().min >= 572) || (etParts(new Date(PLAN.at)).min < 600 && etParts().min >= 601))) buildPlan(); } } }, 15000);
+  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") renderRoutine(); if (planDue()) buildPlan(true); } }, 15000);
   setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
