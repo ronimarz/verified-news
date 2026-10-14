@@ -3505,7 +3505,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       say("Finding days like today…");
       PLAN.like = await computeLike((a, b) => say(`Loading 5-minute candles… ${a} of ${b}`), 504);
       await scorePastPicks(D).catch(() => {});
-      if (PLAN.like) await pickStrategy(PLAN.like, D, say);
+      // the decision made after 10:00 stands for the rest of the day; later rebuilds only refresh levels and grades
+      const kept = stratToday();
+      if (PLAN.like && !(kept && kept.phase === "open" && etParts().min >= 600)) await pickStrategy(PLAN.like, D, say);
       const ed = edgeLoad();
       const used = new Set(activeStrat()?.simAll || []);   // grade only on days the pick wasn't chosen from
       const pr = planRule();
