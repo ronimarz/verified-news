@@ -524,13 +524,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <div class="step" id="st2">
             <div class="no">2</div>
             <div class="step-body">
-              <h3><span id="lc-hold-title">Break, then hold 60 seconds</span> <button class="learn-link" type="button" data-learn="breakhold">Why wait?</button></h3>
+              <h3><span id="lc-hold-title">Break, then hold</span> <button class="learn-link" type="button" data-learn="breakhold">Why wait?</button></h3>
               <div class="seg" role="group" aria-label="How to watch">
                 <button type="button" data-mode="auto" aria-pressed="true">Auto-watch candles</button>
                 <button type="button" data-mode="manual" aria-pressed="false">Tap it myself</button>
               </div>
               <div id="lc-auto">
-                <p class="small muted">The app checks finished 1-minute candles. A candle that closes past your level is the break. The next full candle that never touches the level again is the 60-second hold. If price comes back across, the count starts over.</p>
+                <p class="small muted">The app checks finished 1-minute candles. A candle that closes past your level is the break. If today's strategy waits for a hold, each following full candle that never touches the level again counts as one minute of hold. If price comes back across, the count starts over.</p>
                 <div class="candles" id="lc-candles" aria-label="Recent 1-minute candles"></div>
               </div>
               <div id="lc-manual" hidden>
@@ -621,7 +621,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="rule-box" id="rp-rule">
         <div class="row" style="justify-content:space-between; gap:8px">
           <div style="min-width:0"><div class="label">Rule you're practicing</div><div id="rp-rule-name" style="font-weight:600"></div><div class="small muted" id="rp-rule-sum"></div></div>
-          <select id="rp-rule-pick" style="width:auto" aria-label="Pick a rule"><option value="today">Today's strategy (picked for today)</option><option value="v2">V2: wait 60 seconds</option><option value="v1">V1: wait 3 minutes</option><option value="now">Buy right on the break</option><option value="custom">My own rule</option></select>
+          <select id="rp-rule-pick" style="width:auto" aria-label="Pick a rule"><option value="today">Today's strategy (picked for today)</option><option value="v2">Wait 1 minute</option><option value="v1">Wait 3 minutes</option><option value="now">Buy right on the break</option><option value="custom">My own rule</option></select>
         </div>
         <details id="rp-rule-edit">
           <summary class="small" style="cursor:pointer">Change the rule</summary>
@@ -866,7 +866,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function bs0(type, S, K, ivPct, mins) { const T = Math.max(mins, 0.01) / 525600, v = Math.max(ivPct, 0.5) / 100, sq = v * Math.sqrt(T); const d1 = (Math.log(S / K) + 0.5 * v * v * T) / sq, d2 = d1 - sq; return Math.max(type === "call" ? S * ncdf(d1) - K * ncdf(d2) : K * ncdf(-d2) - S * ncdf(-d1), 0); }
 
   // ---------- state ----------
-  const DEFAULT_CFG = { planDefaults: { target: 50, stop: 40, time: 30 }, startBalance: 100, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5 }, currentVersion: "V2", underlying: "SPY", rules: [] };
+  const DEFAULT_CFG = { planDefaults: { target: 50, stop: 40, time: 30 }, startBalance: 2000, quarterStart: "2026-09-28", quarterEnd: "2026-12-28", targets: { V1: 10, V2: 5, Daily: 10 }, currentVersion: "Daily", underlying: "SPY", rules: [] };
   const S = { trades: [], missed: [], scout: [], practice: [], reviews: [], bt: null, quiz: null, drill: null, cfg: DEFAULT_CFG, db: null, mcp: null, sample: null, canWrite: true, newsFilter: ls.get("xsp.newsFilter", "all"), seen: new Set(ls.get("learn.seen", [])) };
   const LIVE = { snap: null, bars: [], status: "connecting", msg: "", at: null, stopped: false };
   const U = () => S.cfg.underlying || "SPY";
@@ -942,11 +942,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
 
   function renderKpis(st) {
-    const start = num(S.cfg.startBalance) ?? 100;
+    const start = num(S.cfg.startBalance) ?? 2000;
     const today = etParts().date;
     const total = weekdays(S.cfg.quarterStart, S.cfg.quarterEnd);
     const done = today < S.cfg.quarterStart ? 0 : weekdays(S.cfg.quarterStart, today > S.cfg.quarterEnd ? S.cfg.quarterEnd : today);
-    const cur = S.cfg.currentVersion || "V2";
+    const cur = S.cfg.currentVersion || "Daily";
     const target = (S.cfg.targets || {})[cur] || 10;
     const verified = st.official.filter((t) => t.version === cur && t.qual === "verified").length;
     const pending = st.official.filter((t) => t.version === cur && t.qual === "pending").length;
@@ -957,7 +957,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="s"><span class="${cls(st.net)} num">${money(st.net, true)}</span> from ${money(start)} start · ${st.closed.length} closed${st.open.length ? ` · ${st.open.length} open` : ""}</div></div>
       <div class="kpi"><div class="label">Win rate <button class="q" type="button" data-learn="stats" aria-label="Explain win rate">?</button></div><div class="v">${pct(st.winRate, false)}</div><div class="s">${st.wins.length} W · ${st.losses.length} L</div></div>
       <div class="kpi"><div class="label">Avg win / loss <button class="q" type="button" data-learn="stats" aria-label="Explain average win and loss">?</button></div><div class="v"><span class="up">${money(st.avgWin)}</span> <span class="muted">/</span> <span class="down">${money(st.avgLoss)}</span></div><div class="s">${pay != null ? `Wins are ${pay.toFixed(2)}× losses` : "Need a win and a loss"}</div></div>
-      <div class="kpi"><div class="label">${esc(cur)} setups <button class="q" type="button" data-learn="sample" aria-label="Explain verified setups">?</button></div><div class="v">${verified} <span class="muted small">of ${target}</span></div><div class="meter" aria-label="${verified} verified, ${pending} pending">${cells}</div><div class="s">${pending ? `${pending} pending review` : "Verified qualifying entries"}</div></div>
+      <div class="kpi"><div class="label">${esc(verName(cur))} setups <button class="q" type="button" data-learn="sample" aria-label="Explain verified setups">?</button></div><div class="v">${verified} <span class="muted small">of ${target}</span></div><div class="meter" aria-label="${verified} verified, ${pending} pending">${cells}</div><div class="s">${pending ? `${pending} pending review` : "Verified qualifying entries"}</div></div>
       <div class="kpi"><div class="label">Quarter</div><div class="v">${done} <span class="muted small">of ${total} days</span></div><div class="meter"><i class="on" style="flex:${done}"></i><i style="flex:${Math.max(total - done, 0.001)}"></i></div><div class="s">${dayName(S.cfg.quarterStart)} – ${dayName(S.cfg.quarterEnd)}</div></div>`;
   }
 
@@ -1054,15 +1054,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <p class="small muted" style="margin-top:10px">Tests the early-session idea: do mornings move more? Missed setups are not included.</p>`;
   }
 
+  function verName(v) { return ({ Daily: "Daily strategy", V1: "V1 (old test)", V2: "V2 (old test)", pre: "Pre-quarter" })[v] || v; }
   function renderVersions(st) {
-    const vs = [...new Set(["V1", "V2", "Daily", ...st.official.map((t) => t.version).filter(Boolean)])];
+    const vs = [...new Set(["Daily", ...st.official.map((t) => t.version).filter(Boolean)])];
     const rows = vs.map((v) => {
       const ts = st.official.filter((t) => t.version === v), cl = ts.map((t) => ({ t, c: calc(t) })).filter((x) => !x.c.open);
       const net = cl.reduce((s, x) => s + x.c.pnl, 0);
-      return `<tr${ts.length ? "" : ' class="faded"'}><td><b>${esc(v)}</b>${v === S.cfg.currentVersion ? ' <span class="pill info plain">current</span>' : ""}</td><td class="n">${ts.length}</td><td class="n">${ts.filter((t) => t.qual === "verified").length} / ${(S.cfg.targets || {})[v] ?? "–"}</td><td class="n">${cl.filter((x) => x.c.pnl > 0).length}–${cl.filter((x) => x.c.pnl <= 0).length}</td><td class="n ${cls(net)}">${cl.length ? money(net, true) : "–"}</td></tr>`;
+      return `<tr${ts.length ? "" : ' class="faded"'}><td><b>${esc(verName(v))}</b>${v === S.cfg.currentVersion ? ' <span class="pill info plain">current</span>' : ""}</td><td class="n">${ts.length}</td><td class="n">${ts.filter((t) => t.qual === "verified").length} / ${(S.cfg.targets || {})[v] ?? "–"}</td><td class="n">${cl.filter((x) => x.c.pnl > 0).length}–${cl.filter((x) => x.c.pnl <= 0).length}</td><td class="n ${cls(net)}">${cl.length ? money(net, true) : "–"}</td></tr>`;
     }).join("");
     $("#versions").innerHTML = `<table><thead><tr><th>Version</th><th class="n">Entries</th><th class="n">Verified / goal</th><th class="n">W–L</th><th class="n">Net P/L</th></tr></thead><tbody>${rows}</tbody></table>
-      <p class="small muted" style="margin-top:10px">Each rule version is judged on its own trades. V1 and V2 were test rules; "Daily" is trades made with Today's strategy.</p>`;
+      <p class="small muted" style="margin-top:10px">Each version is judged on its own trades. "Daily" is trades made with Today's strategy; older trades are kept from your early test rules.</p>`;
   }
 
   function renderEdge(st) {
@@ -1137,7 +1138,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const alerts = planStatus(t, last ? num(last.bid) : null);
     const plan = t.planTargetPrice != null || t.planTimeStop ? `<div class="small">Plan: take profit at <b>${px(num(t.planTargetPrice))}</b> · stop at <b>${px(num(t.planStopPrice))}</b> · out by <b>${esc(t.planTimeStop || "–")}</b> ET${t.planWhy ? ` · <span class="muted">${esc(t.planWhy)}</span>` : ""}</div>` : `<div class="small muted">No plan saved with this trade.</div>`;
     return `<div class="pos" data-id="${id}">
-      <div class="pos-head"><div><div class="label">Open paper position · ${esc(t.version || "")}</div><h2>${esc(u)} ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
+      <div class="pos-head"><div><div class="label">Open paper position · ${esc(verName(t.version || ""))}</div><h2>${esc(u)} ${esc(contractName(t))} ${esc(t.expiry || "")} × ${c.qty}</h2>
         <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
         <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div>${est != null ? `<div class="small muted">Now ≈ ${px(est)} estimated from ${esc(u)} ${Sn.toFixed(2)} (not a quote)</div>` : ""}</div></div>
       ${plan}
@@ -1201,7 +1202,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#trades-tbl").innerHTML = `<table><thead><tr><th>Date</th><th>Contract</th><th class="n">P/L</th><th>Entry → exit (ET)</th><th class="hide-sm">Ver.</th><th class="n hide-sm">Cost</th><th class="n hide-sm">Return</th><th class="n hide-sm">Balance</th><th>Rule check</th></tr></thead><tbody>${rows.map((t) => {
       const c = calc(t), pre = t.status !== "official";
       return `<tr class="click${pre ? " faded" : ""}" data-id="${esc(t.id)}" tabindex="0"><td>${esc(dayName(t.date))}${pre ? '<div class="small">not counted</div>' : ""}</td><td class="mono">${esc(uOf(t))} ${esc(contractName(t))} <span class="muted small">${esc(t.expiry || "")}</span></td><td class="n ${pre ? "" : cls(c.pnl)}">${money(c.pnl, true)}</td>
-        <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="hide-sm">${esc(t.version || "–")}</td><td class="n hide-sm">${money(c.cost)}</td><td class="n hide-sm">${pct(c.ret)}</td><td class="n hide-sm">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
+        <td class="mono">${esc(t.entryTime || "?")} → ${c.open ? '<span class="pill info">open</span>' : esc(t.exitTime)}</td><td class="hide-sm">${esc(t.version ? verName(t.version) : "–")}</td><td class="n hide-sm">${money(c.cost)}</td><td class="n hide-sm">${pct(c.ret)}</td><td class="n hide-sm">${bal.has(t.id) ? money(bal.get(t.id)) : "–"}</td><td>${qualPill(t.qual)}</td></tr>`;
     }).join("")}</tbody></table>`;
   }
   const openRow = (e) => { const r = e.target.closest("tr[data-id]"); if (r) openForm("trades", S.trades.find((t) => t.id === r.dataset.id)); };
@@ -1228,7 +1229,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     for (const r of S.scout) items.push({ kind: r.kind === "obs" ? "obs" : "scout", date: r.date, time: r.time, r });
     for (const t of S.trades) {
       const c = calc(t);
-      if (t.entryTime) items.push({ kind: "trade", date: t.date, time: t.entryTime, html: `<b>Paper entry</b> · ${esc(uOf(t))} ${esc(contractName(t))} at Ask ${px(c.entry)} (${money(c.cost)}) · ${esc(t.version || "")} ${qualPill(t.qual)}` });
+      if (t.entryTime) items.push({ kind: "trade", date: t.date, time: t.entryTime, html: `<b>Paper entry</b> · ${esc(uOf(t))} ${esc(contractName(t))} at Ask ${px(c.entry)} (${money(c.cost)}) · ${esc(verName(t.version) || "")} ${qualPill(t.qual)}` });
       if (!c.open) items.push({ kind: "trade", date: t.date, time: t.exitTime, html: `<b>Paper exit</b> · ${esc(uOf(t))} ${esc(contractName(t))} at ${px(c.exit)} · <span class="${cls(c.pnl)} num">${money(c.pnl, true)}</span> (${pct(c.ret)})` });
     }
     const f = S.newsFilter, shown = items.filter((i) => f === "all" || i.kind === f);
@@ -1248,7 +1249,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#news-filter").addEventListener("click", (e) => { const c = e.target.closest(".chip"); if (!c) return; S.newsFilter = c.dataset.f; ls.set("xsp.newsFilter", S.newsFilter); renderNews(); });
   $("#news").addEventListener("click", (e) => { const b = e.target.closest("[data-edit-scout]"); if (b) openForm("scout", S.scout.find((r) => r.id === b.dataset.editScout)); });
 
-  // ---------- live V2 check ----------
+  // ---------- live entry check ----------
   const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "", iv: "", pt: "", ps: "", pm: "", pw: "", sk: "", sbid: "", sask: "" };
   let LC = { ...LC0, ...ls.get("spy.live", {}) };
   // A setup from an earlier day never carries over: keep only the mode and plan settings.
@@ -1301,7 +1302,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
 
-  // Read the V2 break and hold from finished 1-minute candles.
+  // Read the break and hold from finished 1-minute candles.
   function detect(bars, L, dir, since, nowT, holdN = 1) {
     const beyond = (b) => dir === "call" ? b.c > L : b.c < L;
     const clean = (b) => dir === "call" ? b.l > L : b.h < L;
@@ -1370,7 +1371,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $$("[data-opp]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.opp === LC.opp)));
     $$("[data-mode]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === LC.mode)));
     $("#lc-auto").hidden = !s.auto; $("#lc-manual").hidden = s.auto;
-    $("#lc-hold-title").textContent = holdN() === 0 ? "Break (today's strategy buys on the break)" : holdN() === 1 ? "Break, then hold 60 seconds" : `Break, then hold ${holdN()} minutes`;
+    $("#lc-hold-title").textContent = holdN() === 0 ? "Break (today's strategy buys on the break)" : holdN() === 1 ? "Break, then hold 1 minute" : `Break, then hold ${holdN()} minutes`;
     $("#st1").className = "step" + (s.s1 ? " done" : ""); $("#st2").className = "step" + (s.s2 ? " done" : "");
     $("#st3").className = "step" + (s.stop ? " stop" : s.s3 ? " done" : ""); $("#st4").className = "step" + (s.s4 ? " done" : "");
     if (s.auto) renderCandles(s);
@@ -1408,7 +1409,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#lc-card").innerHTML = [
       ["Level", s.s1 ? `${esc(LC.level)} ${LC.dir === "put" ? "↓ put" : "↑ call"}${LC.why ? ` · ${esc(LC.why)}` : ""}` : "–"],
       ["Break", s.breakET ? `${esc(s.breakET)} ET` : "–"],
-      ["Hold 60s", s.held ? `Yes · ${esc(s.holdET)} ET` : s.broke ? "In progress" : "–"],
+      [holdN() ? `Hold ${holdN()} min` : "Hold", s.held ? `Yes · ${esc(s.holdET)} ET` : s.broke ? "In progress" : "–"],
       ["False breaks", String(s.resets)],
       ["Context", { no: "Nothing opposing", unknown: "No known opposition, some data stale", yes: "Opposing signal" }[LC.opp] || "–"],
       ["Chain", s.ask != null ? `Bid ${px(s.bid)} / Ask ${px(s.ask)}${num(LC.delta) != null ? ` · Δ ${esc(LC.delta)}` : ""}` : "–"],
@@ -1422,7 +1423,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     let title = "What to think about now", body = "", link = "levels";
     if (!s.s1) { body = "Good levels are prices where the market already turned or paused: today's high or low, yesterday's close, the opening price. They work because many traders watch the same numbers."; link = "levels"; }
     else if (!s.broke) { body = "Patience is part of the rule. Most of the time price does not break your level, and no trade is the correct result. Forcing a trade is how small accounts shrink."; link = "breakhold"; }
-    else if (!s.held) { body = "A break that snaps back is a false break. Waiting one full minute filters many of them, but it costs part of the move. Your journal is testing whether 60 seconds is the right trade-off."; link = "breakhold"; }
+    else if (!s.held) { body = "A break that snaps back is a false break. Waiting for a hold filters many of them, but it costs part of the move. Today's strategy picks the wait (none, 1 or 3 minutes) that worked best on days like today."; link = "breakhold"; }
     else if (!s.s4) { body = `Pick a strike with an Ask near $1.00. Closer to the price means higher delta: the option follows ${U()} more closely but costs more. Further away is cheaper but needs a bigger move.`; link = "delta"; }
     else {
       const spread = s.bid != null ? (s.ask - s.bid) * 100 : 0, d = Math.abs(num(LC.delta) || 0.5);
@@ -1440,7 +1441,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const s = lcState(), now = etParts(), uPrice = LIVE.snap ? num(LIVE.snap.price) : null;
       if (!(s.held && s.s3 && s.s4) || s.stop) return null;
       if (!marketOpen()) { toast("The market is closed. Paper entries only count between 9:30 am and 4:00 pm ET."); return null; }
-      const doc = { date: now.date, status: "official", version: activeStrat() ? "Daily" : S.cfg.currentVersion || "V2", strategy: activeStrat() ? ruleName(activeStrat().rule) : "", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
+      const doc = { date: now.date, status: "official", version: "Daily", strategy: activeStrat() ? ruleName(activeStrat().rule) : "", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
         level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
         entryBid: s.bid, entryAsk: s.ask, exitBid: null, exitAsk: null, entryPrice: null, exitPrice: null, delta: num(LC.delta), catalyst: "",
         entryUnderlying: uPrice, exitUnderlying: null, checkpoints: [{ t: now.hm, xsp: uPrice, bid: s.bid, ask: s.ask }], iv: num(LC.iv),
@@ -1454,7 +1455,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   function logMissed() {
       const s = lcState(), now = etParts();
-      openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held ? " + 60s hold" : ""}`.trim(), signalTime: (s.breakET || "").slice(0, 5), contract: LC.strike ? `${U()} ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: S.cfg.currentVersion || "V2" });
+      openForm("missed", null, { date: now.date, dir: LC.dir, trigger: `${LC.level} ${LC.why || ""} break${s.held && holdN() ? ` + ${holdN()}-min hold` : ""}`.trim(), signalTime: (s.breakET || "").slice(0, 5), contract: LC.strike ? `${U()} ${LC.strike} ${LC.dir === "put" ? "Put" : "Call"}` : "", entryPrice: s.ask, version: "Daily" });
   }
 
   // ---------- lessons ----------
@@ -1474,7 +1475,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       body: ["Common ones: today's high and low, yesterday's close, the opening price, round numbers.", "Pick the level before price gets there. Choosing it after the move is hindsight.", "The Live check suggests today's high, low, open and prior close from Webull."],
       yours: () => "Your Oct 9 call used 780.51, the prior intraday high.", next: ["breakhold"] },
     breakhold: { stage: 1, title: "Break, hold and false breaks", one: "A break is price closing past your level. A hold is it staying there long enough to trust it.",
-      body: ["False break: price pokes through, then snaps back. Very common on choppy days.", "Waiting longer filters more false breaks but uses up more of the move.", "V1 waited 3–5 minutes. V2 waits 60 seconds. Your journal tests which works better.", "Auto-watch uses finished 1-minute candles: one closes past the level (break), the next never touches it (hold)."],
+      body: ["False break: price pokes through, then snaps back. Very common on choppy days.", "Waiting longer filters more false breaks but uses up more of the move.", "Today's strategy picks the wait (none, 1 or 3 minutes) that worked best on the days most like today.", "Auto-watch uses finished 1-minute candles: one closes past the level (break), the next never touches it (hold)."],
       yours: () => { const m = S.missed[0]; return m ? `On ${dayName(m.date)} you waited for a ~5-minute hold and missed the move: ${money(num(m.hypoPnl), true)} hypothetical. That's why the app tests different wait times.` : ""; }, next: ["callput", "levels"] },
     callput: { stage: 2, title: "Calls and puts", one: "A call gains when the price goes up. A put gains when the price goes down.",
       body: ["Buying either one, the most you can lose is what you paid (the premium).", "One contract covers 100 shares, so a $1.15 option costs $115.", "0DTE means it expires at 4:00 pm today. Every minute it gets closer to worthless unless price moves your way."],
@@ -1510,8 +1511,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       body: ["Payoff ratio = average win ÷ average loss.", "Break-even win rate = average loss ÷ (average win + average loss).", "A 33% win rate is profitable if wins are more than twice the size of losses."],
       yours: () => { const s = st0(); const be = s.avgWin != null && s.avgLoss ? Math.abs(s.avgLoss) / (s.avgWin + Math.abs(s.avgLoss)) : null; return be != null ? `Your average win is ${money(s.avgWin)} and average loss ${money(s.avgLoss)}. You need ${pct(be, false)} wins to break even, and you're at ${pct(s.winRate, false)}.` : ""; }, next: ["sample"] },
     sample: { stage: 4, title: "Sample size and rule versions", one: "A few trades prove nothing. You need enough trades under the same rules to see a real pattern.",
-      body: ["That's why rules are frozen in versions (V1, V2) and judged separately.", "Change one thing at a time so you know what made the difference.", "Missed setups count as evidence too. They show whether rules are too strict."],
-      yours: () => `You have ${st0().closed.length} closed official trades. Your plan reviews V2 after its first ${(S.cfg.targets || {}).V2 ?? 5}.`, next: ["stats"] },
+      body: ["That's why each strategy is judged on its own trades, and the daily pick is scored against sitting out.", "Change one thing at a time so you know what made the difference.", "Missed setups count as evidence too. They show whether rules are too strict."],
+      yours: () => `You have ${st0().closed.length} closed official trades. The scorecard on the dashboard compares the daily picks with sitting out.`, next: ["stats"] },
     timeofday: { stage: 4, title: "Time of day", one: "Markets often move most in the first 90 minutes, then slow down midday.",
       body: ["Morning breaks may follow through better.", "Afternoon 0DTE trades fight fast time decay.", "Your Time of day table tests this with your own trades."],
       yours: () => "So far: your morning trade won, your midday and afternoon trades lost. One trade each is far too few to conclude anything.", next: ["theta", "sample"] },
@@ -1642,7 +1643,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const F = {
     trades: [
       ["date", "Date", "date"], ["status", "Counts toward balance", "select", [["official", "Official"], ["pre-quarter", "No · pre-quarter / practice"]]],
-      ["underlying", "Underlying", "select", [["SPY", "SPY"], ["XSP", "XSP"]]], ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2 (test)"], ["Daily", "Daily strategy"]]], ["qual", "Rule check", "select", [["verified", "Verified"], ["pending", "Pending review"], ["not", "Not qualified"]]],
+      ["underlying", "Underlying", "select", [["SPY", "SPY"], ["XSP", "XSP"]]], ["version", "Rule version", "select", [["Daily", "Daily strategy"], ["V1", "V1 (old test)"], ["V2", "V2 (old test)"]]], ["qual", "Rule check", "select", [["verified", "Verified"], ["pending", "Pending review"], ["not", "Not qualified"]]],
       ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["strike", "Strike", "number"], ["expiry", "Expiry", "text"], ["qty", "Contracts", "number"],
       ["level", "Important level / trigger", "text", null, "wide"],
       ["signalTime", "Signal (ET)", "time"], ["entryTime", "Entry (ET)", "time"], ["exitTime", "Exit (ET)", "time"], ["catalyst", "Catalyst class", "select", [["", "–"], ["BIG", "BIG"], ["MODERATE", "MODERATE"], ["SMALL", "SMALL"], ["NONE", "None"]]],
@@ -1657,7 +1658,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     ],
     review: REVIEW_FIELDS,
     missed: [
-      ["date", "Date", "date"], ["version", "Rule version", "select", [["V1", "V1"], ["V2", "V2 (test)"], ["Daily", "Daily strategy"], ["pre", "Pre-quarter"]]], ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["signalTime", "Signal (ET)", "time"],
+      ["date", "Date", "date"], ["version", "Rule version", "select", [["Daily", "Daily strategy"], ["V1", "V1 (old test)"], ["V2", "V2 (old test)"], ["pre", "Pre-quarter"]]], ["dir", "Direction", "select", [["call", "Call"], ["put", "Put"]]], ["signalTime", "Signal (ET)", "time"],
       ["contract", "Contract", "text"], ["trigger", "Trigger / level", "text", null, "wide"],
       ["entryPrice", "Entry-window Ask", "number"], ["m15", "15m after", "number"], ["m30", "30m after", "number"], ["m60", "60m after", "number"], ["hypoPnl", "Hypothetical P/L $", "number"],
       ["lesson", "Lesson", "textarea", null, "wide"],
@@ -1696,7 +1697,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   let formCtx = null;
   function openForm(coll, rec, preset) {
     const now = etParts();
-    const defaults = { trades: { date: now.date, status: "official", underlying: U(), version: S.cfg.currentVersion || "V2", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: S.cfg.currentVersion || "V2", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "News Scout" }, review: {} }[coll];
+    const defaults = { trades: { date: now.date, status: "official", underlying: U(), version: "Daily", qual: "pending", dir: "call", expiry: "0DTE", qty: 1 }, missed: { date: now.date, version: "Daily", dir: "call" }, scout: { date: now.date, time: now.hm, kind: "scout", scout: "News Scout" }, review: {} }[coll];
     const data = rec ? { underlying: coll === "trades" ? uOf(rec) : undefined, ...rec } : { ...defaults, ...(preset || {}) };
     formCtx = { coll, store: STORE[coll] || coll, id: rec?.id || null, base: rec ? stripId(rec) : {} };
     const isTrade = coll === "trades" && rec;
@@ -1800,7 +1801,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $("#f-rulesText").style.minHeight = "260px";
     $("#rules-save").addEventListener("click", async () => {
       const rulesOut = $("#f-rulesText").value.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const i = l.indexOf(":"); return i > 0 ? { name: l.slice(0, i).trim(), text: l.slice(i + 1).trim() } : { name: "Rule", text: l }; });
-      const cfg = { ...S.cfg, currentVersion: $("#f-currentVersion").value || "V2", underlying: $("#f-underlyingCfg").value, startBalance: num($("#f-startBalance").value) ?? 100, quarterStart: $("#f-quarterStart").value, quarterEnd: $("#f-quarterEnd").value, rules: rulesOut };
+      const cfg = { ...S.cfg, currentVersion: $("#f-currentVersion").value || "Daily", underlying: $("#f-underlyingCfg").value, startBalance: num($("#f-startBalance").value) ?? 2000, quarterStart: $("#f-quarterStart").value, quarterEnd: $("#f-quarterEnd").value, rules: rulesOut };
       if (await save("config", "main", cfg)) { dlg.close(); toast("Rules saved."); LIVE.bars = []; schedulePoll(0); }
     });
     dlg.showModal();
@@ -1902,8 +1903,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const cName = (dir, K) => `SPY ${new Date(RP.date + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} ${K} ${dir === "call" ? "Call" : "Put"}`;
   // ----- the rule being practiced -----
   const RULE_PRESETS = {
-    v2: { name: "V2: wait 60 seconds", hold: 1 },
-    v1: { name: "V1: wait 3 minutes", hold: 3 },
+    v2: { name: "Wait 1 minute", hold: 1 },
+    v1: { name: "Wait 3 minutes", hold: 3 },
     now: { name: "Buy right on the break", hold: 0 },
   };
   const RULE_BASE = { hold: 1, dirs: "both", until: 930, t: 50, s: 40, m: 30, lv: { ph: true, pl: true, day: true, pc: false, or15: true, or30: false } };
@@ -2374,7 +2375,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function rpCmdSell() { if (!RP.pos) return "No position to sell."; const w = !!wSellFor(RP.pos); if (w) return "Cancel your working sell order first (Orders tab, or the coach's Cancel button)."; fillFor("now"); return "Sell ticket filled in (Market). Press Preview Order, then Place Order."; }
 
   const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "Held to 4:00 pm" };
-  const ruleOf = (p) => p.rule || "V2: wait 60 seconds";
+  const ruleOf = (p) => ({ "V2: wait 60 seconds": "Wait 1 minute", "V1: wait 3 minutes": "Wait 3 minutes" })[p.rule] || p.rule || "Wait 1 minute";
   const after30Of = (p) => (p.exitTime && p.exitTime > "15:30" ? null : p.after30);
   function renderPracticeStats() {
     const P = [...S.practice].sort((a, b) => (b.at || 0) - (a.at || 0)), el = $("#rp-stats");
@@ -2654,7 +2655,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const box = $("#pat-ai");
     if (!S.sample) { box.textContent = "Explanations need Claude, which isn't available in this view."; return; }
     e.target.disabled = true; box.textContent = "Thinking…";
-    const prompt = `You are a patient options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). Their approach: each morning the app picks a strategy from past days most like today (a level break, an optional wait for a hold, a time window, and take-profit / stop / time-limit exits). V2 (wait 60 seconds) was only their first test rule; don't treat it as the standard.\n\nHere are statistics from SPY's own history:\n${patternBrief(PAT.res)}\n\nIn plain words (under 250 words, short bullets): name the 4-5 most useful patterns for this person, what each means for their rule (which times and levels look better or worse, when to expect enough movement, how often breaks fail), and one thing to test in Practice. Define jargon. Don't promise profits or tell them to buy anything. Say when a difference is too small to matter.`;
+    const prompt = `You are a patient options-trading teacher for a beginner who paper-trades SPY 0DTE options (no real money). Their approach: each morning the app picks a strategy from past days most like today (a level break, an optional wait for a hold, a time window, and take-profit / stop / time-limit exits). Judge ideas against sitting out, not against any one fixed rule.\n\nHere are statistics from SPY's own history:\n${patternBrief(PAT.res)}\n\nIn plain words (under 250 words, short bullets): name the 4-5 most useful patterns for this person, what each means for their rule (which times and levels look better or worse, when to expect enough movement, how often breaks fail), and one thing to test in Practice. Define jargon. Don't promise profits or tell them to buy anything. Say when a difference is too small to matter.`;
     try { await S.sample(prompt, { cache: false, onText: ({ text }) => { box.textContent = text; } }); }
     catch (err) { box.textContent = err?.code === "rate_limited" ? "Too many questions in a short time. Try again in a minute." : "Couldn't get an explanation right now. Try again."; }
     finally { e.target.disabled = false; }
@@ -3726,7 +3727,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     Q.push({ id: "theta1", lesson: "theta", q: "It's 2:30 pm. SPY hasn't moved for an hour. What happened to your 0DTE call?", opts: ["Same price", "Gained value", "Lost value to time decay", "Can't tell"], a: 2, why: "With nothing else changing, an expiring option loses time value every minute, faster in the afternoon." });
     Q.push({ id: "itm1", lesson: "strike", q: "SPY is at 780. Which call is in the money?", opts: ["775 call", "780 call", "785 call", "None"], a: 0, why: "A call is in the money when SPY is above its strike. 775 < 780, so it already has $5 of intrinsic value." });
     Q.push({ id: "max1", lesson: "callput", q: "You buy one put for $1.10. What is the most you can lose?", opts: ["$1.10", "$110", "Unlimited", "$1,100"], a: 1, why: "Buying an option risks only what you paid: $1.10 × 100 = $110." });
-    Q.push({ id: "fb1", lesson: "breakhold", q: "SPY closes a candle above today's high, then the next candle drops back below it. That's called…", opts: ["A hold", "A false break", "A gap", "A reversal confirmation"], a: 1, why: "Price broke the level but couldn't stay past it. Your 60-second hold exists to filter these." });
+    Q.push({ id: "fb1", lesson: "breakhold", q: "SPY closes a candle above today's high, then the next candle drops back below it. That's called…", opts: ["A hold", "A false break", "A gap", "A reversal confirmation"], a: 1, why: "Price broke the level but couldn't stay past it. Waiting for a hold exists to filter these." });
     Q.push({ id: "spy1", lesson: "spyxsp", q: "You still hold an in-the-money SPY call at 4:00 pm. What happens?", opts: ["It settles in cash", "It turns into 100 SPY shares", "It expires worthless", "Nothing until Monday"], a: 1, why: "SPY options settle into shares. That's why your rules say close before the bell." });
     Q.push({ id: "iv1", lesson: "iv", q: "Right after a big scheduled report, SPY barely moves but your option gets cheaper. The most likely reason?", opts: ["Delta", "Volatility dropped (IV crush)", "The spread widened", "Dividends"], a: 1, why: "Before the event, options carry extra expected movement. Once it passes, implied volatility falls and so do prices." });
     Q.push({ id: "gamma1", lesson: "gamma", q: "Why can a 0DTE option double in a few minutes?", opts: ["High gamma near expiry", "Low volume", "Dividends", "The spread"], a: 0, why: "Near expiry, delta changes very fast (high gamma), so a small move can sharply raise or crush the option's price." });
