@@ -1142,6 +1142,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
         <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div>${est != null ? `<div class="small muted">Now ≈ ${px(est)} estimated from ${esc(u)} ${Sn.toFixed(2)} (not a quote)</div>` : ""}</div></div>
       ${plan}
+      ${num(t.planStopPrice) != null && t.date === etParts().date ? `<div class="small">${stopSpyLine(t.dir, num(t.entryUnderlying), num(t.strike), c.entry, num(t.planStopPrice), 960 - (toMin(t.entryTime) ?? etParts().min))}</div>` : ""}
       ${alerts.map((a) => `<div class="alert">Your plan says get out: ${esc(a)}</div>`).join("")}
       <div class="fields">
         <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${Sn != null ? Sn.toFixed(2) : ""}"></div>
@@ -1294,11 +1295,25 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (c.bad) { el.innerHTML = `<span style="color:var(--bad)">The sold strike must be ${LC.dir === "put" ? "below" : "above"} the bought one, and its Bid lower than your Ask.</span>`; return; }
     el.innerHTML = `<span>Spread costs <b>${money(c.maxLoss)}</b> vs <b>${money(c.single.cost)}</b></span><span>Most it can make <b>${money(c.maxProfit)}</b></span><span>Break-even <b>${c.breakeven.toFixed(2)}</b> vs <b>${c.single.breakeven.toFixed(2)}</b></span><span class="muted">Cheaper and needs less move to break even, but gains stop at ${esc(LC.sk)}.</span>`;
   }
+  // How far SPY has to move against you for the option to hit your stop, and how that compares with a normal half hour.
+  function stopInSpy(dir, S, K, ask, stopPrice, mins) {
+    if (!(S > 0 && K > 0 && ask > 0.05 && stopPrice > 0 && mins > 0)) return null;
+    const iv = impliedVol(dir, S, K, mins, ask) || 12, sg = dir === "call" ? -1 : 1, after = Math.max(mins - 10, 1), ivL = iv * Math.exp((calibration().drift || 0) * 10);
+    if (bs0(dir, S, K, ivL, after) - 0.01 <= stopPrice) return { move: 0, at: S };
+    let lo = 0, hi = 15; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (bs0(dir, S + sg * m, K, ivL, after) - 0.01 > stopPrice) lo = m; else hi = m; }
+    return { move: hi, at: S + sg * hi };
+  }
+  function typical30(P) { const nowM = etParts().min, blk = PLAN.intra?.blocks?.[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 570) - 570) / 30)))]; return blk?.v != null && P ? blk.v * P : null; }
+  function stopSpyLine(dir, S, K, ask, stopPrice, mins) {
+    const r = stopInSpy(dir, S, K, ask, stopPrice, mins); if (!r) return "";
+    const w = typical30(S), tight = w != null && r.move < w * 0.6;
+    return `<span class="${tight ? "down" : "muted"}">Your stop ≈ SPY ${r.at.toFixed(2)} (${dir === "call" ? "−" : "+"}$${r.move.toFixed(2)} against you, within about 10 min)${w != null ? `. SPY usually moves about $${w.toFixed(2)} in a half hour${tight ? ", so normal wiggles can trigger this stop" : ""}` : ""}.</span>`;
+  }
   function renderPlanCalc(s) {
     const el = $("#lc-plan-calc"), ask = s.ask;
     if (ask == null) { el.innerHTML = `<span class="muted">Enter the Ask and this turns into exact exit prices.</span>`; return; }
-    const p = planOf(ask, etParts().min);
-    el.innerHTML = `<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${p.planTargetPrice != null ? money((p.planTargetPrice - ask) * 100, true) : "–"})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${p.planStopPrice != null ? money((p.planStopPrice - ask) * 100, true) : "–"})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
+    const p = planOf(ask, etParts().min), Sx = LIVE.snap ? num(LIVE.snap.price) : null;
+    el.innerHTML = `${stopSpyLine(LC.dir, Sx, num(LC.strike), ask, p.planStopPrice, 960 - etParts().min)}<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${p.planTargetPrice != null ? money((p.planTargetPrice - ask) * 100, true) : "–"})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${p.planStopPrice != null ? money((p.planStopPrice - ask) * 100, true) : "–"})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
   }
   $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
 
@@ -2814,13 +2829,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   const qBid = (p) => Math.max(Math.floor((p - (p < 3 ? 0.01 : 0.02)) * 100) / 100, 0), qAsk = (p) => Math.max(Math.ceil((p + (p < 3 ? 0.01 : 0.02)) * 100) / 100, 0.01);
   // Buy the strike whose Ask is nearest $1.00 at the signal, then record the Bid's high, low and close for the next hour.
-  function optPath(B, i, dir, iv) {
+  function optPath(B, i, dir, iv, drift = calibration().drift || 0) {
     const b = B[i], S = b.c, mins = 960 - (b.m + 1); let best = null;
     for (let K = Math.floor(S) - 5; K <= Math.ceil(S) + 5; K++) { const a = qAsk(bs0(dir, S, K, iv, mins)); if (!best || Math.abs(a - 1) < Math.abs(best.a - 1)) best = { K, a }; }
     const path = [];
     for (let k = i + 1; k < B.length && k <= i + 60 && B[k].m < 955; k++) {
-      const x = B[k], ml = 960 - (x.m + 1), up = dir === "call";
-      path.push({ hi: qBid(bs0(dir, up ? x.h : x.l, best.K, iv, ml)), lo: qBid(bs0(dir, up ? x.l : x.h, best.K, iv, ml)), c: qBid(bs0(dir, x.c, best.K, iv, ml)) });
+      const x = B[k], ml = 960 - (x.m + 1), up = dir === "call", ivk = iv * Math.exp(drift * Math.min(x.m - b.m, 60));
+      path.push({ hi: qBid(bs0(dir, up ? x.h : x.l, best.K, ivk, ml)), lo: qBid(bs0(dir, up ? x.l : x.h, best.K, ivk, ml)), c: qBid(bs0(dir, x.c, best.K, ivk, ml)) });
     }
     return { K: best.K, ask: best.a, path };
   }
@@ -2852,7 +2867,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   // how much more (puts) or less (calls) than the middle of the two
   function skewF(dir) { const c = calibration(), mid = Math.sqrt(c.call * c.put); return (dir === "put" ? c.put : c.call) / mid; }
   function calibration() {
-    const D = PAT.daily; if (!D) return { ivMul: 1, n: 0, call: 1 / Math.sqrt(SKEW0), put: Math.sqrt(SKEW0), nCall: 0, nPut: 0 };
+    const D = PAT.daily; if (!D) return { ivMul: 1, n: 0, call: 1 / Math.sqrt(SKEW0), put: Math.sqrt(SKEW0), nCall: 0, nPut: 0, drift: -0.0015, nDrift: 0 };
     if (calMemo && calMemo.D === D && calMemo.T === S.trades && Date.now() - calMemo.at < 2000) return calMemo.r;
     const idx = new Map(D.map((d, i) => [d.date, i])), out = [], by = { call: [], put: [] };
     for (const t of S.trades) {
@@ -2873,7 +2888,18 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const lim = (x) => Math.min(3, Math.max(0.5, x)), ivMul = out.length >= 3 ? lim(median(out)) : 1;
     const mc = by.call.length >= 3 ? median(by.call) : null, mp = by.put.length >= 3 ? median(by.put) : null;
     const call = lim(mc ?? (mp != null ? mp / SKEW0 : ivMul / Math.sqrt(SKEW0))), put = lim(mp ?? (mc != null ? mc * SKEW0 : ivMul * Math.sqrt(SKEW0)));
-    const r = { ivMul, n: out.length, raw: out.length ? median(out) : null, call, put, nCall: by.call.length, nPut: by.put.length };
+    // After you buy, real 0DTE prices have been losing implied volatility (on top of time decay).
+    // Slope per minute from each trade's entry quote to its last quote within an hour; starts from a mild prior.
+    const slopes = [];
+    for (const t of S.trades) {
+      const cps = (t.checkpoints || []).filter((c) => num(c.bid) != null && num(c.ask) != null && num(c.xsp) != null && num(c.ask) < 20 && toMin(c.t) != null);
+      if (uOf(t) !== "SPY" || num(t.strike) == null || !t.dir || cps.length < 2) continue;
+      const c0 = cps[0], m0 = toMin(c0.t), later = cps.filter((c) => toMin(c.t) - m0 >= 10 && toMin(c.t) - m0 <= 60).pop(); if (!later) continue;
+      const iv0 = impliedVol(t.dir, num(c0.xsp), num(t.strike), 960 - m0, (num(c0.bid) + num(c0.ask)) / 2), iv1 = impliedVol(t.dir, num(later.xsp), num(t.strike), 960 - toMin(later.t), (num(later.bid) + num(later.ask)) / 2);
+      if (iv0 && iv1) slopes.push(Math.log(iv1 / iv0) / (toMin(later.t) - m0));
+    }
+    const PRIOR = -0.0015, drift = Math.min(0.002, Math.max(-0.006, (slopes.reduce((a, b) => a + b, 0) + 2 * PRIOR) / (slopes.length + 2)));
+    const r = { ivMul, n: out.length, raw: out.length ? median(out) : null, call, put, nCall: by.call.length, nPut: by.put.length, drift, nDrift: slopes.length };
     calMemo = { D, T: S.trades, at: Date.now(), r }; return r;
   }
   // All signals for a rule over many days, with context tags.
@@ -2889,7 +2915,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         const sg = scanLine(B, ln, rule.hold, rule.until); if (!sg) continue;
         const want = B[sg.i].m + delay; let ei = sg.i; while (ei < B.length - 1 && B[ei].m < want) ei++;   // you enter a few minutes after the signal
         if (ei >= B.length || B[ei].m >= 955) continue;
-        const op = optPath(B, ei, ln.dir, iv0 * cal[ln.dir]);
+        const op = optPath(B, ei, ln.dir, iv0 * cal[ln.dir], cal.drift || 0);
         out.push({ date, m: B[sg.i].m + 1, em: B[ei].m + 1, dir: ln.dir, g: ln.g, line: ln.name, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down", ev: eventsOn(date) });
       }
     }
@@ -2925,7 +2951,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function renderReal() {
     const el = $("#lab-real"); if (!el) return;
     const R = realCfg(), cal = calibration(), md = measuredDelay(), sel = (id, opts, v) => `<select id="${id}" style="width:auto">${opts.map(([val, l]) => `<option value="${val}"${String(v) === String(val) ? " selected" : ""}>${l}</option>`).join("")}</select>`;
-    el.innerHTML = `<div class="why">${R.on ? `<b>Tested the way you trade:</b> you enter <b>${R.delayNow} min</b> after the signal${R.delay == null ? " (measured from your Live check trades)" : ""}, fills are <b>$${R.slip.toFixed(2)}</b> worse each way, <b>${R.maxDay ? `max ${R.maxDay} trade${R.maxDay > 1 ? "s" : ""} a day` : "no daily limit"}</b>${R.stopLoss ? ", <b>stop for the day after a loss</b>" : ""}, one position at a time.` : "<b>Perfect-world testing</b> (instant entries, exact prices, no limits). Results will look better than real life."} ${cal.n >= 3 ? `Model check: ${cal.n} of your real quotes ran ${cal.raw.toFixed(2)}× the model's volatility, so tests are adjusted (calls ${cal.call.toFixed(2)}×, puts ${cal.put.toFixed(2)}×).` : "Model check: save a few checkpoints with SPY's price in live trades and the option model will tune itself to real quotes."} ${cal.nCall >= 3 && cal.nPut >= 3 ? `Puts vs calls: from your own quotes, puts ran ${Math.round((cal.put / cal.call - 1) * 100)}% higher.` : "Puts are priced about 13% higher than calls (real puts cost more), until you've saved 3+ real quotes of each."}
+    el.innerHTML = `<div class="why">${R.on ? `<b>Tested the way you trade:</b> you enter <b>${R.delayNow} min</b> after the signal${R.delay == null ? " (measured from your Live check trades)" : ""}, fills are <b>$${R.slip.toFixed(2)}</b> worse each way, <b>${R.maxDay ? `max ${R.maxDay} trade${R.maxDay > 1 ? "s" : ""} a day` : "no daily limit"}</b>${R.stopLoss ? ", <b>stop for the day after a loss</b>" : ""}, one position at a time.` : "<b>Perfect-world testing</b> (instant entries, exact prices, no limits). Results will look better than real life."} ${cal.n >= 3 ? `Model check: ${cal.n} of your real quotes ran ${cal.raw.toFixed(2)}× the model's volatility, so tests are adjusted (calls ${cal.call.toFixed(2)}×, puts ${cal.put.toFixed(2)}×).` : "Model check: save a few checkpoints with SPY's price in live trades and the option model will tune itself to real quotes."} ${cal.nCall >= 3 && cal.nPut >= 3 ? `Puts vs calls: from your own quotes, puts ran ${Math.round((cal.put / cal.call - 1) * 100)}% higher.` : "Puts are priced about 13% higher than calls (real puts cost more), until you've saved 3+ real quotes of each."} After you buy, option prices also lose about ${Math.round((1 - Math.exp(cal.drift * 60)) * 100)}% of their volatility over the next hour${cal.nDrift ? ` (learned from ${cal.nDrift} of your trades)` : " (a starting estimate until your trades teach it)"}.
       <details style="margin-top:6px"><summary style="cursor:pointer">Change</summary><div class="row" style="margin-top:6px; gap:8px; flex-wrap:wrap">
         <label class="row" style="gap:4px"><input type="checkbox" id="rl-on" style="width:auto"${R.on ? " checked" : ""}> Realistic</label>
         <label>Entry delay ${sel("rl-delay", [["auto", `Auto (${md} min)`], [0, "0"], [1, "1 min"], [2, "2 min"], [3, "3 min"], [5, "5 min"]], R.delay ?? "auto")}</label>
@@ -3185,7 +3211,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   });
 
   // ---------- edge: how your rule did in past situations like this one ----------
-  const settingsKey = () => { const r = realCfg(); return [r.on, r.delayNow, r.slip, r.maxDay, r.stopLoss, calibration().call.toFixed(2), calibration().put.toFixed(2)].join("|"); };
+  const settingsKey = () => { const r = realCfg(); return [r.on, r.delayNow, r.slip, r.maxDay, r.stopLoss, calibration().call.toFixed(2), calibration().put.toFixed(2), calibration().drift.toFixed(4)].join("|"); };
   function edgeSave(rule, sum, excl = 0) {
     const rs = sum.rs.map((x) => ({ date: x.date, m: x.m, g: x.g, dir: x.dir, pnl: Math.round(x.pnl * 100) / 100 }));
     try { localStorage.setItem("edge.v1", JSON.stringify({ at: Date.now(), key: settingsKey(), excl, rule, win: sum.win, avg: sum.avg, n: sum.n, rs })); } catch {}
