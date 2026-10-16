@@ -597,6 +597,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
           <div class="fields" style="grid-template-columns: repeat(3, minmax(0,1fr)); gap:8px">
             <div class="field"><label for="lc-pt">Take profit %</label><input id="lc-pt" type="number" step="5"></div>
             <div class="field"><label for="lc-ps">Stop loss %</label><input id="lc-ps" type="number" step="5"></div>
+            <div class="field" style="grid-column: 1 / -1"><label class="row" style="gap:6px; font-weight:400"><input type="checkbox" id="lc-ls" style="width:auto"> Level stop: get out when a 1-minute candle closes back across the level (the % becomes a backup)</label></div>
             <div class="field"><label for="lc-pm">Time stop (min)</label><input id="lc-pm" type="number" step="5"></div>
             <div class="field wide"><label for="lc-pw">Why this trade, in one line</label><input id="lc-pw" type="text" placeholder="Broke today's high with tech leading"></div>
           </div>
@@ -631,6 +632,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
             <div class="field"><label for="rr-until">No new trades after</label><select id="rr-until"><option value="660">11:00 am</option><option value="720">12:00 pm</option><option value="840">2:00 pm</option><option value="900">3:00 pm</option><option value="930">3:30 pm</option></select></div>
             <div class="field"><label for="rp-t">Take profit at +%</label><input id="rp-t" type="number" step="5" min="5" value="50" inputmode="numeric"></div>
             <div class="field"><label for="rp-s">Stop loss at −%</label><input id="rp-s" type="number" step="5" min="5" value="40" inputmode="numeric"></div>
+            <div class="field" style="grid-column: 1 / -1"><label class="row" style="gap:6px; font-weight:400"><input type="checkbox" id="rp-ls" style="width:auto"> Level stop: sell when a 1-minute candle closes back across the level (the % above becomes a backup)</label></div>
             <div class="field"><label for="rp-m">Sell after (minutes)</label><input id="rp-m" type="number" step="5" min="5" value="30" inputmode="numeric"></div>
           </div>
           <div class="small" style="margin-top:8px">Lines to watch:</div>
@@ -1103,7 +1105,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const r = await S.mcp.callTool("Webull", "get_stock_snapshot", { symbols: sym, category: "US_ETF", extend_hour_required: false, overnight_required: false }, { cache: false });
       const p = Array.isArray(r.payload) ? r.payload[0] : null;
       if (p) { LIVE.snap = p; LIVE.status = "ok"; LIVE.at = Date.now(); }
-      if (view === "live" && (marketOpen() || !LIVE.bars.length)) {
+      if ((view === "live" || S.trades.some((t) => num(t.planStopLevel) != null && calc(t).open)) && (marketOpen() || !LIVE.bars.length)) {
         const b = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [sym], category: "US_ETF", timespan: "M1", count: 60, real_time_required: false }, { cache: false });
         const rows = b.payload?.result?.[0]?.result || [];
         LIVE.bars = rows.map((x) => ({ t: Date.parse(x.time), o: +x.open, h: +x.high, l: +x.low, c: +x.close })).filter((x) => !isNaN(x.t)).sort((a, b) => a.t - b.t);
@@ -1126,6 +1128,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const now = etParts().hm, out = [];
     if (bid != null && num(t.planTargetPrice) != null && bid >= t.planTargetPrice) out.push(`Bid ${px(bid)} reached your take-profit (${px(t.planTargetPrice)}).`);
     if (bid != null && num(t.planStopPrice) != null && bid <= t.planStopPrice) out.push(`Bid ${px(bid)} hit your stop (${px(t.planStopPrice)}).`);
+    if (num(t.planStopLevel) != null && t.date === etParts().date && LIVE.bars.length) {
+      const L = num(t.planStopLevel), since = toMin(t.entryTime), fin = LIVE.bars.filter((b) => b.t + 60000 <= (LIVE.at || Date.now()) + 1000 && etParts(new Date(b.t)).min >= since);
+      const bad = fin.find((b) => (t.dir === "put" ? b.c > L + 0.02 : b.c < L - 0.02));
+      if (bad) out.push(`SPY closed ${t.dir === "put" ? "above" : "below"} ${L.toFixed(2)} at ${fmtClock(etParts(new Date(bad.t)).min + 1)}: the break failed, so your level stop says get out.`);
+    }
     if (t.planTimeStop && now >= t.planTimeStop && t.date === etParts().date) out.push(`It's past your time stop (${t.planTimeStop} ET).`);
     if (etParts().min >= 945 && t.date === etParts().date) out.push("15 minutes to the close. SPY options settle into shares: close before 4:00 pm.");
     return out;
@@ -1142,7 +1149,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         <div class="small muted">Entered ${esc(t.entryTime || "?")} ET at Ask ${px(c.entry)} (${money(c.cost)}) · level ${esc(t.level || "–")}</div></div>
         <div style="text-align:right"><div class="label">Marked to Bid</div><div class="big ${cls(c.mark)}">${c.mark != null ? money(c.mark, true) : "–"}</div><div class="small muted">${last ? `${esc(last.t)} · ${esc(u)} ${esc(last.xsp ?? "–")} · Bid ${px(num(last.bid))} / Ask ${px(num(last.ask))}` : "No checkpoint yet"}</div>${est != null ? `<div class="small muted">Now ≈ ${px(est)} estimated from ${esc(u)} ${Sn.toFixed(2)} (not a quote)</div>` : ""}</div></div>
       ${plan}
-      ${num(t.planStopPrice) != null && t.date === etParts().date ? `<div class="small">${stopSpyLine(t.dir, num(t.entryUnderlying), num(t.strike), c.entry, num(t.planStopPrice), 960 - (toMin(t.entryTime) ?? etParts().min))}</div>` : ""}
+      ${num(t.planStopLevel) != null ? `<div class="small">Level stop: get out if a 1-minute candle closes ${t.dir === "put" ? "above" : "below"} <b>${num(t.planStopLevel).toFixed(2)}</b> (backup stop at Bid ${px(num(t.planStopPrice))}).</div>` : num(t.planStopPrice) != null && t.date === etParts().date ? `<div class="small">${stopSpyLine(t.dir, num(t.entryUnderlying), num(t.strike), c.entry, num(t.planStopPrice), 960 - (toMin(t.entryTime) ?? etParts().min))}</div>` : ""}
       ${alerts.map((a) => `<div class="alert">Your plan says get out: ${esc(a)}</div>`).join("")}
       <div class="fields">
         <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${Sn != null ? Sn.toFixed(2) : ""}"></div>
@@ -1251,10 +1258,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#news").addEventListener("click", (e) => { const b = e.target.closest("[data-edit-scout]"); if (b) openForm("scout", S.scout.find((r) => r.id === b.dataset.editScout)); });
 
   // ---------- live entry check ----------
-  const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "", iv: "", pt: "", ps: "", pm: "", pw: "", sk: "", sbid: "", sask: "" };
+  const LC0 = { dir: null, level: "", why: "", mode: "auto", armedAt: null, breakAt: null, breakET: null, holdET: null, resets: 0, opp: null, strike: "", bid: "", ask: "", delta: "", iv: "", pt: "", ps: "", pm: "", pw: "", ls: "", sk: "", sbid: "", sask: "" };
   let LC = { ...LC0, ...ls.get("spy.live", {}) };
   // A setup from an earlier day never carries over: keep only the mode and plan settings.
-  { const at = LC.armedAt || LC.breakAt; if (at && etParts(new Date(at)).date !== etParts().date) LC = { ...LC0, mode: LC.mode, pt: LC.pt, ps: LC.ps, pm: LC.pm }; }
+  { const at = LC.armedAt || LC.breakAt; if (at && etParts(new Date(at)).date !== etParts().date) LC = { ...LC0, mode: LC.mode, pt: LC.pt, ps: LC.ps, pm: LC.pm, ls: LC.ls }; }
   const saveLC = () => ls.set("spy.live", LC);
   const lcInputs = { "lc-level": "level", "lc-why": "why", "lc-strike": "strike", "lc-bid": "bid", "lc-ask": "ask", "lc-delta": "delta", "lc-pt": "pt", "lc-ps": "ps", "lc-pm": "pm", "lc-pw": "pw", "lc-sk": "sk", "lc-sbid": "sbid", "lc-sask": "sask" };
   for (const [id, k] of Object.entries(lcInputs)) { const el = $("#" + id); el.value = LC[k] ?? ""; el.addEventListener("input", () => { LC[k] = el.value; if (k === "level") rearm(); saveLC(); renderLive(); }); }
@@ -1271,8 +1278,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   // Plan prices from percentages, so the open position card can say when to get out.
   function planOf(ask, entryMin) {
-    const t = num(LC.pt), st = num(LC.ps), m = num(LC.pm);
-    return { planTargetPct: t, planStopPct: st, planTimeMin: m, planWhy: LC.pw || "",
+    const t = num(LC.pt), st = num(LC.ps), m = num(LC.pm), lvl = LC.ls === "1" && num(LC.level) != null ? num(LC.level) : null;
+    return { planTargetPct: t, planStopPct: st, planTimeMin: m, planWhy: LC.pw || "", planStopLevel: lvl, planStopDir: lvl != null ? LC.dir : null,
       planTargetPrice: ask != null && t != null ? +(ask * (1 + t / 100)).toFixed(2) : null,
       planStopPrice: ask != null && st != null ? +(ask * (1 - st / 100)).toFixed(2) : null,
       planTimeStop: m != null ? fmtHM(entryMin + m) : null };
@@ -1309,11 +1316,12 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const w = typical30(S), tight = w != null && r.move < w * 0.6;
     return `<span class="${tight ? "down" : "muted"}">Your stop ≈ SPY ${r.at.toFixed(2)} (${dir === "call" ? "−" : "+"}$${r.move.toFixed(2)} against you, within about 10 min)${w != null ? `. SPY usually moves about $${w.toFixed(2)} in a half hour${tight ? ", so normal wiggles can trigger this stop" : ""}` : ""}.</span>`;
   }
+  $("#lc-ls").addEventListener("change", (e) => { LC.ls = e.target.checked ? "1" : ""; if (e.target.checked && num(LC.ps) < 60) { LC.ps = "80"; $("#lc-ps").value = "80"; } saveLC(); renderLive(); });
   function renderPlanCalc(s) {
     const el = $("#lc-plan-calc"), ask = s.ask;
     if (ask == null) { el.innerHTML = `<span class="muted">Enter the Ask and this turns into exact exit prices.</span>`; return; }
     const p = planOf(ask, etParts().min), Sx = LIVE.snap ? num(LIVE.snap.price) : null;
-    el.innerHTML = `${stopSpyLine(LC.dir, Sx, num(LC.strike), ask, p.planStopPrice, 960 - etParts().min)}<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${p.planTargetPrice != null ? money((p.planTargetPrice - ask) * 100, true) : "–"})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${p.planStopPrice != null ? money((p.planStopPrice - ask) * 100, true) : "–"})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
+    el.innerHTML = `${p.planStopLevel != null ? `<span>Level stop: get out if a 1-minute candle closes ${LC.dir === "put" ? "above" : "below"} <b>${p.planStopLevel.toFixed(2)}</b>. Backup stop at Bid ${px(p.planStopPrice)}.</span>` : stopSpyLine(LC.dir, Sx, num(LC.strike), ask, p.planStopPrice, 960 - etParts().min)}<span>Take profit at Bid <b>${px(p.planTargetPrice)}</b> <span class="up">(${p.planTargetPrice != null ? money((p.planTargetPrice - ask) * 100, true) : "–"})</span></span><span>Stop at Bid <b>${px(p.planStopPrice)}</b> <span class="down">(${p.planStopPrice != null ? money((p.planStopPrice - ask) * 100, true) : "–"})</span></span><span>Out by <b>${esc(p.planTimeStop || "–")}</b> ET</span>`;
   }
   $("#lc-suggest").addEventListener("click", (e) => { const b = e.target.closest("[data-lvl]"); if (!b) return; LC.level = b.dataset.lvl; LC.why = b.dataset.why; $("#lc-level").value = LC.level; $("#lc-why").value = LC.why; rearm(); saveLC(); renderLive(); });
 
@@ -1372,6 +1380,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   function renderLive() {
     const s = lcState(), u = U(), snap = LIVE.snap;
+    if ($("#lc-ls")) $("#lc-ls").checked = LC.ls === "1";
     $("#lc-level-label").textContent = `Important level (${u})`;
     // live price box + suggested levels
     if (snap) {
@@ -1923,21 +1932,25 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     now: { name: "Buy right on the break", hold: 0 },
   };
   const RULE_BASE = { hold: 1, dirs: "both", until: 930, t: 50, s: 40, m: 30, lv: { ph: true, pl: true, day: true, pc: false, or15: true, or30: false } };
+  // A stop below zero means "level stop": exit when a 1-minute candle closes back across the level you traded,
+  // with a backup stop at that percent (−80 = level stop, backup −80%).
+  function stopShort(s) { return s < 0 ? "level stop" : `−${s}%`; }
+  function stopLong(s) { return s < 0 ? `when SPY closes back across the level (backup stop −${-s}%)` : `−${s}%`; }
   let RULE = { ...RULE_BASE, ...ls.get("rp.rule", {}) }; RULE.lv = { ...RULE_BASE.lv, ...(RULE.lv || {}) };
   const ruleWait = (h) => h === 0 ? "buy on the break" : h === 1 ? "wait 1 minute" : `wait ${h} minutes`;
   function rulePreset(r) { for (const [k, v] of Object.entries(RULE_PRESETS)) { if (r.hold === v.hold && r.dirs === "both" && r.until === 930 && r.t === 50 && r.s === 40 && r.m === 30 && Object.keys(RULE_BASE.lv).every((x) => !!r.lv[x] === RULE_BASE.lv[x])) return k; } return "custom"; }
   const LV_SHORT = { ph: "y-high", pl: "y-low", pc: "y-close", or15: "15m range", or30: "30m range", day: "day high/low" };
-  function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, ${Object.keys(LV_SHORT).filter((x) => r.lv?.[x]).map((x) => LV_SHORT[x]).join("+") || "no lines"}${r.dirs && r.dirs !== "both" ? `, ${r.dirs}s only` : ""}${r.until && r.until !== 930 ? `, before ${fmtClock(r.until)}` : ""}, +${r.t}% / −${r.s}% / ${r.m} min` : RULE_PRESETS[k].name; }
+  function ruleName(r) { const k = rulePreset(r); return k === "custom" ? `Own: ${ruleWait(r.hold)}, ${Object.keys(LV_SHORT).filter((x) => r.lv?.[x]).map((x) => LV_SHORT[x]).join("+") || "no lines"}${r.dirs && r.dirs !== "both" ? `, ${r.dirs}s only` : ""}${r.until && r.until !== 930 ? `, before ${fmtClock(r.until)}` : ""}, +${r.t}% / ${stopShort(r.s)} / ${r.m} min` : RULE_PRESETS[k].name; }
   function ruleSummary(r) {
     const lv = [r.lv.ph && r.dirs !== "put" && "yesterday's high", r.lv.pl && r.dirs !== "call" && "yesterday's low", r.lv.day && "today's high/low so far", r.lv.pc && "yesterday's close", r.lv.or15 && "first-15-min range", r.lv.or30 && "first-30-min range"].filter(Boolean);
-    return `When SPY breaks ${lv.length ? lv.join(", ") : "(no lines picked)"}, ${ruleWait(r.hold)}${r.hold ? " with no touch back" : ""}. ${r.dirs === "both" ? "Calls and puts" : r.dirs === "call" ? "Calls only" : "Puts only"}, none after ${fmtClock(r.until)}. Sell at +${r.t}%, −${r.s}%, or after ${r.m} min.`;
+    return `When SPY breaks ${lv.length ? lv.join(", ") : "(no lines picked)"}, ${ruleWait(r.hold)}${r.hold ? " with no touch back" : ""}. ${r.dirs === "both" ? "Calls and puts" : r.dirs === "call" ? "Calls only" : "Puts only"}, none after ${fmtClock(r.until)}. Sell at +${r.t}%, ${stopLong(r.s)}, or after ${r.m} min.`;
   }
   function renderRule() {
     $("#rp-rule-name").textContent = ruleName(RULE); $("#rp-rule-sum").textContent = ruleSummary(RULE);
     const ts = stratToday();
     $("#rp-rule-pick").value = ts && !ts.noTrade && ts.name === ruleName(RULE) ? "today" : rulePreset(RULE);
     $("#rr-hold").value = String(RULE.hold); $("#rr-dirs").value = RULE.dirs; $("#rr-until").value = String(RULE.until);
-    if (document.activeElement?.id !== "rp-t") $("#rp-t").value = RULE.t; if (document.activeElement?.id !== "rp-s") $("#rp-s").value = RULE.s; if (document.activeElement?.id !== "rp-m") $("#rp-m").value = RULE.m;
+    if (document.activeElement?.id !== "rp-t") $("#rp-t").value = RULE.t; if (document.activeElement?.id !== "rp-s") $("#rp-s").value = Math.abs(RULE.s); $("#rp-ls").checked = RULE.s < 0; if (document.activeElement?.id !== "rp-m") $("#rp-m").value = RULE.m;
     $$("[data-rl]").forEach((c) => (c.checked = !!RULE.lv[c.dataset.rl]));
   }
   function setRule(patch) {
@@ -1954,7 +1967,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $("#rr-hold").addEventListener("change", (e) => setRule({ hold: +e.target.value }));
   $("#rr-dirs").addEventListener("change", (e) => setRule({ dirs: e.target.value }));
   $("#rr-until").addEventListener("change", (e) => setRule({ until: +e.target.value }));
-  [["rp-t", "t"], ["rp-s", "s"], ["rp-m", "m"]].forEach(([id, k]) => $("#" + id).addEventListener("change", (e) => { const v = Math.round(num(e.target.value)); setRule({ [k]: v > 0 ? v : RULE_BASE[k] }); }));
+  [["rp-t", "t"], ["rp-s", "s"], ["rp-m", "m"]].forEach(([id, k]) => $("#" + id).addEventListener("change", (e) => { const v = Math.round(num(e.target.value)); const val = v > 0 ? v : RULE_BASE[k]; setRule({ [k]: k === "s" && RULE.s < 0 ? -val : val }); }));
+  $("#rp-ls").addEventListener("change", (e) => { setRule({ s: e.target.checked ? -Math.max(Math.abs(RULE.s), 80) : 40 }); toast(e.target.checked ? "Level stop on: you'll be told to sell when SPY closes back across the level (backup stop −80%)." : "Back to a % stop."); });
   $$("[data-rl]").forEach((c) => c.addEventListener("change", () => setRule({ lv: { [c.dataset.rl]: c.checked } })));
   renderRule();
 
@@ -2110,8 +2124,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (o.action === "BTO") {
       const p = posOf(o.dir, o.strike);
       if (p) { p.costIn += o.fillPx * o.qty; p.bought += o.qty; p.qty += o.qty; p.avg = p.costIn / p.bought; p.targetPx = +(p.avg * (1 + (p.plan.t || 0) / 100)).toFixed(2); p.stopPx = +(p.avg * (1 - (p.plan.s || 0) / 100)).toFixed(2); return; }
-      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pl = { t: RULE.t, s: RULE.s, m: RULE.m };
-      RP.positions.push({ rule: ruleName(RULE), ruleCfg: { ...RULE, lv: { ...RULE.lv } }, dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, costIn: o.fillPx * o.qty, bought: o.qty, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl,
+      const sg = RP.signal, followed = !!(sg && sg.dir === o.dir && RP.idx <= sg.hi + 5), pl = { t: RULE.t, s: Math.abs(RULE.s), m: RULE.m, ls: RULE.s < 0 };
+      RP.positions.push({ rule: ruleName(RULE), ruleCfg: { ...RULE, lv: { ...RULE.lv } }, dir: o.dir, strike: o.strike, qty: o.qty, avg: o.fillPx, costIn: o.fillPx * o.qty, bought: o.qty, openExact: rpMinute(), openT: (rpForming() || rpNow()).t, entryU: rpPrice(), followed, signal: sg, plan: pl, levelL: sg?.L ?? null,
         targetPx: +(o.fillPx * (1 + (pl.t || 0) / 100)).toFixed(2), stopPx: +(o.fillPx * (1 - (pl.s || 0) / 100)).toFixed(2), timeStop: rpMinute() + (pl.m || 0), alert: null, alertAt: null, chase: !!(sg && sg.ask0 && o.fillPx > sg.ask0 * 1.15), followedDir: sg?.dir });
       if (sg) RP.since[sg.key] = RP.bars[Math.max(RP.idx, 0)].t;
       RP.signal = null; RP.tab = "positions";
@@ -2145,7 +2159,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const q = rpQuote(p.dir, p.strike); if (!q) return;
     let a = null;
     const wSell = !!wSellFor(p);
-    if (rpMinute() >= 945) a = "close"; else if (q.bid <= p.stopPx) a = "stop"; else if (rpMinute() >= p.timeStop) a = "time"; else if (!wSell && q.bid >= p.targetPx) a = "target";
+    const lastBar = RP.bars[RP.idx], failed = p.plan.ls && p.levelL != null && lastBar && lastBar.t > p.openT && (p.dir === "call" ? lastBar.c < p.levelL - 0.02 : lastBar.c > p.levelL + 0.02);
+    if (rpMinute() >= 945) a = "close"; else if (q.bid <= p.stopPx) a = "stop"; else if (failed) a = "level"; else if (rpMinute() >= p.timeStop) a = "time"; else if (!wSell && q.bid >= p.targetPx) a = "target";
     if (!a) { if (p.alert && p.alert !== "close") { p.alert = null; p.alertAt = null; RP.coachKey = ""; } return; }
     if (p.alert === a) return;
     p.alert = a; p.alertAt = rpMinute(); RP.coachKey = "";
@@ -2174,7 +2189,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (!RP.bars.length) return { key: "intro", cls: "", title: "How practice works", body: `<ol><li>Pick a day and press <b>Start this day</b>. The market opens at 9:30 and plays at real speed.</li><li>The right side works like Fidelity: <b>Option Chain</b>, <b>Trade</b>, <b>Positions</b>, <b>Orders</b>.</li><li>I watch the key price lines for you and tell you exactly what to click when a signal appears.</li></ol><p class="small muted">Green dashed lines are ceilings (a break above is a call signal). Red ones are floors (a break below is a put signal).</p>` };
     if (RP.phase === "dayend") { const today = S.practice.filter((p) => p.replayDate === RP.date), net = today.reduce((s, p) => s + p.pnl, 0); return { key: "dayend", cls: "", title: "4:00 pm · market closed", body: `<p class="small">${today.length ? `${today.length} practice trade${today.length > 1 ? "s" : ""} on ${esc(dayName(RP.date))}: ${money(net, true)}.` : "No trades today. Skipping setups that don't qualify is a skill too."}</p>`, buttons: [["another", "Practice another day", true]] }; }
     if (RP.phase === "result" && RP.result) {
-      const r = RP.result, how = { target: "Your take-profit order filled", stop: "You sold at your stop", time: "You sold at your time stop", manual: "You closed the trade", close: "The market closed", plan: "You sold on your plan" }[r.exitReason] || "Closed";
+      const r = RP.result, how = { target: "Your take-profit order filled", stop: "You sold at your stop", level: "You sold when the break failed (level stop)", time: "You sold at your time stop", manual: "You closed the trade", close: "The market closed", plan: "You sold on your plan" }[r.exitReason] || "Closed";
       const tip = r.after30 != null && r.after30 > r.exitBid * 1.1 ? "It kept going after you sold. That happens. The plan protects you on the days it doesn't." : r.exitReason === "stop" ? "Taking the stop keeps one loss from becoming a big one." : r.exitReason === "close" ? "In a real account, an in-the-money SPY option left open at 4:00 pm turns into 100 shares. Always close before the bell." : "";
       return { key: "result" + r.at, cls: r.pnl > 0 ? "win" : "loss", title: how, body: `<div class="pl ${cls_(r.pnl)}">${money(r.pnl, true)}</div><p class="small">Bought at ${px(r.entryAsk)}, sold at ${px(r.exitBid)} · ${r.entryTime} → ${r.exitTime} (${r.minsHeld} min).${r.after30 != null ? ` 30 minutes later the Bid was ${px(r.after30)}.` : ""}</p>${tip ? `<p class="small muted">${tip}</p>` : ""}`, buttons: [["continue", "Keep watching", true]] };
     }
@@ -2184,7 +2199,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (p) {
       const contract = cName(p.dir, p.strike);
       if (p.alert) {
-        const why = { target: `The Bid reached your take-profit (${px(p.targetPx)}), and you don't have a sell order working.`, stop: `The Bid dropped to your stop (${px(p.stopPx)}).`, time: `Your ${p.plan.m}-minute time limit is up.`, close: "It's 3:45 pm. Close before the 4:00 pm bell." }[p.alert];
+        const why = { target: `The Bid reached your take-profit (${px(p.targetPx)}), and you don't have a sell order working.`, stop: `The Bid dropped to your stop (${px(p.stopPx)}).`, level: `SPY closed back ${p.dir === "call" ? "below" : "above"} ${p.levelL != null ? p.levelL.toFixed(2) : "the level"}: the break failed, so your level stop says get out.`, time: `Your ${p.plan.m}-minute time limit is up.`, close: "It's 3:45 pm. Close before the 4:00 pm bell." }[p.alert];
         const steps = [...(wSell ? [[`Go to <b>Orders</b> and press <b>Cancel</b> on your $${wSell.limit.toFixed(2)} sell order. A broker won't let you sell the same contract twice.`, false]] : []), ["Go to <b>Positions</b> and press <b>Close</b> next to " + esc(contract) + ".", t?.action === "STC"], ["Order Type: <b>Market</b> (fills right away at the Bid). Press <b>Preview Order</b>.", t?.step === "preview"], ["Check it, then press <b>Place Order</b>.", false]];
         return { key: "alert" + p.strike + p.dir + p.alert + !!wSell + (t ? t.step + t.type : "") + others.length, cls: "warn", title: `Your plan says sell ${p.strike}${p.dir === "call" ? "C" : "P"} now`, body: `<p class="small">${why}</p>${coachSteps(steps)}${alsoNote}`, buttons: [...(wSell ? [["cancelsells", "Cancel my sell order", false]] : []), ["show:positions", "Show me", false], ["fill:now", "Fill it in for me", true]] };
       }
@@ -2389,7 +2404,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function rpCmdBuy() { if (!RP.signal) return "No signal right now. Wait for one, or type skip to signal."; fillFor("bto"); return "Order ticket filled in. Check it, press Preview Order, then Place Order."; }
   function rpCmdSell() { if (!RP.pos) return "No position to sell."; const w = !!wSellFor(RP.pos); if (w) return "Cancel your working sell order first (Orders tab, or the coach's Cancel button)."; fillFor("now"); return "Sell ticket filled in (Market). Press Preview Order, then Place Order."; }
 
-  const reasonName = { target: "Take-profit", stop: "Stop loss", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "Held to 4:00 pm" };
+  const reasonName = { target: "Take-profit", stop: "Stop loss", level: "Level stop (break failed)", time: "Time stop", manual: "Sold myself", plan: "Sold on plan alert", close: "Held to 4:00 pm" };
   const ruleOf = (p) => ({ "V2: wait 60 seconds": "Wait 1 minute", "V1: wait 3 minutes": "Wait 3 minutes" })[p.rule] || p.rule || "Wait 1 minute";
   const after30Of = (p) => (p.exitTime && p.exitTime > "15:30" ? null : p.after30);
   function renderPracticeStats() {
@@ -2835,15 +2850,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const path = [];
     for (let k = i + 1; k < B.length && k <= i + 60 && B[k].m < 955; k++) {
       const x = B[k], ml = 960 - (x.m + 1), up = dir === "call", ivk = iv * Math.exp(drift * Math.min(x.m - b.m, 60));
-      path.push({ hi: qBid(bs0(dir, up ? x.h : x.l, best.K, ivk, ml)), lo: qBid(bs0(dir, up ? x.l : x.h, best.K, ivk, ml)), c: qBid(bs0(dir, x.c, best.K, ivk, ml)) });
+      path.push({ hi: qBid(bs0(dir, up ? x.h : x.l, best.K, ivk, ml)), lo: qBid(bs0(dir, up ? x.l : x.h, best.K, ivk, ml)), c: qBid(bs0(dir, x.c, best.K, ivk, ml)), u: x.c });
     }
     return { K: best.K, ask: best.a, path };
   }
   // Exit with take-profit %, stop %, time limit (minutes). If target and stop both touch in one minute, assume the stop (the cautious choice).
   function exitOf(sig, t, s, m) {
-    const tgt = sig.ask * (1 + t / 100), stp = sig.ask * (1 - s / 100), P = sig.path;
+    const lvl = s < 0 && sig.L != null, tgt = sig.ask * (1 + t / 100), stp = sig.ask * (1 - Math.abs(s) / 100), P = sig.path;
     for (let k = 0; k < P.length; k++) {
       if (P[k].lo <= stp) return { res: "stop", px: P[k].hi < stp ? P[k].c : stp, k };   // if the whole minute is below the stop, you get filled lower
+      if (lvl && P[k].u != null && (sig.dir === "call" ? P[k].u < sig.L - 0.02 : P[k].u > sig.L + 0.02)) return { res: "level", px: P[k].c, k };   // the break failed: sell at that minute's close
       if (P[k].hi >= tgt) return { res: "target", px: tgt, k };
       if (k + 1 >= m) return { res: "time", px: P[k].c, k };
     }
@@ -2916,7 +2932,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
         const want = B[sg.i].m + delay; let ei = sg.i; while (ei < B.length - 1 && B[ei].m < want) ei++;   // you enter a few minutes after the signal
         if (ei >= B.length || B[ei].m >= 955) continue;
         const op = optPath(B, ei, ln.dir, iv0 * cal[ln.dir], cal.drift || 0);
-        out.push({ date, m: B[sg.i].m + 1, em: B[ei].m + 1, dir: ln.dir, g: ln.g, line: ln.name, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down", ev: eventsOn(date) });
+        out.push({ date, m: B[sg.i].m + 1, em: B[ei].m + 1, dir: ln.dir, g: ln.g, line: ln.name, L: sg.L, resets: sg.resets, ...op, gap, avgR, trend: prev.c > sma20 ? "up" : "down", ev: eventsOn(date) });
       }
     }
     return out;
@@ -3043,7 +3059,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const ds = [...LAB.M.keys()].sort(), cut = ds[Math.floor(ds.length * 2 / 3)];
       const lineSets = [["Yesterday's high/low", { ph: true, pl: true }], ["Yesterday's close", { pc: true }], ["First 15 min range", { or15: true }], ["First 30 min range", { or30: true }], ["Today's high/low so far", { day: true }], ["All the usual lines", { ph: true, pl: true, or15: true, day: true }]];
       const windows = [["before 11:00 am", 660], ["before 1:00 pm", 780], ["until 3:30 pm", 930]], exits = [];
-      for (const t of [30, 50, 100]) for (const s of [25, 40, 60]) for (const m of [15, 30, 60]) exits.push([t, s, m]);
+      for (const t of [30, 50, 100]) for (const s of [25, 40, 60, -80]) for (const m of [15, 30, 60]) exits.push([t, s, m]);
       const tried = [];
       for (const hold of [0, 1, 3]) for (const [lname, lv] of lineSets) {
         out.innerHTML = `<div class="empty">Trying rules… wait ${hold} min, ${esc(lname)}</div>`; await new Promise((r) => setTimeout(r, 0));
@@ -3065,7 +3081,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     } catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
     finally { btn.disabled = false; btn.textContent = "Find strategy ideas"; }
   });
-  const ideaText = (x) => `When SPY breaks ${x.lname.toLowerCase().replace("all the usual lines", "any of the usual lines")}, ${x.hold ? `wait ${x.hold === 1 ? "1 minute" : x.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down). Only take signals ${x.wname}. Sell at +${x.t}%, −${x.s}%, or after ${x.m} minutes, whichever comes first.`;
+  const ideaText = (x) => `When SPY breaks ${x.lname.toLowerCase().replace("all the usual lines", "any of the usual lines")}, ${x.hold ? `wait ${x.hold === 1 ? "1 minute" : x.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down). Only take signals ${x.wname}. Sell at +${x.t}%, ${stopLong(x.s)}, or after ${x.m} minutes, whichever comes first.`;
   const statLine = (a) => `${a.n} trades · ${P0(a.win)} won · ${money0(a.avg)}/trade`;
   function ideasBrief() {
     const I = LAB.ideas; if (!I) return "";
@@ -3081,7 +3097,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       if (x.hold !== cur.hold) ch.push(x.hold === 0 ? "buy right on the break" : `wait ${x.hold} minute${x.hold > 1 ? "s" : ""} for a hold`);
       if (x.lname !== "All the usual lines") ch.push(`watch only ${x.lname.toLowerCase()}`);
       if (x.until !== cur.until) ch.push(`only take signals ${x.wname}`);
-      if (x.t !== cur.t || x.s !== cur.s || x.m !== cur.m) ch.push(`sell at +${x.t}% / −${x.s}% / ${x.m} min`);
+      if (x.t !== cur.t || x.s !== cur.s || x.m !== cur.m) ch.push(`sell at +${x.t}% / ${stopShort(x.s)} / ${x.m} min${x.s < 0 ? " (exit if SPY closes back across the level)" : ""}`);
       rec = `<div class="lab-idea ok"><div class="label">Recommendation</div><p style="margin:6px 0"><b>Try this change:</b> ${esc(ch.join("; ") || "same as your current rule")}.</p>
         <p class="small">On days the search never saw, it made <b>${money0(x.test.avg)}</b> per trade (${x.test.n} trades, ${P0(x.test.win)} won) vs <b>${money0(I.v2.test.avg)}</b> for your current rule and $0 for sitting out. Practice it on 20+ replays before using it live.</p>
         <div class="row" style="margin-top:8px"><button class="btn primary" type="button" data-idea="${good.i}">Try it in Practice</button><button class="btn" type="button" data-keepv2>Keep my current rule</button></div></div>`;
@@ -3267,15 +3283,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function planRule() { const t = stratAuto() ? stratToday() : null; return t?.rule ? { ...t.rule, lv: { ...t.rule.lv } } : RULE; }
   function planRuleWho() { const t = stratAuto() ? stratToday() : null; return !t?.rule ? "your practice rule" : t.noTrade ? "today's best-looking strategy" : "today's strategy"; }
   function holdN() { return activeStrat()?.rule.hold ?? 1; }
-  const stratText = (c) => `When SPY breaks ${c.lname}, ${c.rule.hold ? `wait ${c.rule.hold === 1 ? "1 minute" : c.rule.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down), ${c.wname}. Sell at +${c.rule.t}%, −${c.rule.s}%, or after ${c.rule.m} minutes.`;
+  const stratText = (c) => `When SPY breaks ${c.lname}, ${c.rule.hold ? `wait ${c.rule.hold === 1 ? "1 minute" : c.rule.hold + " minutes"} with no touch back, then buy` : "buy right away:"} the call (break up) or put (break down), ${c.wname}. Sell at +${c.rule.t}%, ${stopLong(c.rule.s)}, or after ${c.rule.m} minutes.`;
   function stratRecord(name) {
     const pr = S.practice.filter((p) => p.rule === name), lv = S.trades.filter((t) => t.strategy === name && !calc(t).open);
     const sum = (a, f) => a.reduce((x, y) => x + (f(y) || 0), 0);
     return { pn: pr.length, pw: pr.filter((p) => p.pnl > 0).length, pnet: sum(pr, (p) => p.pnl), ln: lv.length, lw: lv.filter((t) => calc(t).pnl > 0).length, lnet: sum(lv, (t) => calc(t).pnl) };
   }
   // ===== strategy engine: one honest decision used both live and in the replay =====
-  // 162 strategies: 3 waits × 6 line sets × 3 time windows × 3 exit styles. Fewer choices = less chance of picking luck.
-  const EXIT_STYLES = [[30, 25, 15, "quick"], [50, 40, 30, "normal"], [100, 60, 60, "let it run"]];
+  // 270 strategies: 3 waits × 6 line sets × 3 time windows × 5 exit styles (two of them stop out when the break fails). Fewer choices = less chance of picking luck.
+  const EXIT_STYLES = [[30, 25, 15, "quick"], [50, 40, 30, "normal"], [100, 60, 60, "let it run"], [50, -80, 30, "normal, level stop"], [100, -80, 60, "let it run, level stop"]];
   const GRID = [];
   for (const hold of [0, 1, 3]) LINE_SETS.forEach(([lname, lv], li) => { for (const [wname, until] of WINDOWS) for (const [t, s2, m] of EXIT_STYLES) GRID.push({ hold, li, lname, wname, until, t, s: s2, m, rule: { ...RULE_BASE, lv: { ...NO_LINES, ...lv }, hold, dirs: "both", until, t, s: s2, m } }); });
   const RAND = GRID;
@@ -3403,7 +3419,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     // same features the live pick uses at the open: gap, yesterday's move, how busy, trend
     const feat = (di) => [D[di].o / D[di - 1].c - 1, D[di - 1].c / D[di - 2].c - 1, avgR(di, 10) / avgR(di, 60), D[di - 1].c / (D.slice(di - 20, di).reduce((a, d) => a + d.c, 0) / 20) - 1];
     const dates = [...LAB.M.keys()].filter((d) => (idx.get(d) ?? 0) >= 61).sort(), F = new Map(dates.map((d) => [d, feat(idx.get(d))]));
-    say("Scoring 162 strategies on every day…"); await new Promise((r) => setTimeout(r, 0));
+    say(`Scoring ${GRID.length} strategies on every day…`); await new Promise((r) => setTimeout(r, 0));
     const mx = dayMatrix(LAB.M, D, 570);
     const firstTest = Math.min(60, Math.floor(dates.length / 2)), test = dates.slice(firstTest);
     // best single fixed rule, chosen only from the days before the test period
@@ -3457,7 +3473,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       </ul>
       ${survivalHtml(r.sv, "The picker's trades in your account")}
       <details style="margin-top:8px"><summary class="small" style="cursor:pointer">Day by day</summary><table class="lab-tbl" style="width:100%; margin-top:6px"><thead><tr><th>Day</th><th>Pick</th><th class="n">Picker</th><th class="n">Typical</th></tr></thead><tbody>${r.rows.map((x) => `<tr><td style="white-space:nowrap">${esc(dayName(x.d).replace(/^\w+, /, ""))}${x.ev ? ` <span class="pill warn plain">${esc(x.ev)}</span>` : ""}</td><td class="small">${esc(x.pick.slice(0, 80))}${x.pick.length > 80 ? "…" : ""}</td><td class="n ${cls(x.pnl)}">${money0(x.pnl)}</td><td class="n ${cls(x.typ)}">${money0(x.typ)}</td></tr>`).join("")}</tbody></table></details>
-      <p class="small muted" style="margin-top:8px">Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}. "Typical strategy" is the average of all 162 strategies. Choose 1 year for 120+ replayed days.</p></details>`;
+      <p class="small muted" style="margin-top:8px">Best fixed rule (chosen from the days before): ${esc(r.fixedText || "none found")}. "Typical strategy" is the average of all ${GRID.length} strategies. Choose 1 year for 120+ replayed days.</p></details>`;
   }
   // Keep strategy state the same on every device (stored in the journal's database).
   let syncT = null;
@@ -3474,7 +3490,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   function applyStrat() {
     const a = activeStrat(); if (!a) return;
     if (ruleName(RULE) !== a.name) setRule({ ...a.rule, lv: { ...a.rule.lv } });
-    for (const [k, v] of [["pt", a.rule.t], ["ps", a.rule.s], ["pm", a.rule.m]]) { LC[k] = String(v); const el = $("#lc-" + k); if (el && document.activeElement !== el) el.value = v; }
+    for (const [k, v] of [["pt", a.rule.t], ["ps", Math.abs(a.rule.s)], ["pm", a.rule.m]]) { LC[k] = String(v); const el = $("#lc-" + k); if (el && document.activeElement !== el) el.value = v; }
+    LC.ls = a.rule.s < 0 ? "1" : ""; if ($("#lc-ls")) $("#lc-ls").checked = LC.ls === "1";
     saveLC(); renderLive();
   }
   function proofTxt() {
@@ -3570,8 +3587,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
     const need = tpMove(P, 960 - Math.max(nowM, 600), pr.t, pr.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
     const typ30 = blk?.v != null ? blk.v * P : null;
-    const acct = acctSize(), riskTrade = 1.0 * 100 * (pr.s / 100) + FEES + 2 * (realCfg().slip || 0) * 100;
-    const riskLine = `<li><b>Risk per trade:</b> a ~$1.00 contract with a −${pr.s}% stop risks about <b>$${riskTrade.toFixed(0)}</b>, ${((riskTrade / acct) * 100).toFixed(1)}% of your ${money0(acct).replace("+", "")} account${riskTrade / acct > 0.03 ? " (above the usual 2% guideline)" : " (within the usual 1–2% guideline)"}.</li>`;
+    const acct = acctSize(), riskTrade = 1.0 * 100 * (Math.abs(pr.s) / 100) + FEES + 2 * (realCfg().slip || 0) * 100;
+    const riskLine = `<li><b>Risk per trade:</b> a ~$1.00 contract with ${pr.s < 0 ? `a level stop (backup −${-pr.s}%) risks at most` : `a −${pr.s}% stop risks about`} <b>$${riskTrade.toFixed(0)}</b>, ${((riskTrade / acct) * 100).toFixed(1)}% of your ${money0(acct).replace("+", "")} account${riskTrade / acct > 0.03 ? " (above the usual 2% guideline)" : " (within the usual 1–2% guideline)"}.</li>`;
     const room = riskLine + `<li><b>Room to move:</b> days like today ranged about <b>$${(L.medRng * L.px0).toFixed(2)}</b>${L.useOR ? " after 10:00" : " for the day"}. ${need != null ? `Your +${pr.t}% take-profit needs SPY to move about <b>$${need.toFixed(2)}</b> your way within ${pr.m} min${typ30 != null ? `; a typical half hour ${live && marketOpen() ? "right now" : "after 10:00"} spans $${typ30.toFixed(2)} high-to-low` : ""}.` : ""} ${!activeStrat() && need != null && typ30 != null && need > typ30 * 0.9 ? "<b>That's a stretch</b>: consider a smaller take-profit today." : ""}</li>`;
     // lean from similar days
     const upT = trust(Math.max(L.upN, L.K - L.upN), L.K), gf = L.cnt((x) => x.fill) / L.K;
@@ -3785,7 +3802,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     ["st7", "stats", "'Expectancy' means…", ["The average profit or loss per trade", "Your best trade", "Your win rate", "Your account size"], "Expectancy = win rate × average win − loss rate × average loss."],
     ["st8", "stats", "Profit factor 0.8 means…", ["You lose: $0.80 won for every $1 lost", "You win 80% of trades", "You make 80% a year", "Your stop is 80%"], "Profit factor is total won ÷ total lost. Under 1 loses money."],
     ["sa2", "sample", "A rule made money on 6 trades. What's the honest conclusion?", ["Too few trades to tell", "It has an edge", "It will keep working", "It's ready for real money"], "Small samples are mostly noise. That's why the app checks rules on days they weren't picked from."],
-    ["sa3", "sample", "You test 162 rules on the same days and one looks great. What's the risk?", ["It may just be the luckiest of many", "None: it's proven", "It must be the best rule", "The data is wrong"], "Try enough rules and one will look good by chance. Checking it on unseen days is the fix."],
+    ["sa3", "sample", "You test 270 rules on the same days and one looks great. What's the risk?", ["It may just be the luckiest of many", "None: it's proven", "It must be the best rule", "The data is wrong"], "Try enough rules and one will look good by chance. Checking it on unseen days is the fix."],
     ["sa4", "sample", "What makes the app trust today's strategy?", ["It held up on look-alike days it wasn't picked from", "It had the highest backtest", "It's the newest rule", "It won yesterday"], "Out-of-sample checks guard against picking luck."],
     ["sa5", "sample", "The app says 'sit out' today. Is that a loss?", ["No: skipping a day with no edge protects your account", "Yes: you missed profits", "Only if SPY moved", "It counts as −$1"], "Not trading on bad-odds days is part of a winning process."],
     ["bh2", "breakhold", "What is a 'false break'?", ["Price pokes past a level, then snaps back", "A gap at the open", "A level that never gets touched", "A broker error"], "False breaks are common on choppy days; waiting for a hold filters some of them."],
@@ -4084,7 +4101,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     setContext(v) { LC.opp = v; saveLC(); renderLive(); return { no: "Context: nothing opposing.", unknown: "Context: no known opposition, some data stale.", yes: "Context: opposing signal. That blocks this entry." }[v]; },
     fillChain(strike, bid, ask, delta) { const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-strike", "strike", strike); put("lc-bid", "bid", bid); put("lc-ask", "ask", ask); put("lc-delta", "delta", delta); saveLC(); renderLive(); return `Chain filled: strike ${strike ?? LC.strike}, Bid ${bid ?? LC.bid}, Ask ${ask ?? LC.ask}${delta != null ? `, delta ${delta}` : ""}.`; },
     setPlan(t, st, m, why) {
-      if (view === "practice") { setRule({ ...(t != null && { t }), ...(st != null && { s: st }), ...(m != null && { m }) }); return `Practice rule: +${RULE.t}% / −${RULE.s}% / ${RULE.m} min.`; }
+      if (view === "practice") { setRule({ ...(t != null && { t }), ...(st != null && { s: st }), ...(m != null && { m }) }); return `Practice rule: +${RULE.t}% / ${stopShort(RULE.s)} / ${RULE.m} min.`; }
       const put = (id, k, val) => { if (val == null) return; LC[k] = String(val); $("#" + id).value = LC[k]; }; put("lc-pt", "pt", t); put("lc-ps", "ps", st); put("lc-pm", "pm", m); put("lc-pw", "pw", why); saveLC(); renderLive();
       return `Plan: take profit +${LC.pt}%, stop −${LC.ps}%, out after ${LC.pm} min${LC.pw ? ` · ${LC.pw}` : ""}.`;
     },
@@ -4358,7 +4375,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     { n: 3, name: "Alerts only", what: "No guide. Sounds and banners for breaks, holds and plan exits." },
   ];
   function progressReqs() {
-    const P = S.practice, byPlan = P.filter((p) => p.followed && ["target", "stop", "time", "plan", "close"].includes(p.exitReason)).length;
+    const P = S.practice, byPlan = P.filter((p) => p.followed && ["target", "stop", "level", "time", "plan", "close"].includes(p.exitReason)).length;
     const live = S.trades.filter((t) => t.status === "official" && t.version !== "V1" && t.date >= "2026-10-09" && !calc(t).open), liveOk = live.filter((t) => t.reviewFollowed === "yes").length;
     return {
       2: [{ label: "Practice trades", have: P.length, need: 20 }, { label: "Practice trades on a signal and closed by your plan", have: P.length ? Math.round((byPlan / P.length) * 100) : 0, need: 80, unit: "%" }, { label: "Quiz answers right", have: S.quiz?.correct || 0, need: 10 }],
