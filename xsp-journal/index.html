@@ -3582,7 +3582,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     let win = "";
     const untilM = activeStrat()?.rule.until ?? 930, tStart = { "9:30–10:30": 570, "10:30–12:00": 630, "12:00–2:00": 720, "2:00–3:30": 840 };
     if (ed) { const tb = ["9:30–10:30", "10:30–12:00", "12:00–2:00", "2:00–3:30"].filter((k) => tStart[k] < untilM).map((k) => { const g = ed.rs.filter((x) => tBucket(x.m) === k), w = g.filter((x) => x.pnl > 0).length; return { k, n: g.length, win: g.length ? w / g.length : 0, avg: g.length ? g.reduce((a, x) => a + x.pnl, 0) / g.length : 0 }; }).filter((x) => x.n >= 10).sort((a, b) => b.avg - a.avg);
-      if (tb.length >= 2) { const b = tb[0], w = tb[tb.length - 1]; win = `<li><b>Best window:</b> ${b.k} (your rule won ${P0(b.win)}, ${money0(b.avg)}/trade). <b>${w.avg < 0 ? "Sit out" : "Weakest"}:</b> ${w.k} (${money0(w.avg)}/trade).</li>`; } }
+      if (tb.length >= 2) { const b = tb[0], w = tb[tb.length - 1]; win = `<li><b>Time of day, past results only:</b> ${esc(planRuleWho())} did best ${b.k} (won ${P0(b.win)}, ${money0(b.avg)}/trade) and worst ${w.k} (${money0(w.avg)}/trade). ${activeStrat() ? `This is background, not a start time: take today's strategy's signals whenever they come, ${esc(activeStrat().wname || "until 3:30 pm")}.` : ""}</li>`; } }
     // room to move vs what the take-profit needs
     const R = D.slice(-11).map((d, i, a) => (i ? (d.h - d.l) / a[i - 1].c : null)).filter((x) => x != null), iv = ivFromRange(R.reduce((a, b) => a + b, 0) / R.length);
     const need = tpMove(P, 960 - Math.max(nowM, 600), pr.t, pr.m, iv), blk = PLAN.intra ? PLAN.intra.blocks[Math.min(12, Math.max(0, Math.floor((Math.max(nowM, 600) - 570) / 30)))] : null;
