@@ -831,9 +831,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   const cls = (v) => v > 0 ? "up" : v < 0 ? "down" : "";
   const ls = { get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} } };
 
+  // Eastern-time parts of a moment. Building a date formatter is slow (and this runs for every candle), so one
+  // formatter is reused and results are remembered per second.
+  var ET_FMT = null, ET_CACHE = new Map();
   function etParts(d = new Date()) {
-    const p = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "short" }).formatToParts(d).map((x) => [x.type, x.value]));
-    return { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}:${p.minute}:${p.second}`, min: +p.hour * 60 + +p.minute, wd: p.weekday };
+    const k = Math.floor(+d / 1000), hit = ET_CACHE.get(k); if (hit) return hit;
+    ET_FMT ||= new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23", weekday: "short" });
+    const p = Object.fromEntries(ET_FMT.formatToParts(d).map((x) => [x.type, x.value]));
+    const r = { date: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, hms: `${p.hour}:${p.minute}:${p.second}`, min: +p.hour * 60 + +p.minute, wd: p.weekday };
+    if (ET_CACHE.size > 150000) ET_CACHE.clear();
+    ET_CACHE.set(k, r); return r;
   }
   const dayName = (iso) => { const d = new Date(iso + "T12:00:00Z"); return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }); };
   const toMin = (hm) => { if (!hm) return null; const m = /^(\d{1,2}):(\d{2})/.exec(hm); return m ? +m[1] * 60 + +m[2] : null; };
