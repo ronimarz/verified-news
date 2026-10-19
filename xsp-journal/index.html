@@ -1864,21 +1864,26 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (date < etParts().date && fullDay(bars)) HIST.dayCache.set(date, bars);
     return bars;
   }
-  async function manyDays(dates, onProgress) {
+  async function manyDays(dates, onProgress, onChunk) {
     const out = new Map(), need = dates.filter((d) => !fullDay(HIST.dayCache.get(d))).sort();
     // one request covers at most 4 weekdays in a row (4 × 390 = 1,560 candles, under Webull's 1,650 limit)
     const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && c.length < 4 && weekdaysBetween(c[0], d) <= 4) c.push(d); else chunks.push([d]); }
     let done = 0;
     for (const chunk of chunks) {
-      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1650, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+      let r; try { r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M1", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1650, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE); }
+      catch (e) { HIST.failed = (HIST.failed || 0) + 1; HIST.lastErr = e; done += chunk.length; onProgress?.(done, need.length); continue; }   // skip it; the next build fills the gap
       const got = new Map(); for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (got.get(d) || got.set(d, []).get(d)).push(b); }
       for (const d of chunk) { const bars = got.get(d); if (fullDay(bars)) HIST.dayCache.set(d, bars); else if (d < etParts().date) await dayBars(d, true).catch(() => {}); }   // cut off? fetch that day alone
+      await onChunk?.(chunk);
       done += chunk.length; onProgress?.(done, need.length);
     }
     for (const d of dates) out.set(d, HIST.dayCache.get(d) || []);
     return out;
   }
-  const liveErr = (e) => ({ server_not_connected: "Connect Webull in claude.ai Settings → Connectors.", needs_reauth: "Reconnect Webull in claude.ai Settings → Connectors.", not_in_manifest: "Webull is turned off for this page. Allow it from the page's permissions." }[e?.code] || "Webull didn't answer. Try again in a moment.");
+  const liveErr = (e) => {
+    if (e instanceof TypeError || e instanceof ReferenceError || e instanceof RangeError || e instanceof SyntaxError) return `Something in the app broke (${String(e.message || e).slice(0, 140)}). Tell Claude this message.`;
+    return { server_not_connected: "Connect Webull in claude.ai Settings → Connectors.", needs_reauth: "Reconnect Webull in claude.ai Settings → Connectors.", not_in_manifest: "Webull is turned off for this page. Allow it from the page's permissions." }[e?.code] || `Webull didn't answer${e?.code || e?.message ? ` (${String(e.code || e.message).slice(0, 80)})` : ""}. Try again in a moment.`;
+  };
 
   // ---------- practice: a broker-style screen with a coach ----------
   // idx = last finished candle; sub = how far (0–1) the next candle has formed.
@@ -2471,7 +2476,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (PAT.daily && PAT.dailyKey === dkey) return PAT.daily;
     const rows = new Map(); let end = Date.now();
     for (let k = 0; k < 6; k++) {
-      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "D", count: 1200, end_time: end }, LONG_CACHE);
+      let r; try { r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "D", count: 1200, end_time: end }, LONG_CACHE); }
+      catch (e) { if (!rows.size) throw e; break; }   // older pages are optional
       const got = r.payload?.result?.[0]?.result || []; if (!got.length) break;
       for (const x of got) rows.set(String(x.time).slice(0, 10), { date: String(x.time).slice(0, 10), o: +x.open, h: +x.high, l: +x.low, c: +x.close });
       const oldest = Math.min(...got.map((x) => Date.parse(x.time))); if (got.length < 1200 || !(oldest < end)) break; end = oldest - 1;
@@ -2488,11 +2494,14 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     // one request covers at most 15 weekdays in a row (15 × 78 = 1,170 candles, under the 1,200 limit)
     const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && weekdaysBetween(c[0], d) <= 15) c.push(d); else chunks.push([d]); }
     let done = 0;
-    for (const chunk of chunks) {
-      const r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE);
+    const save5 = () => { try { const keep = Object.keys(cache).filter((k) => ok5(cache[k])).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {} };
+    for (const [ci, chunk] of chunks.entries()) {
+      let r; try { r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE); }
+      catch (e) { HIST.failed = (HIST.failed || 0) + 1; HIST.lastErr = e; done += chunk.length; onProgress?.(done, need.length); continue; }
       const got = {}; for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (got[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
       for (const d of chunk) if (ok5(got[d])) cache[d] = got[d];
       done += chunk.length; onProgress?.(done, need.length);
+      if (ci % 5 === 4) save5();
     }
     try { const keep = Object.keys(cache).filter((k) => ok5(cache[k])).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
     return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 40 && v[0].m <= 575));
@@ -2818,8 +2827,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const cached = await idbGetMany(missing.map((d) => `m1:${U()}:${d}`));
     for (const [k, v] of cached) { const bars = v.map(([t, o, h, l, c]) => ({ t, o, h, l, c })); if (fullDay(bars)) HIST.dayCache.set(k.split(":").pop(), bars); }
     const fetchNow = dates.filter((d) => !fullDay(HIST.dayCache.get(d)));
-    await manyDays(fetchNow, onProgress);
-    await idbPutMany(fetchNow.filter((d) => fullDay(HIST.dayCache.get(d))).map((d) => [`m1:${U()}:${d}`, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])]));
+    // saved after every chunk, so a failure part-way never throws away what already downloaded
+    await manyDays(fetchNow, onProgress, (chunk) => idbPutMany(chunk.filter((d) => d < etParts().date && fullDay(HIST.dayCache.get(d))).map((d) => [`m1:${U()}:${d}`, HIST.dayCache.get(d).map((b) => [b.t, b.o, b.h, b.l, b.c])])).catch(() => {}));
     return new Map(dates.map((d) => [d, (HIST.dayCache.get(d) || []).map((b) => ({ ...b, m: barMin(b) })).sort((a, b) => a.m - b.m)]).filter(([, v]) => fullDay(v)));
   }
 
@@ -3558,6 +3567,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const tgt = best.a * (1 + t / 100), ml = Math.max(minsLeft - mHold, 1), bidAt = (m) => qBid(bs0("call", S + m, best.K, iv, ml));
     if (bidAt(25) < tgt) return null; let lo = 0, hi = 25; for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (bidAt(mid) >= tgt) hi = mid; else lo = mid; } return hi;
   }
+  // A Webull problem, or a bug in the app? Say which, so it can be fixed.
+  function planErr(e) {
+    const m = liveErr(e);
+    return m.startsWith("Webull didn't answer") ? m.replace("Try again in a moment.", "Downloaded history is kept, and it tries again by itself in about a minute and a half.") : m.startsWith("Something in the app broke") ? m + " It tries again in about a minute and a half." : m;
+  }
   async function buildPlan(force) {
     if (!S.mcp || PLAN.building) return;
     PLAN.tried = Date.now();
@@ -3579,7 +3593,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       const M5 = await load5m(D.map((d) => d.date).slice(-252));
       PLAN.intra = M5.size >= 20 ? intradayPatterns(M5, D) : null;
       PLAN.at = Date.now(); PLAN.msg = "";
-    } catch (e) { PLAN.msg = liveErr(e); }
+    } catch (e) { PLAN.msg = planErr(e); console.error("game plan", e); }
     finally { PLAN.building = false; renderPlan(); renderPchk(); }
   }
   function renderPlan() {
@@ -4561,7 +4575,10 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   (async () => {
     const mcp = await use("mcp");
     if (!mcp) { LIVE.status = "off"; renderTicker(); renderLive(); rpInitDates(); return; }
-    S.mcp = mcp; schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000);
+    // Retry a failed Webull request a couple of times (busy servers, brief network drops) before giving up.
+    const WB_FATAL = ["server_not_connected", "needs_reauth", "not_in_manifest"];
+    S.mcp = { callTool: async (...a) => { let last; for (let k = 0; k < 3; k++) { try { return await mcp.callTool(...a); } catch (e) { last = e; if (WB_FATAL.includes(e?.code)) throw e; await new Promise((r) => setTimeout(r, 700 * (k + 1) ** 2)); } } throw last; } };
+    schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000);
     if (view === "practice") rpInitDates();
   })();
 })();
