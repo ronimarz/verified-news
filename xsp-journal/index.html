@@ -217,6 +217,10 @@ textarea { min-height: 90px; resize: vertical; }
 .todo .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
 .todo .ic.good { background: var(--good-bg); color: var(--good); } .todo .ic.bad { background: var(--bad-bg); color: var(--bad); } .todo .ic.warn { background: var(--warn-bg); color: var(--warn); } .todo .ic.info { background: var(--info-bg); color: var(--accent); }
 .todo .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+details.dash-fold > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+details.dash-fold > summary::-webkit-details-marker { display: none; }
+details.dash-fold > summary .fold-t { font-weight: 600; font-size: 17px; } details.dash-fold > summary .fold-t::before { content: "▸ "; color: var(--muted); } details.dash-fold[open] > summary .fold-t::before { content: "▾ "; }
+details.dash-fold[open] > summary { margin-bottom: 12px; } details.dash-fold #routine, details.dash-fold .panel { box-shadow: none; }
 .pat-do { font-size: 13.5px; margin: 8px 0 0; padding: 7px 9px; background: var(--panel-2); border-radius: 6px; }
 details.nums { margin-top: 8px; } details.nums > summary { font-size: 12.5px; color: var(--muted); cursor: pointer; } details.nums[open] > summary { margin-bottom: 6px; }
 .pat-today { border-left: 3px solid var(--accent); background: var(--info-bg); padding: 10px 12px; border-radius: 0 8px 8px 0; margin-bottom: 12px; font-size: 14px; }
@@ -465,11 +469,13 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
+    <div id="dash-open"></div>
     <div class="panel" id="plan-card" hidden></div>
     <div class="panel" id="pchk-card" hidden></div>
-    <div class="panel" id="routine"></div>
+    <div class="panel row" id="dash-log" style="justify-content:space-between; gap:10px"><span class="small">Took a trade in Webull (SPY or XSP) without Live check? Log it so your stats, plan and coach review count it.</span><button class="btn" type="button" id="dash-log-btn">Log a trade I took</button></div>
+    <details class="panel dash-fold" id="dash-routine"><summary><span class="fold-t">Your routine today</span><span class="small muted" id="dash-routine-sum"></span></summary><div id="routine"></div></details>
+    <details class="panel dash-fold" id="dash-numbers"><summary><span class="fold-t">Your numbers</span><span class="small muted" id="dash-sum"></span></summary>
     <div class="kpis" id="kpis"></div>
-    <div id="dash-open"></div>
     <div class="grid2">
       <div class="panel">
         <div class="panel-head"><h2>Official balance</h2><span class="small muted" id="eq-sub"></span></div>
@@ -493,6 +499,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     </div>
     <div class="panel" id="edge"></div>
     <div class="panel" id="mistakes"></div>
+    </details>
   </section>
 
   <!-- LIVE CHECK -->
@@ -943,8 +950,15 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   $$(".tab").forEach((b) => b.addEventListener("click", () => showView(b.dataset.view)));
 
   // ---------- rendering ----------
+  function renderDashSum(st) {
+    const el = $("#dash-sum"); if (!el) return;
+    const cnt = new Map(); for (const r of allMistakes()) cnt.set(r.k, (cnt.get(r.k) || 0) + 1);
+    const tk = [...cnt].sort((a, b) => b[1] - a[1])[0], top = tk ? { label: mName[tk[0]] || tk[0] } : null;
+    el.textContent = `Balance ${money(st.bal ?? 0)} · ${st.closed.length} closed trade${st.closed.length === 1 ? "" : "s"}${st.closed.length ? ` · won ${Math.round((st.closed.filter((t) => calc(t).pnl > 0).length / st.closed.length) * 100)}%` : ""}${top ? ` · top mistake: ${top.label.toLowerCase()}` : ""}`;
+    const rs = $("#dash-routine-sum"); if (rs) rs.textContent = marketOpen() ? "Trade loop: pick a level → wait for the break → check → enter → manage" : etParts().min < 570 ? "Before the open: scout report, game plan, levels" : "After the close: replay, review, journal";
+  }
   function renderAll() {
-    const st = stats();
+    const st = stats(); try { renderDashSum(st); } catch {}
     renderKpis(st); renderEquity(st); renderPL(st); renderTod(st); renderVersions(st); renderEdge(st);
     renderOpen(st); renderTrades(st); renderMissed(); renderRules(); renderNews(); renderLive(); renderFlow(); renderTicker();
     renderPracticeStats(); renderReviews(); renderQuizScore(); renderReady(); renderGuide(); renderRoutine(); renderSugg(); renderMistakes(); renderProgress(); renderAlertsBtn(); renderDrillScore();
@@ -1159,6 +1173,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       ${plan}
       ${num(t.planStopLevel) != null ? `<div class="small">Level stop: get out if a 1-minute candle closes ${t.dir === "put" ? "above" : "below"} <b>${num(t.planStopLevel).toFixed(2)}</b> (backup stop at Bid ${px(num(t.planStopPrice))}).</div>` : num(t.planStopPrice) != null && t.date === etParts().date ? `<div class="small">${stopSpyLine(t.dir, num(t.entryUnderlying), num(t.strike), c.entry, num(t.planStopPrice), 960 - (toMin(t.entryTime) ?? etParts().min))}</div>` : ""}
       ${alerts.map((a) => `<div class="alert">Your plan says get out: ${esc(a)}</div>`).join("")}
+      ${exitsBox(t)}
       <div class="fields">
         <div class="field"><label for="${where}-cx-${id}">${esc(u)} now</label><input id="${where}-cx-${id}" data-k="xsp" type="number" step="0.01" inputmode="decimal" placeholder="${Sn != null ? Sn.toFixed(2) : ""}"></div>
         <div class="field"><label for="${where}-cb-${id}">Sell Bid</label><input id="${where}-cb-${id}" data-k="bid" type="number" step="0.01" inputmode="decimal"></div>
@@ -1167,6 +1182,16 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
       <div class="shot" data-shot="pos" data-tid="${id}"><div class="shot-out small"></div></div>
       <div class="row"><button class="btn" type="button" data-shot-paste data-shot-for="${id}">Paste screenshot</button><button class="btn" type="button" data-shot-pick data-shot-for="${id}">Choose a photo</button><button class="btn" type="button" data-act="cp">Save checkpoint</button><button class="btn primary" type="button" data-act="exit">Exit at Bid now</button><button class="btn" type="button" data-act="open">Details</button></div>
     </div>`;
+  }
+  // Place the exits the moment you're in, so a fast drop or a slow hand can't skip the plan.
+  function exitsBox(t) {
+    if (t.exitOrdersSet || (num(t.planTargetPrice) == null && num(t.planStopPrice) == null)) return "";
+    const lvl = num(t.planStopLevel), side = t.dir === "put" ? "above" : "below", steps = [];
+    if (num(t.planTargetPrice) != null) steps.push(`<b>Sell limit</b> at ${px(num(t.planTargetPrice))} (take profit). Webull: tap the position → Sell → Limit → ${px(num(t.planTargetPrice))} → Day.`);
+    if (lvl != null) steps.push(`<b>Price alert on SPY</b> at ${lvl.toFixed(2)} (your level stop). If a 1-minute candle closes ${side} it, sell at the Bid.${num(t.planStopPrice) != null ? ` Backup: alert on the option at ${px(num(t.planStopPrice))}.` : ""}`);
+    else if (num(t.planStopPrice) != null) steps.push(`<b>Stop</b> at ${px(num(t.planStopPrice))}. Webull usually allows only one sell order per contract, so set a <b>price alert on the option</b> at ${px(num(t.planStopPrice))} and sell when it rings. If Webull offers a bracket (OCO) order, use that for both instead.`);
+    if (t.planTimeStop) steps.push(`<b>Phone alarm</b> for ${esc(t.planTimeStop)} ET (time stop).`);
+    return `<div class="yours"><div class="label">Set your exits now, before you watch the chart</div><ol class="small" style="margin:6px 0 8px 18px;padding:0">${steps.map((x) => `<li style="margin-bottom:4px">${x}</li>`).join("")}</ol><button class="btn sm" type="button" data-act="exits">Done, exits are set</button></div>`;
   }
   let lcShowWhileOpen = false;
   function renderOpen(st) {
@@ -1184,6 +1209,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     const b = e.target.closest(".pos [data-act]"); if (!b) return;
     const card = b.closest(".pos"), t = S.trades.find((x) => x.id === card.dataset.id); if (!t) return;
     if (b.dataset.act === "open") return openForm("trades", t);
+    if (b.dataset.act === "exits") { if (await save("trades", t.id, { ...stripId(t), exitOrdersSet: true })) toast("Good. Now let the orders do the work."); return; }
     const v = Object.fromEntries($$(".fields input", card).map((i) => [i.dataset.k, num(i.value)]));
     if (!calc(t).open) { $(".shot-out", card).innerHTML = ""; renderAll(); return toast("This trade is already closed."); }
     if (v.bid == null) return toast("Enter the Sell Bid first.");
@@ -1431,7 +1457,8 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     else if (!s.s1) why = "Pick a direction and the level you are watching.";
     else if (!s.broke) why = `Watching ${side} ${esc(LC.level)}. ${s.auto ? "The app marks the break when a 1-minute candle closes past it." : "Tap Level broke when a candle closes past it."}`;
     else if (!s.held) why = s.auto ? `Broke at ${esc(s.breakET)}. Waiting for ${holdN() === 1 ? "one full candle that stays" : `${holdN()} full candles that stay`} ${side} ${esc(LC.level)}.` : `Holding for ${Math.max(0, 60 * holdN() - Math.floor(s.elapsed))} more seconds. Reset if price returns across ${esc(LC.level)}.`;
-    else if (!s.s3) why = "Hold confirmed. Check the latest scout context.";
+    else if (lateBy(s)) { const lt = lateBy(s); c2 = "stop"; verdict = lt.k === "late" ? "Too late" : "Chasing"; why = lt.why; btns = `<button class="btn" type="button" id="lc-missed">Log as missed setup</button>`; }
+    else if (!s.s3) why = `Hold confirmed at ${fmtClock(toMin(s.holdET))}. You have until about ${fmtClock(toMin(s.holdET) + LATE_MIN)} to enter. Check the latest scout context.`;
     else if (!s.s4) why = "Hold confirmed and context clear. Enter the strike, Bid and Ask from a fresh chain.";
     else if (marketOpen() && newsBlock()) { const nb = newsBlock(); c2 = "stop"; verdict = "Wait: news release"; why = `${esc(EVENT_NAME[nb.k])} comes out at ${fmtClock(nb.t)}. Prices jump around for a few minutes, so no new entries until ${fmtClock(nb.t + 10)}.`; }
     else if (activeStrat() && marketOpen() && etParts().min >= activeStrat().rule.until) { c2 = "stop"; verdict = "Outside today's window"; why = `Today's strategy only takes signals before ${fmtClock(activeStrat().rule.until)}. On days like this, later signals didn't work.`; }
@@ -1469,9 +1496,21 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (e.target.id === "lc-log") { const m = await logEntry(); if (m) toast(m); }
     if (e.target.id === "lc-missed") logMissed();
   });
+  // Entering long after the signal (or after SPY already ran far past the level) was the most repeated live mistake.
+  var LATE_MIN = 5;
+  function lateBy(s) {
+    if (!s.held || !s.holdET || !marketOpen()) return null;
+    const age = etParts().min - toMin(s.holdET), side = LC.dir === "put" ? "below" : "above";
+    if (age > LATE_MIN) return { k: "late", why: `The hold confirmed at ${fmtClock(toMin(s.holdET))}, ${age} minutes ago. Signals are only good for about ${LATE_MIN} minutes: after that the option already priced in the move and the odds look like a coin flip. Skip it and log it as a missed setup. If SPY comes back to ${esc(LC.level)} and breaks again, press Start over and treat that as a new signal.` };
+    const P = LIVE.snap ? num(LIVE.snap.price) : null, L = num(LC.level); if (P == null || L == null) return null;
+    const run = LC.dir === "put" ? L - P : P - L, w = typical30(P), lim = Math.max(0.75, (w || 1.3) * 0.5);
+    if (run > lim) return { k: "chase", why: `SPY is already $${run.toFixed(2)} ${side} ${esc(LC.level)}, more than half a normal half-hour move. Buying now is chasing: much of the move you'd pay for has happened. Skip it, or wait for a pullback toward the level and a fresh break.` };
+    return null;
+  }
   async function logEntry() {
       const s = lcState(), now = etParts(), uPrice = LIVE.snap ? num(LIVE.snap.price) : null;
       if (!(s.held && s.s3 && s.s4) || s.stop) return null;
+      const late = lateBy(s); if (late) { toast(late.k === "late" ? "Too late for this signal. Log it as a missed setup instead." : "SPY already ran too far past the level. Skip this one."); return null; }
       if (!marketOpen()) { toast("The market is closed. Paper entries only count between 9:30 am and 4:00 pm ET."); return null; }
       const doc = { date: now.date, status: "official", version: "Daily", strategy: activeStrat() ? ruleName(activeStrat().rule) : "", qual: "verified", underlying: U(), dir: LC.dir, strike: num(LC.strike), expiry: "0DTE", qty: 1,
         level: `${LC.level}${LC.why ? " " + LC.why : ""}`, signalTime: (s.breakET || "").slice(0, 5), entryTime: now.hm, exitTime: null,
@@ -1816,11 +1855,32 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (e.submitter?.value !== "save" || !["trades", "missed", "scout", "review"].includes(formCtx?.coll)) return dlg.close();
     const doc = { ...formCtx.base, ...collect() };
     if (formCtx.coll === "trades" && doc.exitStudy && ["exitTime", "exitBid", "exitAsk", "strike", "dir", "date"].some((k) => String(doc[k] ?? "") !== String(formCtx.base[k] ?? ""))) delete doc.exitStudy;
-    if (!formCtx.id) doc.createdAt = Date.now();
-    if (await save(formCtx.store, formCtx.id, doc)) { dlg.close(); toast(formCtx.coll === "review" ? "Review saved. It feeds your weekly coach review." : "Saved."); }
+    const isNew = !formCtx.id, filled = formCtx.coll === "trades" && isNew ? autoPlan(doc) : false;
+    if (isNew) doc.createdAt = Date.now();
+    const id = await save(formCtx.store, formCtx.id, doc); if (!id) return;
+    dlg.close();
+    if (formCtx.coll === "trades" && isNew && doc.exitTime && num(doc.exitBid ?? doc.exitPrice) != null && !doc.reviewNote) {
+      openReview({ ...doc, id: typeof id === "string" ? id : undefined });
+      return toast(filled ? "Saved, with today's plan filled in. Now a 30-second review." : "Saved. Now a 30-second review.");
+    }
+    toast(formCtx.coll === "review" ? "Review saved. It feeds your weekly coach review." : filled ? "Saved, with today's plan filled in so the review can grade it." : "Saved.");
   });
+  // A trade logged by hand (taken in Webull without Live check) gets the plan today's strategy would have given it.
+  function autoPlan(doc) {
+    if (num(doc.planTargetPrice) != null || num(doc.planStopPrice) != null || doc.planTimeStop) return false;
+    const entry = num(doc.entryPrice) ?? num(doc.entryAsk), r = planRule(); if (entry == null || !r) return false;
+    const t = num(r.t), s = Math.abs(num(r.s) ?? 40), m = num(r.m), em = toMin(doc.entryTime);
+    if (t != null) doc.planTargetPrice = +(entry * (1 + t / 100)).toFixed(2);
+    doc.planStopPrice = +(entry * (1 - s / 100)).toFixed(2);
+    if (m != null && em != null) doc.planTimeStop = fmtHM(Math.min(em + m, 960));
+    const lvl = num(String(doc.level || "").match(/\d+(\.\d+)?/)?.[0]);
+    if (num(r.s) < 0 && lvl != null && lvl > 50) { doc.planStopLevel = lvl; doc.planStopDir = doc.dir; }
+    if (!doc.planWhy) doc.planWhy = `Filled in after the trade from ${planRuleWho()}: +${t}% / −${s}% / ${m} min${doc.planStopLevel != null ? ", level stop" : ""}.`;
+    return true;
+  }
   form.addEventListener("click", (e) => { if (e.target.value === "cancel") { e.preventDefault(); dlg.close(); } });
   $("#new-trade").addEventListener("click", () => openForm("trades"));
+  $("#dash-log-btn").addEventListener("click", () => openForm("trades"));
   $("#new-missed").addEventListener("click", () => openForm("missed"));
   $("#new-scout").addEventListener("click", () => openForm("scout"));
   $("#edit-rules").addEventListener("click", () => {
@@ -4073,6 +4133,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   function spotlight(sel) {
     const t = sel && $(sel); if (!t) return;
+    for (let d = t.closest("details"); d; d = d.parentElement?.closest("details")) d.open = true;
     $$(".spot").forEach((x) => x.classList.remove("spot"));
     t.classList.add("spot"); t.scrollIntoView({ block: "center", behavior: "smooth" });
     setTimeout(() => t.classList.remove("spot"), 4000);
@@ -4432,12 +4493,13 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   document.addEventListener("click", (e) => { const b = e.target.closest("[data-setlevel]"); if (!b) return; const n = +b.dataset.setlevel; ls.set("guide.level", n); if (n === 3) { AL.on = true; ls.set("alerts.on", true); renderAlertsBtn(); } if (!guideOn) { guideOn = true; ls.set("guide.on", true); } renderProgress(); renderGuide(); renderRoutine(); toast(`Training level: ${LEVELS[n - 1].name}.`); if (e.target.closest("#cmd-out")) $("#cmd-out").hidden = true; });
 
   // ---------- mistakes ----------
-  const MISTAKES = [["early", "Bought without a confirmed break and hold", "breakhold"], ["chase", "Chased a move that already ran", "spread"], ["noplan", "No plan before entering", "exit"], ["ignored", "Ignored my plan's exit", "exit"], ["late", "Entered late in the day", "theta"], ["fearexit", "Exited early out of fear", "exit"], ["context", "Ignored the news context", "regime"], ["revenge", "Revenge trade after a loss", "size"], ["size", "Position too big", "size"]];
+  const MISTAKES = [["slow", "Entered more than 5 minutes after the signal", "breakhold"], ["early", "Bought without a confirmed break and hold", "breakhold"], ["chase", "Chased a move that already ran", "spread"], ["noplan", "No plan before entering", "exit"], ["ignored", "Ignored my plan's exit", "exit"], ["late", "Entered late in the day", "theta"], ["fearexit", "Exited early out of fear", "exit"], ["context", "Ignored the news context", "regime"], ["revenge", "Revenge trade after a loss", "size"], ["size", "Position too big", "size"]];
   const mName = Object.fromEntries(MISTAKES.map(([k, n]) => [k, n]));
   function autoMistakes(t) {
     const out = [];
     if (t.date >= "2026-10-12" && num(t.planTargetPrice) == null && num(t.planStopPrice) == null) out.push("noplan");
     if (toMin(t.entryTime) >= 900) out.push("late");
+    if (toMin(t.signalTime) != null && toMin(t.entryTime) != null && toMin(t.entryTime) - toMin(t.signalTime) > LATE_MIN) out.push("slow");
     if (t.qual === "not") out.push("early");
     if (!calc(t).open && t.exitTime && t.planTimeStop && t.exitTime > t.planTimeStop && t.reviewExitReason !== "time") out.push("ignored");
     return out;
