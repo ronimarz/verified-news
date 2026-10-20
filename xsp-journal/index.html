@@ -2546,24 +2546,27 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     return PAT.daily;
   }
   // 5-minute regular-hours candles per day, cached in this browser so later runs are fast.
+  // 5-minute candles: this browser's cache (IndexedDB, per day), then Webull, a few requests at a time.
   async function load5m(dates, onProgress) {
-    let cache = {}; try { cache = JSON.parse(localStorage.getItem("pat.m5." + U()) || "{}"); } catch {}
     const ok5 = (rows) => !!rows && rows.length >= 40 && Math.min(...rows.map((x) => x[0])) <= 575;
-    for (const k of Object.keys(cache)) if (!ok5(cache[k])) delete cache[k];   // drop days that were cut off
+    const key = (d) => `m5:${U()}:${d}`, cache = {};
+    // move the old localStorage copy into IndexedDB once; it was too big for phone storage, so new days never saved
+    try { const old = JSON.parse(localStorage.getItem("pat.m5." + U()) || "null"); if (old) { const keep = Object.entries(old).filter(([, v]) => ok5(v)); await idbPutMany(keep.map(([d, v]) => [key(d), v])); localStorage.removeItem("pat.m5." + U()); } } catch {}
+    for (const [k, v] of await idbGetMany(dates.map(key))) if (ok5(v)) cache[k.split(":").pop()] = v;
     const need = dates.filter((d) => !cache[d]).sort();
     // one request covers at most 15 weekdays in a row (15 × 78 = 1,170 candles, under the 1,200 limit)
     const chunks = []; for (const d of need) { const c = chunks[chunks.length - 1]; if (c && weekdaysBetween(c[0], d) <= 15) c.push(d); else chunks.push([d]); }
-    let done = 0;
-    const save5 = () => { try { const keep = Object.keys(cache).filter((k) => ok5(cache[k])).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {} };
-    for (const [ci, chunk] of chunks.entries()) {
+    let done = 0, next = 0;
+    const one = async (chunk) => {
       let r; try { r = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [U()], category: "US_ETF", timespan: "M5", start_time: Date.parse(chunk[0] + "T12:00:00Z"), end_time: Date.parse(chunk[chunk.length - 1] + "T22:00:00Z"), count: 1200, trading_sessions: "RTH", real_time_required: false }, LONG_CACHE); }
-      catch (e) { HIST.failed = (HIST.failed || 0) + 1; HIST.lastErr = e; done += chunk.length; onProgress?.(done, need.length); continue; }
+      catch (e) { HIST.failed = (HIST.failed || 0) + 1; HIST.lastErr = e; return; }
       const got = {}; for (const b of toBars(r.payload?.result?.[0]?.result)) { const d = barDate(b), m = barMin(b); if (!chunk.includes(d) || m < 570 || m >= 960) continue; (got[d] ||= []).push([m, +b.o.toFixed(2), +b.h.toFixed(2), +b.l.toFixed(2), +b.c.toFixed(2)]); }
-      for (const d of chunk) if (ok5(got[d])) cache[d] = got[d];
-      done += chunk.length; onProgress?.(done, need.length);
-      if (ci % 5 === 4) save5();
-    }
-    try { const keep = Object.keys(cache).filter((k) => ok5(cache[k])).sort().slice(-520); localStorage.setItem("pat.m5." + U(), JSON.stringify(Object.fromEntries(keep.map((k) => [k, cache[k]])))); } catch {}
+      const today = etParts().date, fresh = chunk.filter((d) => ok5(got[d]));
+      for (const d of fresh) cache[d] = got[d];
+      await idbPutMany(fresh.filter((d) => d < today || etParts().min >= 965).map((d) => [key(d), got[d]]));   // today's candles aren't final until the close
+    };
+    const worker = async () => { while (next < chunks.length) { const c = chunks[next++]; await one(c); done += c.length; onProgress?.(done, need.length); } };
+    await Promise.all([worker(), worker(), worker()]);
     return new Map(dates.map((d) => [d, (cache[d] || []).map(([m, o, h, l, c]) => ({ m, o, h, l, c })).sort((a, b) => a.m - b.m)]).filter(([, v]) => v.length >= 40 && v[0].m <= 575));
   }
   const pctOf = (a, n) => (n ? a / n : null);
