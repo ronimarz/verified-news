@@ -940,7 +940,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
     $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
     if (v === "learn") { renderSim(); if (!QUIZ.cur) nextQuestion(); }
-    if (v === "practice" && !$("#rp-date").options.length) rpInitDates();
+    if (v === "practice" && !RP.datesReady) rpInitDates();
     if (v === "news") { gFlag("news", 1); gFlag("newsAt", +etParts().hm.replace(":", "")); }
     if (v !== "practice" && RP.playing) rpPause();
     if (v !== "practice") $("#rp-mini").hidden = true;
@@ -2097,7 +2097,10 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     try {
       await loadDaily(90);
       const ds = pastDates().slice(-60).reverse();
+      const keep = sel.value; if (/^\d{4}-/.test(keep) && !ds.includes(keep)) ds.unshift(keep);
       sel.innerHTML = ds.map((d) => `<option value="${d}">${esc(dayName(d))}${S.trades.some((t) => t.date === d) ? " · you traded" : ""}${S.practice.some((p) => p.replayDate === d) ? " · practiced" : ""}</option>`).join("");
+      if (keep && ds.includes(keep)) sel.value = keep;
+      RP.datesReady = true;
     } catch (e) { sel.innerHTML = `<option>${esc(liveErr(e))}</option>`; }
     rpRender();
   }
@@ -3311,10 +3314,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     catch (e) { out.innerHTML = `<div class="empty">${esc(liveErr(e))}</div>`; }
     finally { btn.disabled = false; btn.textContent = "Find days like today"; }
   });
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-like-day]"); if (!b) return;
     const d = b.dataset.likeDay, sel = $("#rp-date");
     if (PAT.daily && PAT.daily.length > HIST.daily.length) HIST.daily = PAT.daily.filter((x) => x.date < etParts().date);
+    if (!RP.datesReady) await rpInitDates();   // fill the full day list first, so other days stay pickable
     if (![...sel.options].some((o) => o.value === d)) sel.insertAdjacentHTML("afterbegin", `<option value="${d}">${esc(dayName(d))} · similar day</option>`);
     sel.value = d; showView("practice"); $("#rp-load").click();
   });
@@ -4233,7 +4237,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     async practice(action, arg) {
       if (view !== "practice") showView("practice");
       if (action === "load") {
-        if (!$("#rp-date").options.length || $("#rp-date").options[0].value === "Needs Webull") await rpInitDates();
+        if (!RP.datesReady) await rpInitDates();
         const opts = [...$("#rp-date").options].map((o) => o.value), d = arg ? opts.find((v) => v === arg) : opts[0];
         if (!d) return `That day isn't in the list. Pick one of the last ${opts.length} trading days.`;
         $("#rp-date").value = d; $("#rp-load").click(); return `Loading ${dayName(d)}…`;
