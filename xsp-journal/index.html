@@ -217,7 +217,7 @@ textarea { min-height: 90px; resize: vertical; }
 .todo .ic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
 .todo .ic.good { background: var(--good-bg); color: var(--good); } .todo .ic.bad { background: var(--bad-bg); color: var(--bad); } .todo .ic.warn { background: var(--warn-bg); color: var(--warn); } .todo .ic.info { background: var(--info-bg); color: var(--accent); }
 .todo .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-body[data-view="dash"] .cmd, body[data-view="dash"] #guide, body[data-view="more"] .cmd, body[data-view="more"] #guide { display: none; }
+main > .cmd, #guide { display: none !important; }
 .more-menu { display: grid; gap: 8px; }
 .more-menu .btn { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 12px 14px; height: auto; }
 details.dash-fold > summary { cursor: pointer; list-style: none; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
@@ -447,7 +447,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     <div class="brand"><h1>Quarter Trading Journal</h1><span class="ticker" id="ticker"></span><span class="tick" id="clock">ET --:--:--</span><button class="btn sm" type="button" id="alerts-btn" style="margin-left:auto"></button></div>
     <nav class="tabs" role="tablist" aria-label="Views">
       <button class="tab" role="tab" id="tab-dash" aria-selected="true" data-view="dash">Today</button>
-      <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live">Live check<span class="dot" id="open-dot" hidden></span></button>
+      <button class="tab" role="tab" id="tab-live" aria-selected="false" data-view="live" hidden>Live check<span class="dot" id="open-dot" hidden></span></button>
       <button class="tab" role="tab" id="tab-practice" aria-selected="false" data-view="practice" hidden>Practice</button>
       <button class="tab" role="tab" id="tab-journal" aria-selected="false" data-view="journal">Journal</button>
       <button class="tab" role="tab" id="tab-news" aria-selected="false" data-view="news" hidden>News</button>
@@ -474,9 +474,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
     <div id="dash-open"></div>
-    <div class="panel" id="edge-card" hidden></div>
     <div class="panel" id="pchk-card" hidden></div>
-    <div class="panel row" id="dash-log" style="justify-content:space-between; gap:10px"><span class="small">Took a trade in Webull (SPY or XSP) without Live check? Log it so your stats, plan and coach review count it.</span><button class="btn" type="button" id="dash-log-btn">Log a trade I took</button></div>
+    <div class="panel" id="edge-card" hidden></div>
+    <div class="panel row" id="dash-log" style="justify-content:space-between; gap:10px"><span class="small">Took a trade in Webull (SPY or XSP)? Log it so your stats and coach review count it.</span><button class="btn" type="button" id="dash-log-btn">Log a trade I took</button></div>
     <details class="panel dash-fold" id="dash-numbers"><summary><span class="fold-t">Your numbers</span><span class="small muted" id="dash-sum"></span></summary>
     <div class="kpis" id="kpis"></div>
     <div class="grid2">
@@ -508,13 +508,11 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- MORE -->
   <section class="view" id="view-more" role="tabpanel" aria-labelledby="tab-more" hidden>
     <div class="panel more-menu">
-      <p class="small muted" style="margin:0 0 10px">Extra tools. Your daily routine only needs the Today tab (and Live check when a rule fires).</p>
-      <button class="btn" type="button" data-more="practice"><b>Practice a past day</b><span class="small muted">Replay a real SPY day minute by minute</span></button>
-      <button class="btn" type="button" data-more="learn"><b>Learn &amp; research</b><span class="small muted">Lessons, quizzes, pattern finder, strategy lab</span></button>
+      <p class="small muted" style="margin:0 0 10px">Your daily routine only needs the Today tab.</p>
+      <button class="btn" type="button" data-more="learn"><b>Learn</b><span class="small muted">Lessons, quizzes and the coach</span></button>
       <button class="btn" type="button" data-more="news"><b>News &amp; scout reports</b><span class="small muted">Today's events and the scout's notes</span></button>
     </div>
-    <div class="panel" id="plan-card" hidden></div>
-    <details class="panel dash-fold" id="dash-routine"><summary><span class="fold-t">Your routine today</span><span class="small muted" id="dash-routine-sum"></span></summary><div id="routine"></div></details>
+    <div id="retired" hidden><div class="panel" id="plan-card" hidden></div><details class="panel dash-fold" id="dash-routine"><summary><span class="fold-t">Your routine today</span><span class="small muted" id="dash-routine-sum"></span></summary><div id="routine"></div></details></div>
   </section>
 
   <!-- LIVE CHECK -->
@@ -750,9 +748,9 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
 
   <!-- LEARN -->
   <section class="view" id="view-learn" role="tabpanel" aria-labelledby="tab-learn" hidden>
-    <div class="panel" id="progress"></div>
+    <div class="panel" id="progress" hidden></div>
     <div class="panel" id="ready"></div>
-    <div class="panel" id="pat-panel">
+    <div class="panel" id="pat-panel" hidden>
       <div class="panel-head"><div><h2>SPY pattern finder</h2><p class="small muted" style="margin-top:4px">Looks through SPY's past trading days to find what tends to happen, which days looked like today, and which rules would have worked. These are tendencies, not promises.</p></div></div>
       <div class="seg" role="group" aria-label="Pattern finder sections" id="pat-tabs" style="margin-bottom:12px"><button type="button" data-pt="pat" aria-pressed="true">Patterns</button><button type="button" data-pt="like" aria-pressed="false">Days like today</button><button type="button" data-pt="lab" aria-pressed="false">Strategy lab</button><button type="button" data-pt="news" aria-pressed="false">News days</button></div>
       <div id="pat-sec-pat">
@@ -952,7 +950,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   let view = ls.get("xsp.view", "dash");
   function showView(v) {
     view = v; ls.set("xsp.view", v);
-    const sub = ["practice", "news", "learn"].includes(v);
+    const sub = ["practice", "news", "learn", "live"].includes(v);
     $$(".tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v || (sub && b.dataset.view === "more"))));
     document.body.dataset.view = v;
     $$("main > .view").forEach((s) => (s.hidden = s.id !== "view-" + v));
@@ -3646,7 +3644,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
     if (b.date !== n.date) return true;
     return marketOpen() && ((b.min < 570 && n.min >= 572) || (b.min < 600 && n.min >= 601));
   }
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && planDue()) buildPlan(true); });
+  // the breakout game plan is retired; nothing builds it in the background any more
   function tpMove(S, minsLeft, t, mHold, iv) {
     let best = null; for (let K = Math.floor(S) - 5; K <= Math.ceil(S) + 5; K++) { const a = qAsk(bs0("call", S, K, iv, minsLeft)); if (!best || Math.abs(a - 1) < Math.abs(best.a - 1)) best = { K, a }; }
     const tgt = best.a * (1 + t / 100), ml = Math.max(minsLeft - mHold, 1), bidAt = (m) => qBid(bs0("call", S + m, best.K, iv, ml));
@@ -3821,18 +3819,46 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const c of L?.near || []) { const B = c.bars; if (!B?.length) continue; const at = B.filter((b) => b.m <= m).pop() || B[0], end = B[B.length - 1].c; pays.push(Math.abs(S * (end / at.c) - K)); }
     return pays.length >= 15 ? { avg: pays.reduce((a, b) => a + b, 0) / pays.length, med: median(pays), n: pays.length, over: (x) => pays.filter((p) => p > x).length / pays.length } : null;
   }
+  // ---------- expected move: how far SPY usually travels from now to the close ----------
+  // Tested on 6 months of 5-minute candles (Oct 2026): the last 5 days beat 20-day and look-alike averages early in the day;
+  // after 10:15 how busy the morning was helps; news days move ~1.3x more, Fed days ~2.5x before 2 pm, ordinary days ~0.87x.
+  const EM = { date: null, days: null, loading: null };
+  async function loadEM() {
+    const today = etParts().date; if (EM.date === today && EM.days) return EM.days;
+    if (EM.loading) return EM.loading;
+    EM.loading = (async () => {
+      const D = (await loadDailyAll()).filter((x) => x.date < today), dates = D.slice(-22).map((x) => x.date);
+      const M = await load5m(dates);
+      EM.days = dates.map((d) => M.get(d)).filter((b) => b && b.length >= 70).slice(-20); EM.date = today; return EM.days;
+    })().finally(() => { EM.loading = null; });
+    return EM.loading;
+  }
+  function expectedMove(m, P, hi, lo) {
+    const days = EM.days; if (!days || days.length < 10 || !(P > 0)) return null;
+    const mm = Math.max(575, Math.min(955, 570 + Math.floor((m - 570) / 5) * 5));
+    const at = (b, t) => (b.filter((x) => x.m + 5 <= t).pop() || b[0]);
+    const rows = days.map((b) => { const a = at(b, mm), seen = b.filter((x) => x.m + 5 <= mm); return { rest: Math.abs(b[b.length - 1].c - a.c) / a.c, early: seen.length ? (Math.max(...seen.map((x) => x.h)) - Math.min(...seen.map((x) => x.l))) / a.c : null }; });
+    const avg = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+    let base, how;
+    if (mm < 615 || !(hi > lo)) { base = avg(rows.slice(-5).map((x) => x.rest)); how = "the last 5 days"; }
+    else { const e = avg(rows.map((x) => x.early).filter((x) => x > 0)), act = Math.max(0.5, Math.min(2.5, (hi - lo) / P / e)); base = avg(rows.map((x) => x.rest)) * Math.sqrt(act); how = `the last 20 days, adjusted for how busy this morning was (${act > 1.15 ? "busier than usual" : act < 0.85 ? "quieter than usual" : "about normal"})`; }
+    const ev = evMain(etParts().date), fedLater = ev === "FOMC" && m < 840;
+    const mult = fedLater ? 2.5 : ev ? 1.3 : 0.87;
+    const why = fedLater ? "Fed decision at 2 pm: days like this have moved about 2.5× more than usual" : ev ? `${EVENT_NAME[ev] || ev} day: news days have moved about 1.3× more than usual` : "No big scheduled news today: quiet days move a bit less than average";
+    return { usd: base * mult * P, pct: base * mult, m: mm, how, why, mult, n: days.length };
+  }
   function priceCheck(q) {
-    const L = PLAN.like; if (!L) return { err: "Build today's game plan first (it finds the days like today). Tap Refresh on the game plan." };
     const m = Math.max(570, Math.min(etParts().min, 945)), K = q.K, S = q.S, cost = q.call + q.put;
     if (!(cost > 0) || !(S > 0) || !(K > 0)) return { err: "Enter both prices, the strike and SPY's price." };
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
-    const h = straddlePaid(L, S, K, m); if (!h) return { err: "Not enough look-alike days loaded yet. Refresh the game plan and try again." };
-    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: h.avg, med: h.med, n: h.n, ratio: cost / h.avg, beat: h.over(cost), at: Date.now() };
+    const sn = LIVE.snap, e = expectedMove(m, S, sn ? +sn.high : null, sn ? +sn.low : null);
+    if (!e) return { err: "Still loading SPY's recent candles from Webull. Try again in a few seconds." };
+    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em1", at: Date.now() };
     const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
   function pchkVerdict(r) {
-    return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than days like today delivered. Sit out, take only your best (A-grade) setups, or take profits sooner." }
+    return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than SPY is likely to make. Sit out, take only your best (A-grade) setups, or take profits sooner." }
       : r.ratio <= 0.85 ? { k: "go", cls: "good", word: "Cheap", todo: "Options look cheap for a day like this. Buying has better odds than usual, so your plan's signals are worth taking." }
       : { k: "info", cls: "", word: "About fair", todo: "Normal pricing. Trade your plan as usual." };
   }
@@ -3903,11 +3929,12 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const live = todayRows.filter((x) => x.dir);
     const risk = Math.round(acctSize() * 0.06);
     const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid. ${risk >= 100 ? `Keep it under about $${risk} (6% of your account).` : `Sizing note: the books agree on risking only about 6% of the account per trade ($${risk} for you). One $1.00 option risks $100, so with real money you'd want about $1,700 before trading even one. On paper, keep going.`}`;
-    const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "avoid" ? " today. Skip the candidate trades." : "."}` : `<b>First: do the price check below (30 seconds, around 9:45).</b> If options are expensive today, skip.`;
+    const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "avoid" ? " today. Skip the candidate trades." : "."}` : `<b>First: do the price check above (30 seconds, around 9:45).</b> If options are expensive today, skip.`;
     el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Edge hunt</h2><span class="pill">paper only</span></div>
       <p class="small muted" style="margin:0 0 8px">Two rules that looked promising in a 4.7-year test but aren't proven. The app scores them every day from SPY's candles, whether or not you trade, so we'll know if they're real.</p>
       ${trading ? `<div class="yours"><div class="label">Today</div>${priceLine ? `<div class="small" style="margin:4px 0">${priceLine}</div>` : ""}
         ${todayRows.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.rl.name)}:</b> ${x.txt}</div>`).join("")}
+        ${!live.length && pv?.k === "go" ? `<div class="small" style="margin-top:6px"><b>Options are cheap and no rule fired.</b> Optional test trade: buy both the call and the put at the strike nearest SPY (a straddle). It wins if SPY moves more than the two cost, in either direction. Sell both at 3:50 pm.</div>` : ""}
         ${live.length && pv?.k !== "avoid" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
       <div style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div><b>${esc(rl.name)}</b></div><div class="small muted" style="margin-bottom:2px">${esc(rl.what)}</div>
         <div class="small">Since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)}</div>
@@ -3930,12 +3957,20 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       const v = pchkVerdict(last);
       res = todoBox(`Options are <span class="pill ${v.cls}">${v.word}</span> right now`, [
         { k: v.k, h: v.todo },
-        { k: "info", h: `The ${last.K} call + put cost $${last.cost.toFixed(2)}. That's the move the market is charging for, from ${fmtClock(last.m)} to the close.`, p: `Bought at this time on the ${last.n} days most like today, the same pair would have paid back $${last.paid.toFixed(2)} on average (half the days under $${last.med.toFixed(2)}). It paid more than it cost on ${Math.round(last.beat * 100)}% of them.` },
-      ], `Checked at ${fmtClock(last.m)}. Prices change during the day; re-check before trading the afternoon. A small sample of look-alike days, so read it as a lean.`);
+        { k: "info", h: `The ${last.K} call + put cost $${last.cost.toFixed(2)}. That's the move the market is charging for, from ${fmtClock(last.m)} to the close. SPY's expected move was about $${last.paid.toFixed(2)}.` },
+      ], `Checked at ${fmtClock(last.m)}. Prices change all day, so use the live guide above to re-check by eye before you buy.`);
     }
     const hist = pchkList(), days = [...new Map(hist.map((x) => [x.date, x])).values()];
     const histTxt = days.length >= 5 ? `<p class="small muted" style="margin-top:8px">Your last ${Math.min(days.length, 30)} checked days: options were expensive on ${days.slice(-30).filter((x) => x.ratio >= 1.2).length}, fair on ${days.slice(-30).filter((x) => x.ratio > 0.85 && x.ratio < 1.2).length}, cheap on ${days.slice(-30).filter((x) => x.ratio <= 0.85).length}.</p>` : "";
-    el.innerHTML = `<div class="panel-head"><div><h2>Are options cheap today?</h2><p class="small muted" style="margin-top:4px">Most of the time options are priced for more movement than really happens, which is why buyers lose on average. This checks today's prices against the days most like today.</p></div></div>
+    if (!EM.days && !EM.loading) loadEM().then(() => renderPchk()).catch(() => {});
+    const now = etParts(), sn = LIVE.snap, e = P ? expectedMove(Math.max(570, Math.min(now.min, 945)), P, sn ? +sn.high : null, sn ? +sn.low : null) : null;
+    const guide = !e ? `<div class="small muted">${EM.loading ? "Loading SPY's recent candles…" : "Needs SPY's price from Webull."}</div>`
+      : `<div class="yours"><div class="label">Live guide · ${marketOpen() ? `from ${fmtClock(now.min)} to the close` : "for the next open"}</div>
+        <div style="margin:4px 0">SPY is expected to move about <b>$${e.usd.toFixed(2)}</b> (either way).</div>
+        <div class="small">At the strike nearest ${P.toFixed(2)} (${Math.round(P)}), add the call + put prices in Webull:</div>
+        <div class="small" style="margin-top:4px"><span class="pill good">Cheap</span> under <b>$${(e.usd * 0.85).toFixed(2)}</b> &nbsp; <span class="pill">Fair</span> $${(e.usd * 0.85).toFixed(2)}–$${(e.usd * 1.2).toFixed(2)} &nbsp; <span class="pill bad">Expensive</span> over <b>$${(e.usd * 1.2).toFixed(2)}</b></div>
+        <div class="small muted" style="margin-top:6px">${esc(e.why)}. Based on ${esc(e.how)}. This updates every minute, so you can compare with live Webull prices by eye. Enter them below to record the check.</div></div>`;
+    el.innerHTML = `<div class="panel-head"><div><h2>Are options cheap right now?</h2><p class="small muted" style="margin-top:4px">Buyers only win when SPY moves more than the option's price expects. This compares today's prices with how far SPY is likely to move.</p></div></div>${guide}
       ${res}
       <details${last ? "" : " open"}><summary class="small" style="cursor:pointer">${last ? "Check again" : "How to check (30 seconds)"}</summary>
         <p class="small" style="margin:6px 0">In the option chain, find the strike closest to SPY's price. Enter the <b>call</b> and the <b>put</b> at that strike (the middle of Bid and Ask, or just the Ask). Or paste a chain screenshot below.</p>
@@ -4550,7 +4585,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     clearTimeout(alertUser.t); alertUser.t = setTimeout(stopAlert, 20000);
   }
   function stopAlert() { $("#alertbar").hidden = true; clearInterval(AL.flashT); document.title = AL.title; }
-  $("#alertbar").addEventListener("click", (e) => { if (e.target.id === "al-go") { showView("live"); setTimeout(() => spotlight(openPos() ? "#live-open" : "#lc-decision"), 60); } if (e.target.id === "al-go" || e.target.id === "al-x") stopAlert(); });
+  $("#alertbar").addEventListener("click", (e) => { if (e.target.id === "al-go") { showView("dash"); setTimeout(() => spotlight("#dash-open"), 60); } if (e.target.id === "al-go" || e.target.id === "al-x") stopAlert(); });
   // Called after every live render: fire each alert once.
   function liveAlerts(s) {
     if (!marketOpen()) return;
@@ -4718,7 +4753,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // ---------- boot ----------
   showView(["dash", "live", "practice", "journal", "news", "learn", "more"].includes(view) ? view : "dash");
   fillPlanDefaults();
-  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") renderRoutine(); if (planDue()) buildPlan(true); } }, 15000);
+  setInterval(() => { if (!dlg.open) { renderGuide(); if (view === "dash") renderRoutine(); } }, 15000);
   setInterval(() => { $("#clock").textContent = "ET " + etParts().hms; if (view === "live" && LC.mode === "manual" && LC.breakAt) renderLive(); }, 500);
   renderAll();
 
@@ -4750,7 +4785,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // Retry a failed Webull request a couple of times (busy servers, brief network drops) before giving up.
     const WB_FATAL = ["server_not_connected", "needs_reauth", "not_in_manifest"];
     S.mcp = { callTool: async (...a) => { let last; for (let k = 0; k < 3; k++) { try { return await mcp.callTool(...a); } catch (e) { last = e; if (WB_FATAL.includes(e?.code)) throw e; await new Promise((r) => setTimeout(r, 700 * (k + 1) ** 2)); } } throw last; } };
-    schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
+    schedulePoll(0); renderPchk(); loadEM().then(() => renderPchk()).catch(() => {}); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
+    setInterval(() => { const c = $("#pchk-card"); if (c && !c.contains(document.activeElement) && !c.querySelector(".shot-out:not(:empty)")) renderPchk(); }, 60000);
     if (view === "practice") rpInitDates();
   })();
 })();
