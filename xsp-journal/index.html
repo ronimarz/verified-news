@@ -470,6 +470,7 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   <!-- DASHBOARD -->
   <section class="view" id="view-dash" role="tabpanel" aria-labelledby="tab-dash">
     <div id="dash-open"></div>
+    <div class="panel" id="edge-card" hidden></div>
     <div class="panel" id="plan-card" hidden></div>
     <div class="panel" id="pchk-card" hidden></div>
     <div class="panel row" id="dash-log" style="justify-content:space-between; gap:10px"><span class="small">Took a trade in Webull (SPY or XSP) without Live check? Log it so your stats, plan and coach review count it.</span><button class="btn" type="button" id="dash-log-btn">Log a trade I took</button></div>
@@ -3810,7 +3811,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
     const h = straddlePaid(L, S, K, m); if (!h) return { err: "Not enough look-alike days loaded yet. Refresh the game plan and try again." };
     const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: h.avg, med: h.med, n: h.n, ratio: cost / h.avg, beat: h.over(cost), at: Date.now() };
-    const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync();
+    const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
   function pchkVerdict(r) {
@@ -3818,6 +3819,76 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       : r.ratio <= 0.85 ? { k: "go", cls: "good", word: "Cheap", todo: "Options look cheap for a day like this. Buying has better odds than usual, so your plan's signals are worth taking." }
       : { k: "info", cls: "", word: "About fair", todo: "Normal pricing. Trade your plan as usual." };
   }
+  // ---------- edge hunt: candidate rules, scored automatically from daily candles ----------
+  // Picked from a 4.7-year test (2022–2026): each held up in both halves but neither is proven. Paper only.
+  const EDGE_START = "2026-10-22";
+  const EDGE_RULES = [
+    { id: "tom", name: "Turn of the month", what: "Buy a call on the last trading day of a month and the first trading day of the next." },
+    { id: "gap", name: "Fade the gap", what: "If SPY opens more than 0.3% above yesterday's close, buy a put. More than 0.3% below, buy a call." },
+  ];
+  const nextWeekday = (d) => { const x = new Date(d + "T12:00:00Z"); do x.setUTCDate(x.getUTCDate() + 1); while ([0, 6].includes(x.getUTCDay())); return x.toISOString().slice(0, 10); };
+  // dir for a day, given that day's open (o), yesterday's close (pc), and the previous/next trading dates
+  function edgeSignal(id, d, o, pc, prevD, nextD) {
+    if (id === "tom") return d.slice(5, 7) !== (nextD || nextWeekday(d)).slice(5, 7) || d.slice(5, 7) !== prevD.slice(5, 7) ? "call" : null;
+    const g = o / pc - 1; return g > 0.003 ? "put" : g < -0.003 ? "call" : null;
+  }
+  // What a morning straddle costs compared with SPY's average open-to-close move of the last 20 days (1.0 = fair).
+  function edgeAlpha(D) {
+    const idx = new Map(D.map((x, i) => [x.date, i])), a = [];
+    for (const q of pchkList()) { const i = idx.get(q.date); if (i == null || i < 20 || q.m > 615) continue; const em = D.slice(i - 20, i).reduce((s, x) => s + Math.abs(x.c - x.o), 0) / 20; if (em > 0) a.push(q.cost / em); }
+    return a.length >= 5 ? { v: median(a), n: a.length } : { v: 1, n: a.length };
+  }
+  function edgeScore(D, alpha) {
+    const out = Object.fromEntries(EDGE_RULES.map((r) => [r.id, { past: [], fwd: [] }]));
+    for (let i = 20; i < D.length; i++) {
+      const x = D[i], em = D.slice(i - 20, i).reduce((s, y) => s + Math.abs(y.c - y.o), 0) / 20;
+      for (const rl of EDGE_RULES) {
+        const dir = edgeSignal(rl.id, x.date, x.o, D[i - 1].c, D[i - 1].date, D[i + 1]?.date); if (!dir) continue;
+        const pay = Math.max(dir === "call" ? x.c - x.o : x.o - x.c, 0), pl = 100 * (pay - (alpha * em) / 2 - 0.02);
+        out[rl.id][x.date >= EDGE_START ? "fwd" : "past"].push({ date: x.date, dir, pl });
+      }
+    }
+    return out;
+  }
+  const edgeLine = (a) => !a.length ? `<span class="muted">no signals yet</span>` : `${a.length} trade${a.length > 1 ? "s" : ""} · won ${Math.round((a.filter((t) => t.pl > 0).length / a.length) * 100)}% · <b class="${cls(a.reduce((s, t) => s + t.pl, 0))}">${money(Math.round(a.reduce((s, t) => s + t.pl, 0) / a.length), true)}</b>/trade`;
+  async function renderEdge() {
+    const el = $("#edge-card"); if (!el) return;
+    if (!S.mcp) { el.hidden = true; return; }
+    let D; try { D = await loadDailyAll(); } catch { return; }
+    if (etParts().min < 960) D = D?.filter((x) => x.date < etParts().date);   // today's candle isn't final until the close
+    if (!D || D.length < 30) return;
+    el.hidden = false;
+    const al = edgeAlpha(D), sc = edgeScore(D, al.v), now = etParts(), today = now.date, last = D[D.length - 1];
+    const snap = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === today && +LIVE.snap.open > 0 ? LIVE.snap : null;
+    const trading = !["Sat", "Sun"].includes(now.wd) && last.date < today;
+    const chk = pchkList().filter((x) => x.date === today).pop(), pv = chk ? pchkVerdict(chk) : null;
+    const todayRows = !trading ? [] : EDGE_RULES.map((rl) => {
+      if (rl.id === "gap") {
+        if (!snap) { const pc = last.c; return { rl, txt: `Watch the open: above <b>${(pc * 1.003).toFixed(2)}</b> → buy a put. Below <b>${(pc * 0.997).toFixed(2)}</b> → buy a call.` }; }
+        const dir = edgeSignal("gap", today, +snap.open, last.c, last.date); const g = +snap.open / last.c - 1;
+        return { rl, dir, txt: dir ? `SPY opened ${pct(g)} → <b>buy a ${dir.toUpperCase()}</b>.` : `SPY opened ${pct(g)}, inside ±0.3% → no trade.` };
+      }
+      const dir = edgeSignal("tom", today, 0, 0, last.date);
+      return { rl, dir, txt: dir ? `Today is a turn-of-the-month day → <b>buy a CALL</b>.` : `Not a turn-of-the-month day → no trade.` };
+    });
+    const live = todayRows.filter((x) => x.dir);
+    const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid.`;
+    const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "avoid" ? " today. Skip the candidate trades." : "."}` : `<b>First: do the price check below (30 seconds, around 9:45).</b> If options are expensive today, skip.`;
+    el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Edge hunt</h2><span class="pill">paper only</span></div>
+      <p class="small muted" style="margin:0 0 8px">Two rules that looked promising in a 4.7-year test but aren't proven. The app scores them every day from SPY's candles, whether or not you trade, so we'll know if they're real.</p>
+      ${trading ? `<div class="yours"><div class="label">Today</div>${priceLine ? `<div class="small" style="margin:4px 0">${priceLine}</div>` : ""}
+        ${todayRows.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.rl.name)}:</b> ${x.txt}</div>`).join("")}
+        ${live.length && pv?.k !== "avoid" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
+      <div class="breakdown" style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="display:block;padding:6px 0"><div><b>${esc(rl.name)}</b> <span class="small muted">${esc(rl.what)}</span></div>
+        <div class="small">Since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)}</div>
+        <div class="small muted">Before that (${esc(D[20].date.slice(0, 4))}–2026): ${edgeLine(sc[rl.id].past)}</div></div>`).join("")}</div>
+      <details style="margin-top:8px"><summary class="small">How the numbers are worked out</summary><p class="small muted" style="margin-top:6px">Each trade buys at the open and sells at the close. Without old option prices, an option is priced at ${al.v.toFixed(2)}× SPY's average open-to-close move of the last 20 days (split between call and put), plus 2¢ costs. ${al.n >= 5 ? `That price level comes from your ${al.n} morning price checks.` : `That's "fair" pricing. After 5 morning price checks (you have ${al.n}), it switches to what you actually saw.`} A rule needs about 30 tracked trades before the result means much. Expect that to take 2–4 months.</p></details>`;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-edge-log]"); if (!b) return;
+    const rl = EDGE_RULES.find((x) => x.id === b.dataset.edgeLog);
+    openForm("trades", null, { dir: b.dataset.edgeDir, level: `Edge hunt: ${rl.name}`, planWhy: `Edge hunt candidate: ${rl.name}. Hold to 3:50 pm.`, planTimeStop: "15:50" });
+  });
   function renderPchk() {
     const el = $("#pchk-card"); if (!el) return;
     if (!S.mcp) { el.hidden = true; return; } el.hidden = false;
@@ -4647,7 +4718,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // Retry a failed Webull request a couple of times (busy servers, brief network drops) before giving up.
     const WB_FATAL = ["server_not_connected", "needs_reauth", "not_in_manifest"];
     S.mcp = { callTool: async (...a) => { let last; for (let k = 0; k < 3; k++) { try { return await mcp.callTool(...a); } catch (e) { last = e; if (WB_FATAL.includes(e?.code)) throw e; await new Promise((r) => setTimeout(r, 700 * (k + 1) ** 2)); } } throw last; } };
-    schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000);
+    schedulePoll(0); renderPchk(); setTimeout(() => buildPlan(), 4000); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
     if (view === "practice") rpInitDates();
   })();
 })();
