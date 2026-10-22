@@ -3841,12 +3841,14 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   const EDGE_START = "2026-10-22";
   const EDGE_RULES = [
     { id: "tom", name: "Turn of the month", what: "Buy a call on the last trading day of a month and the first trading day of the next." },
-    { id: "gap", name: "Fade the gap", what: "If SPY opens more than 0.3% above yesterday's close, buy a put. More than 0.3% below, buy a call." },
+    { id: "gap", name: "Fade the gap", what: "If SPY opens more than 0.3% above yesterday's close, buy a put. More than 0.3% below, buy a call. Skip it when the market is wild (SPY's average daily move over the last 20 days is above 0.9%)." },
   ];
   const nextWeekday = (d) => { const x = new Date(d + "T12:00:00Z"); do x.setUTCDate(x.getUTCDate() + 1); while ([0, 6].includes(x.getUTCDay())); return x.toISOString().slice(0, 10); };
   // dir for a day, given that day's open (o), yesterday's close (pc), and the previous/next trading dates
-  function edgeSignal(id, d, o, pc, prevD, nextD) {
+  // em = average |open−close| of the last 20 days; a "wild" market is one where that's over 0.9% of the price
+  function edgeSignal(id, d, o, pc, prevD, nextD, em) {
     if (id === "tom") return d.slice(5, 7) !== (nextD || nextWeekday(d)).slice(5, 7) || d.slice(5, 7) !== prevD.slice(5, 7) ? "call" : null;
+    if (em != null && em / pc > 0.009) return null;
     const g = o / pc - 1; return g > 0.003 ? "put" : g < -0.003 ? "call" : null;
   }
   // What a morning straddle costs compared with SPY's average open-to-close move of the last 20 days (1.0 = fair).
@@ -3860,7 +3862,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (let i = 20; i < D.length; i++) {
       const x = D[i], em = D.slice(i - 20, i).reduce((s, y) => s + Math.abs(y.c - y.o), 0) / 20;
       for (const rl of EDGE_RULES) {
-        const dir = edgeSignal(rl.id, x.date, x.o, D[i - 1].c, D[i - 1].date, D[i + 1]?.date); if (!dir) continue;
+        const dir = edgeSignal(rl.id, x.date, x.o, D[i - 1].c, D[i - 1].date, D[i + 1]?.date, em); if (!dir) continue;
         const pay = Math.max(dir === "call" ? x.c - x.o : x.o - x.c, 0), pl = 100 * (pay - (alpha * em) / 2 - 0.02);
         out[rl.id][x.date >= EDGE_START ? "fwd" : "past"].push({ date: x.date, dir, pl });
       }
@@ -3868,6 +3870,14 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     return out;
   }
   const edgeLine = (a) => !a.length ? `<span class="muted">no signals yet</span>` : `${a.length} trade${a.length > 1 ? "s" : ""} · won ${Math.round((a.filter((t) => t.pl > 0).length / a.length) * 100)}% · <b class="${cls(a.reduce((s, t) => s + t.pl, 0))}">${money(Math.round(a.reduce((s, t) => s + t.pl, 0) / a.length), true)}</b>/trade`;
+  // Grade every past price check: the straddle you priced vs what it was actually worth at the close. No old option prices needed.
+  function pchkGrade(D) {
+    const close = new Map(D.map((x) => [x.date, x.c])), g = [];
+    for (const q of pchkList()) { const c = close.get(q.date); if (c == null || !(q.cost > 0)) continue; g.push({ v: pchkVerdict(q).k, back: Math.abs(c - q.K) / q.cost }); }
+    if (!g.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card:</b> after each day closes, the app checks whether the options you priced were worth it. No graded checks yet.</div>`;
+    const avg = (a) => a.reduce((s, x) => s + x.back, 0) / a.length, row = (lab, a) => a.length ? `${lab}: ${a.length} day${a.length > 1 ? "s" : ""}, paid back <b class="${cls(avg(a) - 1)}">${Math.round(avg(a) * 100)}%</b> of the cost` : "";
+    return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+  }
   async function renderEdge() {
     const el = $("#edge-card"); if (!el) return;
     if (!S.mcp) { el.hidden = true; return; }
@@ -3879,17 +3889,20 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const snap = LIVE.snap && etParts(new Date(+LIVE.snap.last_trade_time)).date === today && +LIVE.snap.open > 0 ? LIVE.snap : null;
     const trading = !["Sat", "Sun"].includes(now.wd) && last.date < today;
     const chk = pchkList().filter((x) => x.date === today).pop(), pv = chk ? pchkVerdict(chk) : null;
+    const em0 = D.slice(-20).reduce((s, x) => s + Math.abs(x.c - x.o), 0) / 20, wild = em0 / last.c > 0.009;
     const todayRows = !trading ? [] : EDGE_RULES.map((rl) => {
+      if (rl.id === "gap" && wild) return { rl, txt: `The market is wild right now (SPY's average daily move is ${pct(em0 / last.c, false)}), so this rule sits out.` };
       if (rl.id === "gap") {
         if (!snap) { const pc = last.c; return { rl, txt: `Watch the open: above <b>${(pc * 1.003).toFixed(2)}</b> → buy a put. Below <b>${(pc * 0.997).toFixed(2)}</b> → buy a call.` }; }
-        const dir = edgeSignal("gap", today, +snap.open, last.c, last.date); const g = +snap.open / last.c - 1;
+        const dir = edgeSignal("gap", today, +snap.open, last.c, last.date, null, em0); const g = +snap.open / last.c - 1;
         return { rl, dir, txt: dir ? `SPY opened ${pct(g)} → <b>buy a ${dir.toUpperCase()}</b>.` : `SPY opened ${pct(g)}, inside ±0.3% → no trade.` };
       }
       const dir = edgeSignal("tom", today, 0, 0, last.date);
       return { rl, dir, txt: dir ? `Today is a turn-of-the-month day → <b>buy a CALL</b>.` : `Not a turn-of-the-month day → no trade.` };
     });
     const live = todayRows.filter((x) => x.dir);
-    const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid.`;
+    const risk = Math.round(acctSize() * 0.06);
+    const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid. ${risk >= 100 ? `Keep it under about $${risk} (6% of your account).` : `Sizing note: the books agree on risking only about 6% of the account per trade ($${risk} for you). One $1.00 option risks $100, so with real money you'd want about $1,700 before trading even one. On paper, keep going.`}`;
     const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "avoid" ? " today. Skip the candidate trades." : "."}` : `<b>First: do the price check below (30 seconds, around 9:45).</b> If options are expensive today, skip.`;
     el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Edge hunt</h2><span class="pill">paper only</span></div>
       <p class="small muted" style="margin:0 0 8px">Two rules that looked promising in a 4.7-year test but aren't proven. The app scores them every day from SPY's candles, whether or not you trade, so we'll know if they're real.</p>
@@ -3899,6 +3912,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       <div style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div><b>${esc(rl.name)}</b></div><div class="small muted" style="margin-bottom:2px">${esc(rl.what)}</div>
         <div class="small">Since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)}</div>
         <div class="small muted">Before that (${esc(D[20].date.slice(0, 4))}–2026): ${edgeLine(sc[rl.id].past)}</div></div>`).join("")}</div>
+      ${pchkGrade(D)}
       <details style="margin-top:8px"><summary class="small">How the numbers are worked out</summary><p class="small muted" style="margin-top:6px">Each trade buys at the open and sells at the close. Without old option prices, an option is priced at ${al.v.toFixed(2)}× SPY's average open-to-close move of the last 20 days (split between call and put), plus 2¢ costs. ${al.n >= 5 ? `That price level comes from your ${al.n} morning price checks.` : `That's "fair" pricing. After 5 morning price checks (you have ${al.n}), it switches to what you actually saw.`} A rule needs about 30 tracked trades before the result means much. Expect that to take 2–4 months.</p></details>`;
   }
   document.addEventListener("click", (e) => {
