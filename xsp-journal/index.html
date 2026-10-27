@@ -3590,14 +3590,29 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   // Keep strategy state the same on every device (stored in the journal's database).
   let syncT = null;
+  // Merge, never overwrite: a device with old or empty local data must not wipe what other devices saved.
+  let stratDb = null, stratReady = false;
+  const pchkKey = (x) => `${x.date}|${Math.round((x.m || 0) / 10)}`;
+  function mergePchk(a, b) { const m = new Map(); for (const x of [...(a || []), ...(b || [])]) if (x && x.date) { const k = pchkKey(x), o = m.get(k); if (!o || (x.at || 0) >= (o.at || 0)) m.set(k, x); } return [...m.values()].sort((x, y) => (x.at || 0) - (y.at || 0)).slice(-400); }
+  const mergeObj = (db, mine) => ({ ...(db || {}), ...(mine || {}) });
   function stratSync() {
     if (!S.db) return; clearTimeout(syncT);
-    syncT = setTimeout(() => { const at = Date.now(); ls.set("strat.syncAt", at); S.db.doc("strategy/state").set({ updatedAt: at, today: ls.get("strat.today", null), lib: ls.get("strat.lib", {}), hist: ls.get("strat.hist", {}), real: ls.get("real.v1", {}), prove: ls.get("prove.v1", null), auto: ls.get("strat.auto", true), pchk: ls.get("pricecheck.v1", []) }).catch(() => {}); }, 800);
+    syncT = setTimeout(() => {
+      if (!stratReady) return stratSync();   // wait until the saved copy has loaded, so it can be merged
+      const at = Date.now(), d = stratDb || {}; ls.set("strat.syncAt", at);
+      const pchk = mergePchk(d.pchk, ls.get("pricecheck.v1", [])); ls.set("pricecheck.v1", pchk);
+      S.db.doc("strategy/state").set({ updatedAt: at, today: ls.get("strat.today", null) ?? d.today ?? null, lib: mergeObj(d.lib, ls.get("strat.lib", {})), hist: mergeObj(d.hist, ls.get("strat.hist", {})), real: mergeObj(d.real, ls.get("real.v1", {})), prove: ls.get("prove.v1", null) ?? d.prove ?? null, auto: ls.get("strat.auto", true), pchk }).catch(() => {});
+    }, 800);
   }
   function stratFromDb(d) {
-    if (!d || !(d.updatedAt > (ls.get("strat.syncAt", 0) || 0))) return;
-    for (const [k, key] of [["today", "strat.today"], ["lib", "strat.lib"], ["hist", "strat.hist"], ["real", "real.v1"], ["prove", "prove.v1"], ["auto", "strat.auto"], ["pchk", "pricecheck.v1"]]) if (d[k] !== undefined && d[k] !== null) ls.set(key, d[k]);
-    ls.set("strat.syncAt", d.updatedAt); applyStrat(); renderPlan(); renderPchk(); renderRule();
+    stratDb = d; stratReady = true;
+    const merged = mergePchk(d.pchk, ls.get("pricecheck.v1", [])); ls.set("pricecheck.v1", merged);
+    if (d.updatedAt > (ls.get("strat.syncAt", 0) || 0)) {
+      for (const [k, key] of [["today", "strat.today"], ["lib", "strat.lib"], ["hist", "strat.hist"], ["real", "real.v1"], ["prove", "prove.v1"], ["auto", "strat.auto"]]) if (d[k] !== undefined && d[k] !== null) ls.set(key, ["lib", "hist", "real"].includes(k) ? mergeObj(ls.get(key, {}), d[k]) : d[k]);
+      ls.set("strat.syncAt", d.updatedAt);
+    }
+    if (merged.length > (d.pchk || []).length) stratSync();   // this device has checks the saved copy lacks
+    applyStrat(); renderPlan(); renderPchk(); renderRule(); renderEdge();
   }
   // Put today's strategy to work: Practice rule, Live check hold and exits.
   function applyStrat() {
@@ -3937,7 +3952,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
         ${!live.length && pv?.k === "go" ? `<div class="small" style="margin-top:6px"><b>Options are cheap and no rule fired.</b> Optional test trade: buy both the call and the put at the strike nearest SPY (a straddle). It wins if SPY moves more than the two cost, in either direction. Sell both at 3:50 pm.</div>` : ""}
         ${live.length && pv?.k !== "avoid" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
       <div style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div><b>${esc(rl.name)}</b></div><div class="small muted" style="margin-bottom:2px">${esc(rl.what)}</div>
-        <div class="small">Since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)}</div>
+        <div class="small">Tracked live since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)} <span class="muted">(updates after each close)</span></div>
         <div class="small muted">Before that (${esc(D[20].date.slice(0, 4))}–2026): ${edgeLine(sc[rl.id].past)}</div></div>`).join("")}</div>
       ${pchkGrade(D)}
       <details style="margin-top:8px"><summary class="small">How the numbers are worked out</summary><p class="small muted" style="margin-top:6px">Each trade buys at the open and sells at the close. Without old option prices, an option is priced at ${al.v.toFixed(2)}× SPY's average open-to-close move of the last 20 days (split between call and put), plus 2¢ costs. ${al.n >= 5 ? `That price level comes from your ${al.n} morning price checks.` : `That's "fair" pricing. After 5 morning price checks (you have ${al.n}), it switches to what you actually saw.`} A rule needs about 30 tracked trades before the result means much. Expect that to take 2–4 months.</p></details>`;
@@ -4770,7 +4785,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const onErr = () => { const b = $("#banner"); b.hidden = false; b.textContent = "Live updates stopped. Reload the page to reconnect."; };
     const listen = (coll, key) => db.collection(coll).onSnapshot((snap) => { S[key] = snap.docs.map((d) => ({ id: d.id, ...d.data() })); renderAll(); }, onErr);
     listen("trades", "trades"); listen("missed", "missed"); listen("scout", "scout"); listen("practice", "practice"); listen("reviews", "reviews");
-    db.doc("strategy/state").onSnapshot((d) => { if (d.exists) stratFromDb(d.data()); }, () => {});
+    db.doc("strategy/state").onSnapshot((d) => { if (d.exists) stratFromDb(d.data()); else { stratDb = {}; stratReady = true; } }, () => { stratReady = true; });
     db.collection("events").onSnapshot((snap) => { addDbEvents(snap.docs.map((x) => x.data())); renderPlan(); }, () => {});
     db.doc("backtest/latest").onSnapshot((d) => { S.bt = d.exists ? d.data() : null; }, () => {});
     db.doc("quiz/extra").onSnapshot((d) => { QUIZ.extra = d.exists && Array.isArray(d.data().items) ? d.data().items : []; }, () => {});
