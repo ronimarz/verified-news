@@ -3875,7 +3875,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   function pchkVerdict(r) {
     return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than SPY is likely to make. Sit out, take only your best (A-grade) setups, or take profits sooner." }
       : r.ratio <= 0.85 ? { k: "go", cls: "good", word: "Cheap", todo: "Options look cheap for a day like this. Buying has better odds than usual, so your plan's signals are worth taking." }
-      : { k: "info", cls: "", word: "About fair", todo: "Normal pricing. Trade your plan as usual." };
+      : { k: "info", cls: "", word: "About fair", todo: "Fair isn't good enough: on fair days the straddle still lost money. Skip today and only buy when options are cheap." };
   }
   // ---------- edge hunt: candidate rules, scored automatically from daily candles ----------
   // Picked from a 4.7-year test (2022–2026): each held up in both halves but neither is proven. Paper only.
@@ -3944,13 +3944,13 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const live = todayRows.filter((x) => x.dir);
     const risk = Math.round(acctSize() * 0.06);
     const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid. ${risk >= 100 ? `Keep it under about $${risk} (6% of your account).` : `Sizing note: the books agree on risking only about 6% of the account per trade ($${risk} for you). One $1.00 option risks $100, so with real money you'd want about $1,700 before trading even one. On paper, keep going.`}`;
-    const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "avoid" ? " today. Skip the candidate trades." : "."}` : `<b>First: do the price check above (30 seconds, around 9:45).</b> If options are expensive today, skip.`;
+    const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "go" ? ". A rule signal below can be taken." : " today. Only cheap days are traded, so skip."}` : `<b>First: do the price check above (30 seconds, around 9:45).</b> Only trade if it says cheap.`;
     el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Edge hunt</h2><span class="pill">paper only</span></div>
       <p class="small muted" style="margin:0 0 8px">Two rules that looked promising in a 4.7-year test but aren't proven. The app scores them every day from SPY's candles, whether or not you trade, so we'll know if they're real.</p>
       ${trading ? `<div class="yours"><div class="label">Today</div>${priceLine ? `<div class="small" style="margin:4px 0">${priceLine}</div>` : ""}
         ${todayRows.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.rl.name)}:</b> ${x.txt}</div>`).join("")}
         ${!live.length && pv?.k === "go" ? `<div class="small" style="margin-top:6px"><b>Options are cheap and no rule fired.</b> Optional test trade: buy both the call and the put at the strike nearest SPY (a straddle). It wins if SPY moves more than the two cost, in either direction. Sell both at 3:50 pm.</div>` : ""}
-        ${live.length && pv?.k !== "avoid" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
+        ${live.length && pv?.k === "go" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
       <div style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div><b>${esc(rl.name)}</b></div><div class="small muted" style="margin-bottom:2px">${esc(rl.what)}</div>
         <div class="small">Tracked live since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)} <span class="muted">(updates after each close)</span></div>
         <div class="small muted">Before that (${esc(D[20].date.slice(0, 4))}–2026): ${edgeLine(sc[rl.id].past)}</div></div>`).join("")}</div>
