@@ -3930,7 +3930,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     return r;
   }
   function pchkVerdict(r) {
-    return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than SPY is likely to make. Sit out, take only your best (A-grade) setups, or take profits sooner." }
+    return r.ratio >= 1.2 ? { k: "avoid", cls: "bad", word: "Expensive", todo: "Buying is a worse bet than usual today. Options are charging for more movement than SPY is likely to make. Skip today: only cheap days are traded." }
       : r.ratio <= 0.85 ? { k: "go", cls: "good", word: "Cheap", todo: "Options look cheap for a day like this. Buying has better odds than usual, so your plan's signals are worth taking." }
       : { k: "info", cls: "", word: "About fair", todo: "Fair isn't good enough: on fair days the straddle still lost money. Skip today and only buy when options are cheap." };
   }
