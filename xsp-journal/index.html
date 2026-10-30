@@ -3836,15 +3836,17 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   // ---------- expected move: how far SPY usually travels from now to the close ----------
   // Tested on 6 months of 5-minute candles (Oct 2026): the last 5 days beat 20-day and look-alike averages early in the day;
-  // after 10:15 how busy the morning was helps; news days move ~1.3x more, Fed days ~2.5x before 2 pm, ordinary days ~0.87x.
-  const EM = { date: null, days: null, loading: null };
+  // after 10:15 how busy the morning was helps; news days move ~1.3x more, ordinary days ~0.87x. Fed days were 2.5x
+  // (from only 3 past days) but overshot on Oct 28, 2026, so they now count as an ordinary news day until more data is in.
+  const EM = { date: null, days: null, byDate: new Map(), loading: null };
   async function loadEM() {
     const today = etParts().date; if (EM.date === today && EM.days) return EM.days;
     if (EM.loading) return EM.loading;
     EM.loading = (async () => {
-      const D = (await loadDailyAll()).filter((x) => x.date < today), dates = D.slice(-22).map((x) => x.date);
+      const D = (await loadDailyAll()).filter((x) => x.date < today), dates = D.slice(-30).map((x) => x.date);
       const M = await load5m(dates);
-      EM.days = dates.map((d) => M.get(d)).filter((b) => b && b.length >= 70).slice(-20); EM.date = today; return EM.days;
+      EM.byDate = new Map(dates.map((d) => [d, M.get(d)]).filter(([, b]) => b && b.length >= 70));
+      EM.days = [...EM.byDate.values()].slice(-20); EM.date = today; return EM.days;
     })().finally(() => { EM.loading = null; });
     return EM.loading;
   }
@@ -3857,18 +3859,73 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     let base, how;
     if (mm < 615 || !(hi > lo)) { base = avg(rows.slice(-5).map((x) => x.rest)); how = "the last 5 days"; }
     else { const e = avg(rows.map((x) => x.early).filter((x) => x > 0)), act = Math.max(0.5, Math.min(2.5, (hi - lo) / P / e)); base = avg(rows.map((x) => x.rest)) * Math.sqrt(act); how = `the last 20 days, adjusted for how busy this morning was (${act > 1.15 ? "busier than usual" : act < 0.85 ? "quieter than usual" : "about normal"})`; }
-    const ev = evMain(etParts().date), fedLater = ev === "FOMC" && m < 840;
-    const mult = fedLater ? 2.5 : ev ? 1.3 : 0.87;
-    const why = fedLater ? "Fed decision at 2 pm: days like this have moved about 2.5× more than usual" : ev ? `${EVENT_NAME[ev] || ev} day: news days have moved about 1.3× more than usual` : "No big scheduled news today: quiet days move a bit less than average";
+    const { mult, why } = emMult(etParts().date);
     return { usd: base * mult * P, pct: base * mult, m: mm, how, why, mult, n: days.length };
   }
-  function priceCheck(q) {
+  function emMult(date) {
+    const ev = evMain(date);
+    return { mult: ev ? 1.3 : 0.87, why: ev === "FOMC" ? "Fed decision day: counted like other news days (about 1.3× a normal move). The old 2.5× overshot on Oct 28" : ev ? `${EVENT_NAME[ev] || ev} day: news days have moved about 1.3× more than usual` : "No big scheduled news today: quiet days move a bit less than average" };
+  }
+  // The same early-morning estimate (average of the 5 days before) for a past date, used to back-fill missed checks.
+  function emOn(date, mm, P) {
+    const prior = [...EM.byDate.keys()].filter((d) => d < date).slice(-5); if (prior.length < 5 || !(P > 0)) return null;
+    const at = (b, t) => (b.filter((x) => x.m + 5 <= t).pop() || b[0]);
+    const base = prior.reduce((s, d) => { const b = EM.byDate.get(d), a = at(b, mm); return s + Math.abs(b[b.length - 1].c - a.c) / a.c; }, 0) / prior.length;
+    return base * emMult(date).mult * P;
+  }
+
+  // ---------- live option prices (Webull OPRA) ----------
+  const optSym = (date, cp, K) => `${U()}${date.slice(2, 4)}${date.slice(5, 7)}${date.slice(8, 10)}${cp}${String(Math.round(K * 1000)).padStart(8, "0")}`;
+  const optMid = (x) => { const b = num(x?.bid), a = num(x?.ask); return b != null && a != null && a > 0 ? (a + b) / 2 : num(x?.price); };
+  async function liveStraddle() {
+    const P = LIVE.snap ? +LIVE.snap.price : null; if (!(P > 0)) throw Object.assign(new Error("no SPY price yet"), { code: "no_price" });
+    const K = Math.round(P), d = etParts().date;
+    const r = await S.mcp.callTool("Webull", "get_option_snapshot", { symbols: `${optSym(d, "C", K)},${optSym(d, "P", K)}`, category: "US_OPTION" }, { cache: false });
+    const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
+    const c = optMid(arr.find((x) => /C\d{8}$/.test(x.symbol || ""))), p = optMid(arr.find((x) => /P\d{8}$/.test(x.symbol || "")));
+    if (c == null || p == null) throw Object.assign(new Error("no quote"), { code: "no_quote" });
+    return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3) };
+  }
+  const liveErrMsg = (e) => e?.code === "no_price" ? "Waiting for SPY's price from Webull. Try again in a moment." : e?.code === "no_quote" ? "Webull had no quote for today's options at that strike. Enter the prices by hand." : /SUBSCRIBED|permission/i.test(String(e?.message || "")) ? "Webull refused option prices (the OPRA subscription for the API may have lapsed). Enter the prices by hand." : "Couldn't get option prices from Webull. Enter them by hand or paste a screenshot.";
+  async function runLivePchk(source) {
+    const q = await liveStraddle(); const r = priceCheck(q, source);
+    if (!r.err) { renderPchk(); renderEdge(); }
+    return r;
+  }
+  // Record the 9:45 check by itself if the app is open then and nothing was recorded yet.
+  async function autoPchk() {
+    const now = etParts(); if (!S.mcp || !marketOpen() || now.min < 585 || now.min > 600 || !EM.days) return;
+    if (pchkList().some((x) => x.date === now.date)) return;
+    try { const r = await runLivePchk("auto"); if (!r.err) toast("Today's 9:45 price check was recorded automatically from Webull."); } catch {}
+  }
+  // Fill in missed mornings from Webull's 5-minute option bars (expired options stay available for about a week).
+  let backfilled = false;
+  async function backfillPchk() {
+    if (backfilled || !S.mcp || !EM.byDate.size) return; backfilled = true;
+    const have = new Set(pchkList().map((x) => x.date)), today = etParts().date, add = [];
+    const recent = [...EM.byDate.keys()].filter((d) => d < today && d >= EDGE_START).slice(-5).filter((d) => !have.has(d));
+    for (const d of recent) {
+      try {
+        const b = EM.byDate.get(d), bar = b.filter((x) => x.m + 5 <= 585).pop(); if (!bar) continue;
+        const S0 = bar.c, K = Math.round(S0), paid = emOn(d, 585, S0); if (!paid) continue;
+        const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: `${optSym(d, "C", K)},${optSym(d, "P", K)}`, category: "US_OPTION", timespan: "M5", start_time: d + "T13:00:00Z", end_time: d + "T15:30:00Z", count: "40" }, LONG_CACHE);
+        const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
+        const px = (cp) => { const s = arr.find((x) => new RegExp(cp + "\\d{8}$").test(x.symbol || "")); const row = (s?.result || []).find((x) => etParts(new Date(x.time)).min === 580); return row ? num(row.close) : null; };
+        const c = px("C"), p = px("P"); if (c == null || p == null) continue;
+        add.push({ date: d, m: 585, S: S0, K, call: c, put: p, cost: c + p, paid, n: 5, ratio: (c + p) / paid, model: "em2", source: "auto-backfill (last trade at 9:45)", at: Date.parse(d + "T14:45:00Z") });
+      } catch {}
+    }
+    if (!add.length) return;
+    ls.set("pricecheck.v1", mergePchk(pchkList(), add)); stratSync(); renderPchk(); renderEdge();
+    toast(`Filled in ${add.length} missed price check${add.length > 1 ? "s" : ""} from Webull.`);
+  }
+  function priceCheck(q, source) {
     const m = Math.max(570, Math.min(etParts().min, 945)), K = q.K, S = q.S, cost = q.call + q.put;
     if (!(cost > 0) || !(S > 0) || !(K > 0)) return { err: "Enter both prices, the strike and SPY's price." };
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
     const sn = LIVE.snap, e = expectedMove(m, S, sn ? +sn.high : null, sn ? +sn.low : null);
     if (!e) return { err: "Still loading SPY's recent candles from Webull. Try again in a few seconds." };
-    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em1", at: Date.now() };
+    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now() };
     const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
@@ -3994,7 +4051,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
           <div class="field"><label for="pc-c">Call price</label><input id="pc-c" type="number" step="0.01" min="0" value="${esc(keep("pc-c"))}"></div>
           <div class="field"><label for="pc-p">Put price</label><input id="pc-p" type="number" step="0.01" min="0" value="${esc(keep("pc-p"))}"></div>
         </div>
-        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="pc-run">Check</button><button class="btn" type="button" data-shot-paste>Paste chain screenshot</button><button class="btn" type="button" data-shot-pick>Choose a photo</button></div>
+        <div class="row" style="margin-top:8px"><button class="btn primary" type="button" id="pc-live">Get live prices &amp; check</button><button class="btn" type="button" id="pc-run">Check typed prices</button><button class="btn" type="button" data-shot-paste>Paste chain screenshot</button><button class="btn" type="button" data-shot-pick>Choose a photo</button></div>
         <div class="shot-out small" style="margin-top:8px"></div>
       </details>${histTxt}`;
   }
@@ -4004,6 +4061,13 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     renderPchk(); renderPlan(); spotlight("#pchk-card");
   }
   document.addEventListener("click", (e) => { if (e.target.closest("[data-pchk-go]")) { e.preventDefault(); const d = $("#pchk-card details"); if (d) d.open = true; spotlight("#pchk-card"); } });
+  document.addEventListener("click", async (e) => {
+    if (e.target.id !== "pc-live") return;
+    const b = e.target; b.disabled = true; b.textContent = "Getting prices…";
+    try { const r = await runLivePchk("live"); if (r.err) { const o = $("#pchk-card .shot-out"); if (o) o.innerHTML = `<span style="color:var(--warn)">${esc(r.err)}</span>`; } else spotlight("#pchk-card"); }
+    catch (err) { const o = $("#pchk-card .shot-out"); if (o) o.innerHTML = `<span style="color:var(--warn)">${esc(liveErrMsg(err))}</span>`; else toast(liveErrMsg(err)); }
+    finally { if (b.isConnected) { b.disabled = false; b.textContent = "Get live prices & check"; } }
+  });
   document.addEventListener("click", (e) => {
     if (e.target.id !== "pc-run") return;
     runPchk({ K: num($("#pc-k").value), call: num($("#pc-c").value), put: num($("#pc-p").value), S: LIVE.snap ? +LIVE.snap.price : num($("#pc-k").value) });
@@ -4800,8 +4864,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     // Retry a failed Webull request a couple of times (busy servers, brief network drops) before giving up.
     const WB_FATAL = ["server_not_connected", "needs_reauth", "not_in_manifest"];
     S.mcp = { callTool: async (...a) => { let last; for (let k = 0; k < 3; k++) { try { return await mcp.callTool(...a); } catch (e) { last = e; if (WB_FATAL.includes(e?.code)) throw e; await new Promise((r) => setTimeout(r, 700 * (k + 1) ** 2)); } } throw last; } };
-    schedulePoll(0); renderPchk(); loadEM().then(() => renderPchk()).catch(() => {}); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
-    setInterval(() => { const c = $("#pchk-card"); if (c && !c.contains(document.activeElement) && !c.querySelector(".shot-out:not(:empty)")) renderPchk(); }, 60000);
+    schedulePoll(0); renderPchk(); loadEM().then(() => { renderPchk(); backfillPchk(); autoPchk(); }).catch(() => {}); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
+    setInterval(() => { autoPchk(); const c = $("#pchk-card"); if (c && !c.contains(document.activeElement) && !c.querySelector(".shot-out:not(:empty)")) renderPchk(); }, 60000);
     if (view === "practice") rpInitDates();
   })();
 })();
