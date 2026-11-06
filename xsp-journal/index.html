@@ -3875,16 +3875,18 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
 
   // ---------- live option prices (Webull OPRA) ----------
+  const WING = 5;   // the protected seller's "wings": $5 either side of the strike
   const optSym = (date, cp, K) => `${U()}${date.slice(2, 4)}${date.slice(5, 7)}${date.slice(8, 10)}${cp}${String(Math.round(K * 1000)).padStart(8, "0")}`;
   const optMid = (x) => { const b = num(x?.bid), a = num(x?.ask); return b != null && a != null && a > 0 ? (a + b) / 2 : num(x?.price); };
   async function liveStraddle() {
     const P = LIVE.snap ? +LIVE.snap.price : null; if (!(P > 0)) throw Object.assign(new Error("no SPY price yet"), { code: "no_price" });
     const K = Math.round(P), d = etParts().date;
-    const r = await S.mcp.callTool("Webull", "get_option_snapshot", { symbols: `${optSym(d, "C", K)},${optSym(d, "P", K)}`, category: "US_OPTION" }, { cache: false });
-    const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
-    const c = optMid(arr.find((x) => /C\d{8}$/.test(x.symbol || ""))), p = optMid(arr.find((x) => /P\d{8}$/.test(x.symbol || "")));
+    const sc = optSym(d, "C", K), sp = optSym(d, "P", K), wc = optSym(d, "C", K + WING), wp = optSym(d, "P", K - WING);
+    const r = await S.mcp.callTool("Webull", "get_option_snapshot", { symbols: [sc, sp, wc, wp].join(","), category: "US_OPTION" }, { cache: false });
+    const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [], q = (sym) => optMid(arr.find((x) => x.symbol === sym));
+    const c = q(sc), p = q(sp), wC = q(wc), wP = q(wp);
     if (c == null || p == null) throw Object.assign(new Error("no quote"), { code: "no_quote" });
-    return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3) };
+    return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3), ...(wC != null && wP != null ? { W: WING, wingC: +wC.toFixed(3), wingP: +wP.toFixed(3) } : {}) };
   }
   const liveErrMsg = (e) => e?.code === "no_price" ? "Waiting for SPY's price from Webull. Try again in a moment." : e?.code === "no_quote" ? "Webull had no quote for today's options at that strike. Enter the prices by hand." : /SUBSCRIBED|permission/i.test(String(e?.message || "")) ? "Webull refused option prices (the OPRA subscription for the API may have lapsed). Enter the prices by hand." : "Couldn't get option prices from Webull. Enter them by hand or paste a screenshot.";
   async function runLivePchk(source) {
@@ -3908,11 +3910,12 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       try {
         const b = EM.byDate.get(d), bar = b.filter((x) => x.m + 5 <= 585).pop(); if (!bar) continue;
         const S0 = bar.c, K = Math.round(S0), paid = emOn(d, 585, S0); if (!paid) continue;
-        const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: `${optSym(d, "C", K)},${optSym(d, "P", K)}`, category: "US_OPTION", timespan: "M5", start_time: d + "T13:00:00Z", end_time: d + "T15:30:00Z", count: "40" }, LONG_CACHE);
+        const syms = [optSym(d, "C", K), optSym(d, "P", K), optSym(d, "C", K + WING), optSym(d, "P", K - WING)];
+        const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: syms.join(","), category: "US_OPTION", timespan: "M5", start_time: d + "T13:00:00Z", end_time: d + "T15:30:00Z", count: "40" }, LONG_CACHE);
         const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
-        const px = (cp) => { const s = arr.find((x) => new RegExp(cp + "\\d{8}$").test(x.symbol || "")); const row = (s?.result || []).find((x) => etParts(new Date(x.time)).min === 580); return row ? num(row.close) : null; };
-        const c = px("C"), p = px("P"); if (c == null || p == null) continue;
-        add.push({ date: d, m: 585, S: S0, K, call: c, put: p, cost: c + p, paid, n: 5, ratio: (c + p) / paid, model: "em2", source: "auto-backfill (last trade at 9:45)", at: Date.parse(d + "T14:45:00Z") });
+        const px = (sym) => { const s = arr.find((x) => x.symbol === sym); const row = (s?.result || []).find((x) => etParts(new Date(x.time)).min === 580); return row ? num(row.close) : null; };
+        const [c, p, wC, wP] = syms.map(px); if (c == null || p == null) continue;
+        add.push({ date: d, m: 585, S: S0, K, call: c, put: p, cost: c + p, paid, n: 5, ratio: (c + p) / paid, model: "em2", source: "auto-backfill (last trade at 9:45)", at: Date.parse(d + "T14:45:00Z"), ...(wC != null && wP != null ? { W: WING, wingC: wC, wingP: wP } : {}) });
       } catch {}
     }
     if (!add.length) return;
@@ -3925,7 +3928,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
     const sn = LIVE.snap, e = expectedMove(m, S, sn ? +sn.high : null, sn ? +sn.low : null);
     if (!e) return { err: "Still loading SPY's recent candles from Webull. Try again in a few seconds." };
-    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now() };
+    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now(), ...(q.W ? { W: q.W, wingC: q.wingC, wingP: q.wingP } : {}) };
     const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
@@ -3974,7 +3977,20 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const q of pchkList()) { const c = close.get(q.date); if (c == null || !(q.cost > 0)) continue; g.push({ v: pchkVerdict(q).k, back: Math.abs(c - q.K) / q.cost }); }
     if (!g.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card:</b> after each day closes, the app checks whether the options you priced were worth it. No graded checks yet.</div>`;
     const avg = (a) => a.reduce((s, x) => s + x.back, 0) / a.length, row = (lab, a) => a.length ? `${lab}: ${a.length} day${a.length > 1 ? "s" : ""}, paid back <b class="${cls(avg(a) - 1)}">${Math.round(avg(a) * 100)}%</b> of the cost` : "";
-    return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+    return sellerBoard(close) + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+  }
+  // Paper "seller" side: the same mornings graded as if you had SOLD instead of bought. One check per day (the first).
+  function sellerBoard(close) {
+    const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && close.has(q.date) && q.date >= EDGE_START && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
+    const days = [...first.values()]; if (!days.length) return "";
+    const naked = days.map((q) => (q.cost - Math.abs(close.get(q.date) - q.K)) * 100 - 4);
+    const prot = days.filter((q) => q.W && q.wingC != null && q.wingP != null).map((q) => (q.cost - q.wingC - q.wingP - Math.min(Math.abs(close.get(q.date) - q.K), q.W)) * 100 - 8);
+    const line = (a) => { const avg = a.reduce((x, y) => x + y, 0) / a.length; return `${a.length} day${a.length > 1 ? "s" : ""} · won ${Math.round((a.filter((x) => x > 0).length / a.length) * 100)}% · avg <b class="${cls(avg)}">${money(Math.round(avg), true)}</b> · worst <span class="${cls(Math.min(...a))}">${money(Math.round(Math.min(...a)), true)}</span>`; };
+    return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Seller scoreboard</b> <span class="pill">paper only</span><br>
+      The same mornings, as if you had <b>sold</b> the call + put instead of buying them.<br>
+      <b>Protected</b> (iron butterfly: also buy the $${WING} wings, so the most you can lose is capped): ${prot.length ? line(prot) : `<span class="muted">starts filling from the next checks (wing prices weren't recorded before)</span>`}<br>
+      <span class="muted">Unprotected (for comparison only, needs a large margin account): ${line(naked)}</span><br>
+      <span class="muted">Per 1 set, held to the close, after rough fees. Selling wins small most days and loses big on crash days, so the worst day matters as much as the average.</span></div>`;
   }
   async function renderEdge() {
     const el = $("#edge-card"); if (!el) return;
