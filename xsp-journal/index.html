@@ -3828,7 +3828,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // ---------- price check: are options cheap or expensive today? ----------
   // An at-the-money call + put (a "straddle") pays |SPY at the close − strike|. Its price is the move the market is charging for.
   // Compare it with what that same straddle would actually have paid, bought at this time, on the days most like today.
-  const pchkList = () => ls.get("pricecheck.v1", []);
+  const pchkRaw = () => ls.get("pricecheck.v1", []);
+  const pchkList = () => pchkRaw().filter((x) => !x.void);   // a voided check (e.g. taken after the close) is kept but ignored
   function straddlePaid(L, S, K, m) {
     const pays = [];
     for (const c of L?.near || []) { const B = c.bars; if (!B?.length) continue; const at = B.filter((b) => b.m <= m).pop() || B[0], end = B[B.length - 1].c; pays.push(Math.abs(S * (end / at.c) - K)); }
@@ -3919,17 +3920,18 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       } catch {}
     }
     if (!add.length) return;
-    ls.set("pricecheck.v1", mergePchk(pchkList(), add)); stratSync(); renderPchk(); renderEdge();
+    ls.set("pricecheck.v1", mergePchk(pchkRaw(), add)); stratSync(); renderPchk(); renderEdge();
     toast(`Filled in ${add.length} missed price check${add.length > 1 ? "s" : ""} from Webull.`);
   }
   function priceCheck(q, source) {
+    if (!marketOpen()) return { err: "The market is closed. Price checks only count between 9:30 am and 4:00 pm ET, while today's options are trading." };
     const m = Math.max(570, Math.min(etParts().min, 945)), K = q.K, S = q.S, cost = q.call + q.put;
     if (!(cost > 0) || !(S > 0) || !(K > 0)) return { err: "Enter both prices, the strike and SPY's price." };
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
     const sn = LIVE.snap, e = expectedMove(m, S, sn ? +sn.high : null, sn ? +sn.low : null);
     if (!e) return { err: "Still loading SPY's recent candles from Webull. Try again in a few seconds." };
     const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now(), ...(q.W ? { W: q.W, wingC: q.wingC, wingP: q.wingP } : {}) };
-    const list = pchkList().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
+    const list = pchkRaw().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
   function pchkVerdict(r) {
