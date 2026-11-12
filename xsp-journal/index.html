@@ -3880,16 +3880,22 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   const optSym = (date, cp, K) => `${U()}${date.slice(2, 4)}${date.slice(5, 7)}${date.slice(8, 10)}${cp}${String(Math.round(K * 1000)).padStart(8, "0")}`;
   const optMid = (x) => { const b = num(x?.bid), a = num(x?.ask); return b != null && a != null && a > 0 ? (a + b) / 2 : num(x?.price); };
   async function liveStraddle() {
-    const P = LIVE.snap ? +LIVE.snap.price : null; if (!(P > 0)) throw Object.assign(new Error("no SPY price yet"), { code: "no_price" });
-    const K = Math.round(P), d = etParts().date;
+    if (etParts().min < 580) throw Object.assign(new Error("too early"), { code: "too_early" });
+    const sn = await S.mcp.callTool("Webull", "get_stock_snapshot", { symbols: U(), category: "US_ETF", extend_hour_required: false, overnight_required: false }, { cache: false });
+    const snap = Array.isArray(sn.payload) ? sn.payload[0] : null, P = snap ? +snap.price : null, d = etParts().date;
+    const fresh = snap && etParts(new Date(+snap.last_trade_time)).date === d && etParts(new Date(+snap.last_trade_time)).min >= 570;
+    if (!(P > 0) || !fresh) throw Object.assign(new Error("no fresh SPY price"), { code: "no_price" });
+    LIVE.snap = snap;
+    const K = Math.round(P);
     const sc = optSym(d, "C", K), sp = optSym(d, "P", K), wc = optSym(d, "C", K + WING), wp = optSym(d, "P", K - WING);
     const r = await S.mcp.callTool("Webull", "get_option_snapshot", { symbols: [sc, sp, wc, wp].join(","), category: "US_OPTION" }, { cache: false });
     const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [], q = (sym) => optMid(arr.find((x) => x.symbol === sym));
     const c = q(sc), p = q(sp), wC = q(wc), wP = q(wp);
     if (c == null || p == null) throw Object.assign(new Error("no quote"), { code: "no_quote" });
+    if (Math.abs(c - p) > Math.max(1, 0.4 * (c + p))) throw Object.assign(new Error("off-center"), { code: "off_center" });
     return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3), ...(wC != null && wP != null ? { W: WING, wingC: +wC.toFixed(3), wingP: +wP.toFixed(3) } : {}) };
   }
-  const liveErrMsg = (e) => e?.code === "no_price" ? "Waiting for SPY's price from Webull. Try again in a moment." : e?.code === "no_quote" ? "Webull had no quote for today's options at that strike. Enter the prices by hand." : /SUBSCRIBED|permission/i.test(String(e?.message || "")) ? "Webull refused option prices (the OPRA subscription for the API may have lapsed). Enter the prices by hand." : "Couldn't get option prices from Webull. Enter them by hand or paste a screenshot.";
+  const liveErrMsg = (e) => e?.code === "too_early" ? "Too early: option prices are jumpy in the first 10 minutes. Check from 9:40 on (9:45 is the standard time)." : e?.code === "off_center" ? "The call and put prices are far apart, so SPY has moved away from that strike. Try again in a moment." : e?.code === "no_price" ? "Waiting for SPY's price from Webull. Try again in a moment." : e?.code === "no_quote" ? "Webull had no quote for today's options at that strike. Enter the prices by hand." : /SUBSCRIBED|permission/i.test(String(e?.message || "")) ? "Webull refused option prices (the OPRA subscription for the API may have lapsed). Enter the prices by hand." : "Couldn't get option prices from Webull. Enter them by hand or paste a screenshot.";
   async function runLivePchk(source) {
     const q = await liveStraddle(); const r = priceCheck(q, source);
     if (!r.err) { renderPchk(); renderEdge(); }
@@ -3925,6 +3931,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   function priceCheck(q, source) {
     if (!marketOpen()) return { err: "The market is closed. Price checks only count between 9:30 am and 4:00 pm ET, while today's options are trading." };
+    if (etParts().min < 580) return { err: "Too early: option prices are jumpy in the first 10 minutes. Check from 9:40 on (9:45 is the standard time)." };
     const m = Math.max(570, Math.min(etParts().min, 945)), K = q.K, S = q.S, cost = q.call + q.put;
     if (!(cost > 0) || !(S > 0) || !(K > 0)) return { err: "Enter both prices, the strike and SPY's price." };
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
