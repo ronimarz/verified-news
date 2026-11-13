@@ -4047,6 +4047,16 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     try { const path = await straddlePath(q); if (path.length) { Object.assign(TODAY_PATH, { date: now.date, path }); renderEdge(); } } catch {}
   }
   // A small chart of the straddle's gain or loss through the day, measured from the morning check's price.
+  function profitWindows(q, path) {
+    const pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]), out = {};
+    for (const lvl of [0, 0.1, 0.25]) {
+      let mins = 0, first = null, run = 0, best = 0;
+      for (const [m, g] of pts) { if (g > lvl) { mins += 5; run += 5; best = Math.max(best, run); if (first == null) first = m; } else run = 0; }
+      out[lvl] = { mins, first, longest: best };
+    }
+    return out;
+  }
+  const fmtMins = (n) => n >= 60 ? `${Math.floor(n / 60)} h ${n % 60 ? (n % 60) + " min" : ""}`.trim() : `${n} min`;
   function pathChart(q, path, live) {
     const W = 300, H = 64, t0 = q.m, t1 = 960, pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]);
     if (pts.length < 2) return "";
@@ -4061,7 +4071,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
         <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
         <circle cx="${X(peak[0]).toFixed(1)}" cy="${Y(peak[1]).toFixed(1)}" r="2.5" fill="var(--gain)"/>
       </svg>
-      <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtClock(t0)}</span><span>dashed lines: +25% and +50%</span><span>4:00 pm</span></div></div>`;
+      <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtClock(t0)}</span><span>dashed lines: +25% and +50%</span><span>4:00 pm</span></div>
+      ${(() => { const w = profitWindows(q, path), seg = (lvl, lab) => w[lvl].mins ? `${lab}: <b>${fmtMins(w[lvl].mins)}</b> (from ${fmtClock(w[lvl].first)}, longest stretch ${fmtMins(w[lvl].longest)})` : `${lab}: <b>never</b>`; return `<div class="small" style="margin-top:2px">${seg(0, "In profit")} · ${seg(0.1, "Up 10%+")} · ${seg(0.25, "Up 25%+")}</div>`; })()}</div>`;
   }
   function pathCharts() {
     const today = etParts().date, list = [];
@@ -4069,7 +4080,9 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && q.path?.length && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
     for (const q of [...first.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)) list.push(pathChart(q, q.path, false));
     const body = list.filter(Boolean).join("");
-    return body ? `<details style="margin-top:8px" open><summary class="small"><b>When were profits available?</b> The morning straddle through each day</summary>${body}</details>` : "";
+    const past = [...first.values()], sum = (lvl) => { const w = past.map((q) => profitWindows(q, q.path)[lvl]); const hit = w.filter((x) => x.mins > 0); return { n: past.length, hit: hit.length, avg: hit.length ? Math.round(hit.reduce((a, b) => a + b.mins, 0) / hit.length / 5) * 5 : 0 }; };
+    const sumLine = past.length ? (() => { const a = sum(0), b = sum(0.1), c = sum(0.25); return `<div class="small" style="margin:6px 0">Across ${a.n} day${a.n > 1 ? "s" : ""}: in profit at some point on <b>${a.hit}</b> (for about ${fmtMins(a.avg)} on those days) · up 10%+ on <b>${b.hit}</b> (about ${fmtMins(b.avg)}) · up 25%+ on <b>${c.hit}</b> (about ${fmtMins(c.avg)}).</div>`; })() : "";
+    return body ? `<details style="margin-top:8px" open><summary class="small"><b>When were profits available, and for how long?</b> The morning straddle through each day</summary>${sumLine}${body}</details>` : "";
   }
   // Fetch the straddle's path for recent checks that don't have one yet (after that day's close).
   let pathsBusy = false;
