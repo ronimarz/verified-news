@@ -3986,23 +3986,27 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const q of pchkList()) { const c = close.get(q.date); if (c == null || !(q.cost > 0)) continue; g.push({ v: pchkVerdict(q).k, back: Math.abs(c - q.K) / q.cost }); }
     if (!g.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card:</b> after each day closes, the app checks whether the options you priced were worth it. No graded checks yet.</div>`;
     const avg = (a) => a.reduce((s, x) => s + x.back, 0) / a.length, row = (lab, a) => a.length ? `${lab}: ${a.length} day${a.length > 1 ? "s" : ""}, paid back <b class="${cls(avg(a) - 1)}">${Math.round(avg(a) * 100)}%</b> of the cost` : "";
-    return pathCharts() + sellerBoard(close) + exitBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+    return pathCharts() + sellerBoard(close) + exitBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (was the price right for the whole day? Straddle you priced vs what it was worth at the close; over 100% means options were underpriced. For trading results, see the exit-rule scoreboard):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
   }
   // Paper "seller" side: the same mornings graded as if you had SOLD instead of bought. One check per day (the first).
   // ---------- exit-rule scoreboard: the buyer's straddle replayed through the day under rules fixed in advance ----------
   // Each check stores the straddle's 5-minute path (call + put, last trade per bar) from the check to the close, fetched
   // from Webull after that day ends (Webull keeps expired options for about a week). Exits use bar closes, never highs.
+  // Quick exits first: most 0DTE buyers are out within minutes. Hold-to-close is kept only as a reference line.
   const EXIT_RULES = [
-    { id: "hold", name: "Hold to 3:50" },
-    { id: "tp25", name: "Take profit at +25%", tp: 1.25 },
-    { id: "tp50", name: "Take profit at +50%", tp: 1.5 },
+    { id: "q15", name: "Quick: +10% target, else out after 15 min", tp: 1.1, max: 15 },
+    { id: "q30", name: "Quick: +20% target, else out after 30 min", tp: 1.2, max: 30 },
+    { id: "s15", name: "Sell after 15 min, no target", max: 15 },
+    { id: "tp25", name: "Take profit at +25% (any time)", tp: 1.25 },
     { id: "tpsl", name: "+50% target or −50% stop", tp: 1.5, sl: 0.5 },
     { id: "t11", name: "Sell at 11:00", at: 660 },
+    { id: "hold", name: "Hold to 3:50 (reference only)", ref: true },
   ];
   function exitValue(q, rule) {
     const path = (q.path || []).filter((x) => x[0] <= 950), cost = q.cost;   // path times are bar END minutes; 950 = 3:50 pm
     if (!path.length) return null;
     for (const [m, v] of path) {
+      if (rule.max != null && m - q.m >= rule.max) return v;
       if (rule.at != null && m >= rule.at) return v;
       if (rule.tp && v >= cost * rule.tp) return v;
       if (rule.sl && v <= cost * rule.sl) return v;
@@ -4016,10 +4020,10 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const rows = EXIT_RULES.map((rl) => {
       const res = days.map((q) => { const v = exitValue(q, rl); return v == null ? null : (v - q.cost) / q.cost - 0.04 / q.cost; }).filter((x) => x != null);
       const avg = res.reduce((a, b) => a + b, 0) / res.length;
-      return `<tr><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
+      return `<tr${rl.ref ? ' class="muted"' : ""}><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
     }).join("");
     return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Exit-rule scoreboard</b> <span class="pill">paper only</span><br>
-      If you had bought the call + put at each morning check (${days.length} day${days.length > 1 ? "s" : ""}), how each exit rule would have done. Rules are fixed in advance, so no hindsight.
+      If you had bought the call + put at each morning check (${days.length} day${days.length > 1 ? "s" : ""}), how each exit rule would have done. The quick rules match how 0DTE is usually traded: in and out within minutes. Rules are fixed in advance, so no hindsight. Times are in 5-minute steps.
       <div class="tbl-wrap" style="margin-top:6px"><table class="small"><thead><tr><th style="text-align:left">Exit rule</th><th>Won</th><th>Average</th><th>Worst</th></tr></thead><tbody>${rows}</tbody></table></div>
       <span class="muted">Uses the last trade in each 5-minute bar, so a real fill could be a little better or worse. Needs many days before one rule can be trusted over another.</span></div>`;
   }
