@@ -3893,7 +3893,9 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const c = q(sc), p = q(sp), wC = q(wc), wP = q(wp);
     if (c == null || p == null) throw Object.assign(new Error("no quote"), { code: "no_quote" });
     if (Math.abs(c - p) > Math.max(1, 0.4 * (c + p))) throw Object.assign(new Error("off-center"), { code: "off_center" });
-    return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3), ...(wC != null && wP != null ? { W: WING, wingC: +wC.toFixed(3), wingP: +wP.toFixed(3) } : {}) };
+    const gap = (sym) => { const x = arr.find((y) => y.symbol === sym), b = num(x?.bid), a = num(x?.ask); return b != null && a != null && a >= b ? a - b : null; };
+    const gC = gap(sc), gP = gap(sp), gwC = gap(wc), gwP = gap(wp);
+    return { K, S: P, call: +c.toFixed(3), put: +p.toFixed(3), ...(gC != null && gP != null ? { spread: +(gC + gP).toFixed(3) } : {}), ...(wC != null && wP != null ? { W: WING, wingC: +wC.toFixed(3), wingP: +wP.toFixed(3), ...(gwC != null && gwP != null ? { wingSpread: +(gwC + gwP).toFixed(3) } : {}) } : {}) };
   }
   const liveErrMsg = (e) => e?.code === "too_early" ? "Too early: option prices are jumpy in the first 10 minutes. Check from 9:40 on (9:45 is the standard time)." : e?.code === "off_center" ? "The call and put prices are far apart, so SPY has moved away from that strike. Try again in a moment." : e?.code === "no_price" ? "Waiting for SPY's price from Webull. Try again in a moment." : e?.code === "no_quote" ? "Webull had no quote for today's options at that strike. Enter the prices by hand." : /SUBSCRIBED|permission/i.test(String(e?.message || "")) ? "Webull refused option prices (the OPRA subscription for the API may have lapsed). Enter the prices by hand." : "Couldn't get option prices from Webull. Enter them by hand or paste a screenshot.";
   async function runLivePchk(source) {
@@ -3937,7 +3939,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     if (Math.abs(S - K) > 3) return { err: `Use the strike closest to SPY's price (about ${Math.round(S)}). Prices far from it don't measure the expected move well.` };
     const sn = LIVE.snap, e = expectedMove(m, S, sn ? +sn.high : null, sn ? +sn.low : null);
     if (!e) return { err: "Still loading SPY's recent candles from Webull. Try again in a few seconds." };
-    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now(), ...(q.W ? { W: q.W, wingC: q.wingC, wingP: q.wingP } : {}) };
+    const r = { date: etParts().date, m, S, K, call: q.call, put: q.put, cost, paid: e.usd, n: e.n, ratio: cost / e.usd, model: "em2", source: source || "manual", at: Date.now(), ...(q.W ? { W: q.W, wingC: q.wingC, wingP: q.wingP } : {}), ...(q.spread != null ? { spread: q.spread } : {}), ...(q.wingSpread != null ? { wingSpread: q.wingSpread } : {}) };
     const list = pchkRaw().filter((x) => !(x.date === r.date && Math.abs(x.m - r.m) < 10)); list.push(r); ls.set("pricecheck.v1", list.slice(-200)); stratSync(); setTimeout(renderEdge, 50);
     return r;
   }
@@ -4002,6 +4004,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     { id: "t11", name: "Sell at 11:00", at: 660 },
     { id: "hold", name: "Hold to 3:50 (reference only)", ref: true },
   ];
+  const tradeCost = (q) => (q.spread != null ? q.spread : 0.04);            // straddle round trip, $ per share
+  const flyCost = (q) => tradeCost(q) + (q.wingSpread != null ? q.wingSpread : 0.04);   // + the two wings
   function exitValue(q, rule) {
     const path = (q.path || []).filter((x) => x[0] <= 950), cost = q.cost;   // path times are bar END minutes; 950 = 3:50 pm
     if (!path.length) return null;
@@ -4018,14 +4022,14 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const days = [...first.values()];
     if (!days.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Exit-rule scoreboard:</b> the day after each check, the app replays the straddle through the day under five exit rules. Nothing replayed yet.</div>`;
     const rows = EXIT_RULES.map((rl) => {
-      const res = days.map((q) => { const v = exitValue(q, rl); return v == null ? null : (v - q.cost) / q.cost - 0.04 / q.cost; }).filter((x) => x != null);
+      const res = days.map((q) => { const v = exitValue(q, rl); return v == null ? null : (v - q.cost) / q.cost - tradeCost(q) / q.cost; }).filter((x) => x != null);
       const avg = res.reduce((a, b) => a + b, 0) / res.length;
       return `<tr${rl.ref ? ' class="muted"' : ""}><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
     }).join("");
     return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Exit-rule scoreboard</b> <span class="pill">paper only</span><br>
       If you had bought the call + put at each morning check (${days.length} day${days.length > 1 ? "s" : ""}), how each exit rule would have done. The quick rules match how 0DTE is usually traded: in and out within minutes. Rules are fixed in advance, so no hindsight. Times are in 5-minute steps.
       <div class="tbl-wrap" style="margin-top:6px"><table class="small"><thead><tr><th style="text-align:left">Exit rule</th><th>Won</th><th>Average</th><th>Worst</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <span class="muted">Uses the last trade in each 5-minute bar, so a real fill could be a little better or worse. Needs many days before one rule can be trusted over another.</span></div>`;
+      <span class="muted">Uses the last trade in each minute, minus the real bid/ask gap recorded at your check (4¢ estimate on days without one). Needs many days before one rule can be trusted over another.</span></div>`;
   }
   async function straddlePath(q) {
     const syms = [optSym(q.date, "C", q.K), optSym(q.date, "P", q.K)];
@@ -4117,14 +4121,14 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   function sellerBoard(close) {
     const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && close.has(q.date) && q.date >= EDGE_START && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
     const days = [...first.values()]; if (!days.length) return "";
-    const naked = days.map((q) => (q.cost - Math.abs(close.get(q.date) - q.K)) * 100 - 4);
-    const prot = days.filter((q) => q.W && q.wingC != null && q.wingP != null).map((q) => (q.cost - q.wingC - q.wingP - Math.min(Math.abs(close.get(q.date) - q.K), q.W)) * 100 - 8);
+    const naked = days.map((q) => (q.cost - Math.abs(close.get(q.date) - q.K)) * 100 - tradeCost(q) * 100);
+    const prot = days.filter((q) => q.W && q.wingC != null && q.wingP != null).map((q) => (q.cost - q.wingC - q.wingP - Math.min(Math.abs(close.get(q.date) - q.K), q.W)) * 100 - flyCost(q) * 100);
     const line = (a) => { const avg = a.reduce((x, y) => x + y, 0) / a.length; return `${a.length} day${a.length > 1 ? "s" : ""} · won ${Math.round((a.filter((x) => x > 0).length / a.length) * 100)}% · avg <b class="${cls(avg)}">${money(Math.round(avg), true)}</b> · worst <span class="${cls(Math.min(...a))}">${money(Math.round(Math.min(...a)), true)}</span>`; };
     return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Seller scoreboard</b> <span class="pill">paper only</span><br>
       The same mornings, as if you had <b>sold</b> the call + put instead of buying them.<br>
       <b>Protected</b> (iron butterfly: also buy the $${WING} wings, so the most you can lose is capped): ${prot.length ? line(prot) : `<span class="muted">starts filling from the next checks (wing prices weren't recorded before)</span>`}<br>
       <span class="muted">Unprotected (for comparison only, needs a large margin account): ${line(naked)}</span><br>
-      <span class="muted">Per 1 set, held to the close, after rough fees. Selling wins small most days and loses big on crash days, so the worst day matters as much as the average.</span></div>`;
+      <span class="muted">Per 1 set, held to the close, minus the real bid/ask gap recorded at the check (estimated on days without one). Selling wins small most days and loses big on crash days, so the worst day matters as much as the average.</span></div>`;
   }
   async function renderEdge() {
     const el = $("#edge-card"); if (!el) return;
@@ -4179,7 +4183,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       const v = pchkVerdict(last);
       res = todoBox(`Options are <span class="pill ${v.cls}">${v.word}</span> right now`, [
         { k: v.k, h: v.todo },
-        { k: "info", h: `The ${last.K} call + put cost $${last.cost.toFixed(2)}. That's the move the market is charging for, from ${fmtClock(last.m)} to the close. SPY's expected move was about $${last.paid.toFixed(2)}.` },
+        { k: "info", h: `The ${last.K} call + put cost $${last.cost.toFixed(2)}. That's the move the market is charging for, from ${fmtClock(last.m)} to the close. SPY's expected move was about $${last.paid.toFixed(2)}.${last.spread != null ? ` Trading cost (bid/ask gap, in and out): about $${last.spread.toFixed(2)}, ${Math.round((last.spread / last.cost) * 100)}% of the price.` : ""}` },
       ], `Checked at ${fmtClock(last.m)}. Prices change all day, so use the live guide above to re-check by eye before you buy.`);
     }
     const hist = pchkList(), days = [...new Map(hist.map((x) => [x.date, x])).values()];
