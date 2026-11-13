@@ -4029,13 +4029,13 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   }
   async function straddlePath(q) {
     const syms = [optSym(q.date, "C", q.K), optSym(q.date, "P", q.K)];
-    const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: syms.join(","), category: "US_OPTION", timespan: "M5", start_time: q.date + "T13:00:00Z", end_time: q.date + "T21:30:00Z", count: "120" }, { cache: false });
+    const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: syms.join(","), category: "US_OPTION", timespan: "M1", start_time: q.date + "T13:00:00Z", end_time: q.date + "T21:30:00Z", count: "500" }, { cache: false });
     const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
     const series = (sym) => new Map(((arr.find((x) => x.symbol === sym) || {}).result || []).map((x) => [etParts(new Date(x.time)).min, num(x.close)]).filter(([, v]) => v != null));
     const c = series(syms[0]), p = series(syms[1]);
     const mins = [...new Set([...c.keys(), ...p.keys()])].filter((m) => m >= q.m && m < 960).sort((a, b) => a - b);
-    let lc = null, lp = null; const path = [];
-    for (const m of mins) { if (c.has(m)) lc = c.get(m); if (p.has(m)) lp = p.get(m); if (lc != null && lp != null) path.push([m + 5, +(lc + lp).toFixed(3)]); }
+    let lc = null, lp = null; const path = [], step = mins.length > 1 && mins[1] - mins[0] >= 5 ? 5 : 1;   // bars are stamped at their start
+    for (const m of mins) { if (c.has(m)) lc = c.get(m); if (p.has(m)) lp = p.get(m); if (lc != null && lp != null) path.push([m + step, +(lc + lp).toFixed(3)]); }
     return path;
   }
   // Today's straddle, refreshed every few minutes while the app is open (kept in memory; saved after the close).
@@ -4047,15 +4047,23 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     try { const path = await straddlePath(q); if (path.length) { Object.assign(TODAY_PATH, { date: now.date, path }); renderEdge(); } } catch {}
   }
   // A small chart of the straddle's gain or loss through the day, measured from the morning check's price.
+  const pathStep = (path) => (path.length > 1 && path[1][0] - path[0][0] >= 5 ? 5 : 1);
+  // Each separate stretch the straddle spent above a gain level: when it opened (minutes after buying) and how long it lasted.
   function profitWindows(q, path) {
-    const pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]), out = {};
+    const step = pathStep(path), pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]), out = {};
     for (const lvl of [0, 0.1, 0.25]) {
-      let mins = 0, first = null, run = 0, best = 0;
-      for (const [m, g] of pts) { if (g > lvl) { mins += 5; run += 5; best = Math.max(best, run); if (first == null) first = m; } else run = 0; }
-      out[lvl] = { mins, first, longest: best };
+      const wins = []; let cur = null;
+      for (const [m, g] of pts) {
+        if (g > lvl) { if (!cur) cur = { open: m - step - q.m, len: 0, peak: g }; cur.len += step; cur.peak = Math.max(cur.peak, g); }
+        else if (cur) { wins.push(cur); cur = null; }
+      }
+      if (cur) wins.push(cur);
+      const mins = wins.reduce((a, w) => a + w.len, 0);
+      out[lvl] = { mins, wins, first: wins.length ? q.m + wins[0].open + step : null, longest: Math.max(0, ...wins.map((w) => w.len)), step };
     }
     return out;
   }
+  const qtl = (a, f) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.min(s.length - 1, Math.floor(f * s.length))] : null; };
   const fmtMins = (n) => n >= 60 ? `${Math.floor(n / 60)} h ${n % 60 ? (n % 60) + " min" : ""}`.trim() : `${n} min`;
   function pathChart(q, path, live) {
     const W = 300, H = 64, t0 = q.m, t1 = 960, pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]);
@@ -4081,7 +4089,15 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const q of [...first.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)) list.push(pathChart(q, q.path, false));
     const body = list.filter(Boolean).join("");
     const past = [...first.values()], sum = (lvl) => { const w = past.map((q) => profitWindows(q, q.path)[lvl]); const hit = w.filter((x) => x.mins > 0); return { n: past.length, hit: hit.length, avg: hit.length ? Math.round(hit.reduce((a, b) => a + b.mins, 0) / hit.length / 5) * 5 : 0 }; };
-    const sumLine = past.length ? (() => { const a = sum(0), b = sum(0.1), c = sum(0.25); return `<div class="small" style="margin:6px 0">Across ${a.n} day${a.n > 1 ? "s" : ""}: in profit at some point on <b>${a.hit}</b> (for about ${fmtMins(a.avg)} on those days) · up 10%+ on <b>${b.hit}</b> (about ${fmtMins(b.avg)}) · up 25%+ on <b>${c.hit}</b> (about ${fmtMins(c.avg)}).</div>`; })() : "";
+    const durLine = (lvl, lab) => {
+      const wins = past.flatMap((q) => profitWindows(q, q.path)[lvl].wins).filter((w) => w.len >= 1);
+      if (!wins.length) return `<li>${lab}: no windows yet</li>`;
+      const len = wins.map((w) => w.len), open = wins.map((w) => w.open);
+      return `<li>${lab}: <b>${wins.length}</b> window${wins.length > 1 ? "s" : ""}. Typical length <b>${fmtMins(qtl(len, 0.5))}</b> (most between ${fmtMins(qtl(len, 0.25))} and ${fmtMins(qtl(len, 0.75))}, longest ${fmtMins(Math.max(...len))}). They usually opened <b>${fmtMins(qtl(open, 0.5))}</b> after buying (most between ${fmtMins(qtl(open, 0.25))} and ${fmtMins(qtl(open, 0.75))}).</li>`;
+    };
+    const sumLine = past.length ? (() => { const a = sum(0), b = sum(0.1), c = sum(0.25); return `<div class="small" style="margin:6px 0">Across ${a.n} day${a.n > 1 ? "s" : ""}: in profit at some point on <b>${a.hit}</b> · up 10%+ on <b>${b.hit}</b> · up 25%+ on <b>${c.hit}</b>.</div>
+      <div class="small"><b>How long do profit windows stay open?</b> A window is one unbroken stretch above the level.<ul style="margin:4px 0 6px 18px">${durLine(0.1, "Up 10%+")}${durLine(0.25, "Up 25%+")}${durLine(0, "Any profit")}</ul>
+      <span class="muted">Measured to the minute (older days to 5 minutes). "Typical" is the middle value. Needs 30+ windows before the typical length can be trusted.</span></div>`; })() : "";
     return body ? `<details style="margin-top:8px" open><summary class="small"><b>When were profits available, and for how long?</b> The morning straddle through each day</summary>${sumLine}${body}</details>` : "";
   }
   // Fetch the straddle's path for recent checks that don't have one yet (after that day's close).
