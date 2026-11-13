@@ -3986,7 +3986,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const q of pchkList()) { const c = close.get(q.date); if (c == null || !(q.cost > 0)) continue; g.push({ v: pchkVerdict(q).k, back: Math.abs(c - q.K) / q.cost }); }
     if (!g.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card:</b> after each day closes, the app checks whether the options you priced were worth it. No graded checks yet.</div>`;
     const avg = (a) => a.reduce((s, x) => s + x.back, 0) / a.length, row = (lab, a) => a.length ? `${lab}: ${a.length} day${a.length > 1 ? "s" : ""}, paid back <b class="${cls(avg(a) - 1)}">${Math.round(avg(a) * 100)}%</b> of the cost` : "";
-    return sellerBoard(close) + exitBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+    return pathCharts() + sellerBoard(close) + exitBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (straddle you priced vs what it was worth at the close; over 100% means buying was worth it):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
   }
   // Paper "seller" side: the same mornings graded as if you had SOLD instead of bought. One check per day (the first).
   // ---------- exit-rule scoreboard: the buyer's straddle replayed through the day under rules fixed in advance ----------
@@ -4023,6 +4023,50 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       <div class="tbl-wrap" style="margin-top:6px"><table class="small"><thead><tr><th style="text-align:left">Exit rule</th><th>Won</th><th>Average</th><th>Worst</th></tr></thead><tbody>${rows}</tbody></table></div>
       <span class="muted">Uses the last trade in each 5-minute bar, so a real fill could be a little better or worse. Needs many days before one rule can be trusted over another.</span></div>`;
   }
+  async function straddlePath(q) {
+    const syms = [optSym(q.date, "C", q.K), optSym(q.date, "P", q.K)];
+    const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: syms.join(","), category: "US_OPTION", timespan: "M5", start_time: q.date + "T13:00:00Z", end_time: q.date + "T21:30:00Z", count: "120" }, { cache: false });
+    const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
+    const series = (sym) => new Map(((arr.find((x) => x.symbol === sym) || {}).result || []).map((x) => [etParts(new Date(x.time)).min, num(x.close)]).filter(([, v]) => v != null));
+    const c = series(syms[0]), p = series(syms[1]);
+    const mins = [...new Set([...c.keys(), ...p.keys()])].filter((m) => m >= q.m && m < 960).sort((a, b) => a - b);
+    let lc = null, lp = null; const path = [];
+    for (const m of mins) { if (c.has(m)) lc = c.get(m); if (p.has(m)) lp = p.get(m); if (lc != null && lp != null) path.push([m + 5, +(lc + lp).toFixed(3)]); }
+    return path;
+  }
+  // Today's straddle, refreshed every few minutes while the app is open (kept in memory; saved after the close).
+  const TODAY_PATH = { date: null, path: null, at: 0 };
+  async function refreshTodayPath() {
+    const now = etParts(); if (!S.mcp || !marketOpen() || Date.now() - TODAY_PATH.at < 240000) return;
+    const q = pchkList().filter((x) => x.date === now.date && x.cost > 0).sort((a, b) => a.m - b.m)[0]; if (!q) return;
+    TODAY_PATH.at = Date.now();
+    try { const path = await straddlePath(q); if (path.length) { Object.assign(TODAY_PATH, { date: now.date, path }); renderEdge(); } } catch {}
+  }
+  // A small chart of the straddle's gain or loss through the day, measured from the morning check's price.
+  function pathChart(q, path, live) {
+    const W = 300, H = 64, t0 = q.m, t1 = 960, pts = path.filter((x) => x[0] <= 960).map(([m, v]) => [m, (v - q.cost) / q.cost]);
+    if (pts.length < 2) return "";
+    const lo = Math.min(-0.5, ...pts.map((x) => x[1])), hi = Math.max(0.5, ...pts.map((x) => x[1])), X = (m) => ((m - t0) / (t1 - t0)) * W, Y = (g) => H - ((g - lo) / (hi - lo)) * H;
+    const peak = pts.reduce((a, b) => (b[1] > a[1] ? b : a)), last = pts[pts.length - 1];
+    const line = pts.map(([m, g]) => `${X(m).toFixed(1)},${Y(g).toFixed(1)}`).join(" ");
+    const tp = [0.25, 0.5].filter((g) => g < hi).map((g) => `<line x1="0" x2="${W}" y1="${Y(g).toFixed(1)}" y2="${Y(g).toFixed(1)}" stroke="var(--gain)" stroke-opacity=".35" stroke-dasharray="3 3"/>`).join("");
+    return `<div style="margin:8px 0"><div class="small"><b>${esc(dayName(q.date))}</b>${live ? ' <span class="pill info">live</span>' : ""} · bought at ${fmtClock(q.m)} for ${px(q.cost)} · best <b class="${cls(peak[1])}">${pct(peak[1])}</b> at ${fmtClock(peak[0])} · ${live ? "now" : "close"} <b class="${cls(last[1])}">${pct(last[1])}</b></div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:64px;display:block" role="img" aria-label="Straddle gain or loss through the day">
+        <rect x="0" y="0" width="${W}" height="${Y(0).toFixed(1)}" fill="var(--gain)" fill-opacity=".07"/>${tp}
+        <line x1="0" x2="${W}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--muted)" stroke-width="1"/>
+        <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+        <circle cx="${X(peak[0]).toFixed(1)}" cy="${Y(peak[1]).toFixed(1)}" r="2.5" fill="var(--gain)"/>
+      </svg>
+      <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtClock(t0)}</span><span>dashed lines: +25% and +50%</span><span>4:00 pm</span></div></div>`;
+  }
+  function pathCharts() {
+    const today = etParts().date, list = [];
+    if (TODAY_PATH.date === today && TODAY_PATH.path) { const q = pchkList().filter((x) => x.date === today && x.cost > 0).sort((a, b) => a.m - b.m)[0]; if (q) list.push(pathChart(q, TODAY_PATH.path, true)); }
+    const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && q.path?.length && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
+    for (const q of [...first.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5)) list.push(pathChart(q, q.path, false));
+    const body = list.filter(Boolean).join("");
+    return body ? `<details style="margin-top:8px" open><summary class="small"><b>When were profits available?</b> The morning straddle through each day</summary>${body}</details>` : "";
+  }
   // Fetch the straddle's path for recent checks that don't have one yet (after that day's close).
   let pathsBusy = false;
   async function fillPaths() {
@@ -4032,17 +4076,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       const todo = raw.filter((q) => !q.void && !q.path && q.cost > 0 && q.date >= weekAgo && (q.date < now.date || now.min >= 960));
       let changed = 0;
       for (const q of todo.slice(0, 8)) {
-        try {
-          const syms = [optSym(q.date, "C", q.K), optSym(q.date, "P", q.K)];
-          const r = await S.mcp.callTool("Webull", "get_option_bars", { symbols: syms.join(","), category: "US_OPTION", timespan: "M5", start_time: q.date + "T13:00:00Z", end_time: q.date + "T21:30:00Z", count: "120" }, LONG_CACHE);
-          const arr = Array.isArray(r.payload) ? r.payload : r.payload?.result || [];
-          const series = (sym) => new Map(((arr.find((x) => x.symbol === sym) || {}).result || []).map((x) => [etParts(new Date(x.time)).min, num(x.close)]).filter(([m, v]) => v != null));
-          const c = series(syms[0]), p = series(syms[1]);
-          const mins = [...new Set([...c.keys(), ...p.keys()])].filter((m) => m >= q.m && m < 960).sort((a, b) => a - b);
-          let lc = null, lp = null; const path = [];
-          for (const m of mins) { if (c.has(m)) lc = c.get(m); if (p.has(m)) lp = p.get(m); if (lc != null && lp != null) path.push([m + 5, +(lc + lp).toFixed(3)]); }
-          if (path.length >= 5) { q.path = path; changed++; }
-        } catch {}
+        try { const path = await straddlePath(q); if (path.length >= 5) { q.path = path; changed++; } } catch {}
       }
       if (changed) { ls.set("pricecheck.v1", raw); stratSync(); renderEdge(); }
     } finally { pathsBusy = false; }
@@ -4948,7 +4982,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const WB_FATAL = ["server_not_connected", "needs_reauth", "not_in_manifest"];
     S.mcp = { callTool: async (...a) => { let last; for (let k = 0; k < 3; k++) { try { return await mcp.callTool(...a); } catch (e) { last = e; if (WB_FATAL.includes(e?.code)) throw e; await new Promise((r) => setTimeout(r, 700 * (k + 1) ** 2)); } } throw last; } };
     schedulePoll(0); renderPchk(); loadEM().then(() => { renderPchk(); backfillPchk().then(fillPaths); autoPchk(); }).catch(() => {}); setTimeout(renderEdge, 2500); setInterval(renderEdge, 120000);
-    setInterval(() => { autoPchk(); const c = $("#pchk-card"); if (c && !c.contains(document.activeElement) && !c.querySelector(".shot-out:not(:empty)")) renderPchk(); }, 60000);
+    setInterval(() => { autoPchk(); refreshTodayPath(); const c = $("#pchk-card"); if (c && !c.contains(document.activeElement) && !c.querySelector(".shot-out:not(:empty)")) renderPchk(); }, 60000);
     if (view === "practice") rpInitDates();
   })();
 })();
