@@ -3851,6 +3851,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     })().finally(() => { EM.loading = null; });
     return EM.loading;
   }
+  const MED_TO_MEAN = 1.2;
+  const midOf = (a) => { const s = [...a].sort((x, y) => x - y), n = s.length; return n ? (n % 2 ? s[(n - 1) / 2] : (s[n / 2 - 1] + s[n / 2]) / 2) : 0; };
   function expectedMove(m, P, hi, lo) {
     const days = EM.days; if (!days || days.length < 10 || !(P > 0)) return null;
     const mm = Math.max(575, Math.min(955, 570 + Math.floor((m - 570) / 5) * 5));
@@ -3858,8 +3860,8 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const rows = days.map((b) => { const a = at(b, mm), seen = b.filter((x) => x.m + 5 <= mm); return { rest: Math.abs(b[b.length - 1].c - a.c) / a.c, early: seen.length ? (Math.max(...seen.map((x) => x.h)) - Math.min(...seen.map((x) => x.l))) / a.c : null }; });
     const avg = (a) => a.reduce((s, x) => s + x, 0) / a.length;
     let base, how;
-    if (mm < 615 || !(hi > lo)) { base = avg(rows.slice(-5).map((x) => x.rest)); how = "the last 5 days"; }
-    else { const e = avg(rows.map((x) => x.early).filter((x) => x > 0)), act = Math.max(0.5, Math.min(2.5, (hi - lo) / P / e)); base = avg(rows.map((x) => x.rest)) * Math.sqrt(act); how = `the last 20 days, adjusted for how busy this morning was (${act > 1.15 ? "busier than usual" : act < 0.85 ? "quieter than usual" : "about normal"})`; }
+    if (mm < 615 || !(hi > lo)) { base = midOf(rows.slice(-5).map((x) => x.rest)) * MED_TO_MEAN; how = "the middle of the last 5 days (one wild day can't skew it)"; }
+    else { const e = avg(rows.map((x) => x.early).filter((x) => x > 0)), act = Math.max(0.5, Math.min(2.5, (hi - lo) / P / e)); base = midOf(rows.map((x) => x.rest)) * MED_TO_MEAN * Math.sqrt(act); how = `the middle of the last 20 days, adjusted for how busy this morning was (${act > 1.15 ? "busier than usual" : act < 0.85 ? "quieter than usual" : "about normal"})`; }
     const { mult, why } = emMult(etParts().date);
     return { usd: base * mult * P, pct: base * mult, m: mm, how, why, mult, n: days.length };
   }
@@ -3871,7 +3873,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   function emOn(date, mm, P) {
     const prior = [...EM.byDate.keys()].filter((d) => d < date).slice(-5); if (prior.length < 5 || !(P > 0)) return null;
     const at = (b, t) => (b.filter((x) => x.m + 5 <= t).pop() || b[0]);
-    const base = prior.reduce((s, d) => { const b = EM.byDate.get(d), a = at(b, mm); return s + Math.abs(b[b.length - 1].c - a.c) / a.c; }, 0) / prior.length;
+    const base = midOf(prior.map((d) => { const b = EM.byDate.get(d), a = at(b, mm); return Math.abs(b[b.length - 1].c - a.c) / a.c; })) * MED_TO_MEAN;
     return base * emMult(date).mult * P;
   }
 
