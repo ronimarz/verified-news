@@ -3990,7 +3990,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const q of pchkList()) { const c = close.get(q.date); if (c == null || !(q.cost > 0)) continue; g.push({ v: pchkVerdict(q).k, back: Math.abs(c - q.K) / q.cost }); }
     if (!g.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card:</b> after each day closes, the app checks whether the options you priced were worth it. No graded checks yet.</div>`;
     const avg = (a) => a.reduce((s, x) => s + x.back, 0) / a.length, row = (lab, a) => a.length ? `${lab}: ${a.length} day${a.length > 1 ? "s" : ""}, paid back <b class="${cls(avg(a) - 1)}">${Math.round(avg(a) * 100)}%</b> of the cost` : "";
-    return pathCharts() + sellerBoard(close) + exitBoard() + oneSideBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (was the price right for the whole day? Straddle you priced vs what it was worth at the close; over 100% means options were underpriced. For trading results, see the exit-rule scoreboard):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
+    return pathCharts() + exitBoard() + oneSideBoard() + `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Price check report card</b> (was the price right for the whole day? Straddle you priced vs what it was worth at the close; over 100% means options were underpriced. For trading results, see the exit-rule scoreboard):<br>${[row("All checks", g), row("Days it said cheap", g.filter((x) => x.v === "go")), row("Days it said expensive", g.filter((x) => x.v === "avoid"))].filter(Boolean).join("<br>")}<br><span class="muted">${g.length < 20 ? `Needs about 20 checks before it means much (${g.length} so far).` : "Enough checks to start trusting this."}</span></div>`;
   }
   // Paper "seller" side: the same mornings graded as if you had SOLD instead of bought. One check per day (the first).
   // ---------- exit-rule scoreboard: the buyer's straddle replayed through the day under rules fixed in advance ----------
@@ -4024,7 +4024,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && q.path?.length && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
     const days = [...first.values()];
     if (!days.length) return `<div class="small muted" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Exit-rule scoreboard:</b> the day after each check, the app replays the straddle through the day under five exit rules. Nothing replayed yet.</div>`;
-    const rows = EXIT_RULES.map((rl) => {
+    const rows = EXIT_RULES.filter((rl) => rl.star || rl.ref).map((rl) => {
       const res = days.map((q) => { const v = exitValue(q, rl); return v == null ? null : (v - q.cost) / q.cost - tradeCost(q) / q.cost; }).filter((x) => x != null);
       const avg = res.reduce((a, b) => a + b, 0) / res.length;
       return `<tr${rl.ref ? ' class="muted"' : rl.star ? ' style="font-weight:600"' : ""}><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
@@ -4089,7 +4089,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
         <circle cx="${X(peak[0]).toFixed(1)}" cy="${Y(peak[1]).toFixed(1)}" r="2.5" fill="var(--gain)"/>
       </svg>
       <div class="small muted" style="display:flex;justify-content:space-between"><span>${fmtClock(t0)}</span><span>dashed lines: +25% and +50%</span><span>4:00 pm</span></div>
-      ${(() => { const w = profitWindows(q, path), seg = (lvl, lab) => w[lvl].mins ? `${lab}: <b>${fmtMins(w[lvl].mins)}</b> (from ${fmtClock(w[lvl].first)}, longest stretch ${fmtMins(w[lvl].longest)})` : `${lab}: <b>never</b>`; return `<div class="small" style="margin-top:2px">${seg(0, "In profit")} · ${seg(0.1, "Up 10%+")} · ${seg(0.25, "Up 25%+")}</div>`; })()}</div>`;
+      ${"" && (() => { const w = profitWindows(q, path), seg = (lvl, lab) => w[lvl].mins ? `${lab}: <b>${fmtMins(w[lvl].mins)}</b> (from ${fmtClock(w[lvl].first)}, longest stretch ${fmtMins(w[lvl].longest)})` : `${lab}: <b>never</b>`; return `<div class="small" style="margin-top:2px">${seg(0, "In profit")} · ${seg(0.1, "Up 10%+")} · ${seg(0.25, "Up 25%+")}</div>`; })()}</div>`;
   }
   function pathCharts() {
     const today = etParts().date, list = [];
@@ -4107,7 +4107,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const sumLine = past.length ? (() => { const a = sum(0), b = sum(0.1), c = sum(0.25); return `<div class="small" style="margin:6px 0">Across ${a.n} day${a.n > 1 ? "s" : ""}: in profit at some point on <b>${a.hit}</b> · up 10%+ on <b>${b.hit}</b> · up 25%+ on <b>${c.hit}</b>.</div>
       <div class="small"><b>How long do profit windows stay open?</b> A window is one unbroken stretch above the level.<ul style="margin:4px 0 6px 18px">${durLine(0.1, "Up 10%+")}${durLine(0.25, "Up 25%+")}${durLine(0, "Any profit")}</ul>
       <span class="muted">Measured to the minute (older days to 5 minutes). "Typical" is the middle value. Needs 30+ windows before the typical length can be trusted.</span></div>`; })() : "";
-    return body ? `<details style="margin-top:8px" open><summary class="small"><b>When were profits available, and for how long?</b> The morning straddle through each day</summary>${sumLine}${body}</details>` : "";
+    return body ? `<details style="margin-top:8px"><summary class="small"><b>When were profits available?</b> The morning straddle through each day</summary>${body}</details>` : "";
   }
   // Fetch the straddle's path for recent checks that don't have one yet (after that day's close).
   let pathsBusy = false;
@@ -4147,6 +4147,25 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
       ${row("Call only", days.map((q) => legResult(q, "C")))}${row("Put only", days.map((q) => legResult(q, "P")))}${row("<b>The side the morning scout leaned</b>", leaned, "no scout leans on these days yet")}</tbody></table></div>
       <span class="muted">The scout row only counts days the opening scout said UP (call) or DOWN (put)${skipped ? `; ${skipped} "no clear lean" day${skipped > 1 ? "s were" : " was"} skipped` : ""}. To be worth following, it has to beat both "call only" and "put only" over many days.</span></div>`;
   }
+  // ---------- frozen test: three questions fixed in advance ----------
+  const FREEZE_START = "2026-11-19", FREEZE_DAYS = 40;
+  function frozenQuestions(close) {
+    const first = new Map(); for (const q of pchkList()) if (q.date >= FREEZE_START && q.cost > 0 && close.has(q.date) && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
+    const days = [...first.values()], n = days.length, avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
+    const buy = (q) => (Math.abs(close.get(q.date) - q.K) - q.cost - (q.spread != null ? q.spread : 0.04)) / q.cost;
+    const cheap = days.filter((q) => q.ratio <= 0.85).map(buy), exp = days.filter((q) => q.ratio >= 1.2).map(buy);
+    const rest = EXIT_RULES.find((x) => x.id === "rest50"), withPath = days.filter((q) => q.path?.length);
+    const rv = withPath.map((q) => { const v = exitValue(q, rest); return v == null ? null : { r: (v - q.cost - tradeCost(q)) / q.cost, fill: v >= q.cost * 1.5 - 1e-9 }; }).filter(Boolean);
+    const legs = days.filter((q) => q.pathC?.length && q.pathP?.length);
+    const callA = avg(legs.map((q) => legResult(q, "C")).filter((x) => x != null)), putA = avg(legs.map((q) => legResult(q, "P")).filter((x) => x != null));
+    const sideR = legs.map((q) => { const l = scoutLean(q.date); return l === "UP" ? legResult(q, "C") : l === "DOWN" ? legResult(q, "P") : null; }).filter((x) => x != null), sideA = avg(sideR);
+    const f = (x) => (x == null ? "–" : pct(x)), stat = (ok, enough) => (!enough ? '<span class="pill">collecting</span>' : ok ? '<span class="pill good">on track</span>' : '<span class="pill bad">not on track</span>');
+    const ca = avg(cheap), ea = avg(exp), fillRate = rv.length ? rv.filter((x) => x.fill).length / rv.length : null, ra = avg(rv.map((x) => x.r));
+    const q1 = `<li><b>1. Do cheap days beat expensive days?</b> Success: cheap days average positive and at least 25 points better than expensive days (buying the call + put, held to the close).<br>Cheap: ${cheap.length} day${cheap.length === 1 ? "" : "s"}, ${f(ca)} · Expensive: ${exp.length}, ${f(ea)} ${stat(ca != null && ea != null && ca > 0 && ca - ea >= 0.25, cheap.length >= 5 && exp.length >= 5)}</li>`;
+    const q2 = `<li><b>2. Does the resting +50% order pay?</b> Success: it fills on at least 57% of days and averages positive.<br>${rv.length} day${rv.length === 1 ? "" : "s"}: filled ${fillRate == null ? "–" : Math.round(fillRate * 100) + "%"} · average ${f(ra)} ${stat(fillRate != null && fillRate >= 0.57 && ra > 0, rv.length >= 15)}</li>`;
+    const q3 = `<li><b>3. Is the scout's side worth following?</b> Success: buying the side the scout leaned (resting +50%) beats both call-only and put-only.<br>Scout's side: ${sideR.length} day${sideR.length === 1 ? "" : "s"}, ${f(sideA)} · Call only ${f(callA)} · Put only ${f(putA)} ${stat(sideA != null && sideA > (callA ?? -9) && sideA > (putA ?? -9), sideR.length >= 15)}</li>`;
+    return `<div class="small" style="margin-top:10px"><div class="label">The three questions · ${n} of ${FREEZE_DAYS} days</div><ul style="margin:6px 0 0 18px;display:grid;gap:6px">${q1}${q2}${q3}</ul></div>`;
+  }
   function sellerBoard(close) {
     const first = new Map(); for (const q of pchkList()) if (q.cost > 0 && close.has(q.date) && q.date >= EDGE_START && (!first.has(q.date) || q.m < first.get(q.date).m)) first.set(q.date, q);
     const days = [...first.values()]; if (!days.length) return "";
@@ -4185,17 +4204,15 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const risk = Math.round(acctSize() * 0.06);
     const how = `Buy 1 contract, strike closest to SPY's price, between 9:35 and 9:45 am. Hold it until 3:50 pm, then sell. That is exactly what was tested. Max loss is what you paid. ${risk >= 100 ? `Keep it under about $${risk} (6% of your account).` : `Sizing note: the books agree on risking only about 6% of the account per trade ($${risk} for you). One $1.00 option risks $100, so with real money you'd want about $1,700 before trading even one. On paper, keep going.`}`;
     const priceLine = !trading ? "" : chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>${pv.k === "go" ? ". A rule signal below can be taken." : " today. Only cheap days are traded, so skip."}` : `<b>First: do the price check above (30 seconds, around 9:45).</b> Only trade if it says cheap.`;
-    el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Edge hunt</h2><span class="pill">paper only</span></div>
-      <p class="small muted" style="margin:0 0 8px">Two rules that looked promising in a 4.7-year test but aren't proven. The app scores them every day from SPY's candles, whether or not you trade, so we'll know if they're real.</p>
-      ${trading ? `<div class="yours"><div class="label">Today</div>${priceLine ? `<div class="small" style="margin:4px 0">${priceLine}</div>` : ""}
-        ${todayRows.map((x) => `<div class="small" style="margin:4px 0"><b>${esc(x.rl.name)}:</b> ${x.txt}</div>`).join("")}
-        ${!live.length && pv?.k === "go" ? `<div class="small" style="margin-top:6px"><b>Options are cheap and no rule fired.</b> Optional test trade: buy both the call and the put at the strike nearest SPY (a straddle). It wins if SPY moves more than the two cost, in either direction. Sell both at 3:50 pm.</div>` : ""}
-        ${live.length && pv?.k === "go" ? `<div class="small muted" style="margin-top:6px">${how}</div><div class="row" style="margin-top:8px">${live.map((x) => `<button class="btn sm" type="button" data-edge-log="${x.rl.id}" data-edge-dir="${x.dir}">Log my ${esc(x.rl.name.toLowerCase())} trade</button>`).join("")}</div>` : ""}</div>` : ""}
-      <div style="margin-top:10px">${EDGE_RULES.map((rl) => `<div style="padding:8px 0;border-top:1px solid var(--line)"><div><b>${esc(rl.name)}</b></div><div class="small muted" style="margin-bottom:2px">${esc(rl.what)}</div>
-        <div class="small">Tracked live since ${esc(dayName(EDGE_START))}: ${edgeLine(sc[rl.id].fwd)} <span class="muted">(updates after each close)</span></div>
-        <div class="small muted">Before that (${esc(D[20].date.slice(0, 4))}–2026): ${edgeLine(sc[rl.id].past)}</div></div>`).join("")}</div>
-      ${pchkGrade(D)}
-      <details style="margin-top:8px"><summary class="small">How the numbers are worked out</summary><p class="small muted" style="margin-top:6px">Each trade buys at the open and sells at the close. Without old option prices, an option is priced at ${al.v.toFixed(2)}× SPY's average open-to-close move of the last 20 days (split between call and put), plus 2¢ costs. ${al.n >= 5 ? `That price level comes from your ${al.n} morning price checks.` : `That's "fair" pricing. After 5 morning price checks (you have ${al.n}), it switches to what you actually saw.`} A rule needs about 30 tracked trades before the result means much. Expect that to take 2–4 months.</p></details>`;
+    const close = new Map(D.map((x) => [x.date, x.c]));
+    const lean = trading ? scoutLean(today) : null;
+    const plan = !trading ? "" : `<div class="yours"><div class="label">Today</div>
+      <div class="small" style="margin:4px 0">${chk ? `Price check: options are <span class="pill ${pv.cls}">${pv.word}</span>.` : "<b>Price check:</b> recorded automatically at 9:45 if the app is open, or tap Get live prices above (from 9:40)."}</div>
+      <div class="small" style="margin:4px 0">Morning scout's lean: <b>${lean === "UP" ? "UP (call side)" : lean === "DOWN" ? "DOWN (put side)" : lean === "NONE" ? "no clear lean" : "not in yet"}</b></div>
+      <div class="small muted" style="margin-top:6px">Paper plan, the same every day: the app grades buying the call + put at the check with a resting +50% sell order (else sell at 3:50), plus the call alone, the put alone and the scout's side. Nothing to do but keep the app checking.</div></div>`;
+    el.innerHTML = `<div class="panel-head" style="margin:0 0 6px"><h2>Frozen test</h2><span class="pill">paper only</span></div>
+      <p class="small muted" style="margin:0 0 8px">Setup frozen on ${esc(dayName(FREEZE_START))}: no more rule or model changes. Only days from then on count, and the three questions below are judged once, at ${FREEZE_DAYS} trading days (about mid-January). Until then, results are progress, not answers.</p>
+      ${plan}${frozenQuestions(close)}${pchkGrade(D)}`;
   }
   document.addEventListener("click", (e) => {
     const b = e.target.closest("[data-edge-log]"); if (!b) return;
