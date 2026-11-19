@@ -3998,6 +3998,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
   // from Webull after that day ends (Webull keeps expired options for about a week). Exits use bar closes, never highs.
   // Quick exits first: most 0DTE buyers are out within minutes. Hold-to-close is kept only as a reference line.
   const EXIT_RULES = [
+    { id: "rest50", name: "★ Resting +50% sell order, else hold to 3:50 (tracked rule)", tp: 1.5, fillAtTarget: true, star: true },
     { id: "q15", name: "Quick: +10% target, else out after 15 min", tp: 1.1, max: 15 },
     { id: "q30", name: "Quick: +20% target, else out after 30 min", tp: 1.2, max: 30 },
     { id: "s15", name: "Sell after 15 min, no target", max: 15 },
@@ -4014,7 +4015,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     for (const [m, v] of path) {
       if (rule.max != null && m - q.m >= rule.max) return v;
       if (rule.at != null && m >= rule.at) return v;
-      if (rule.tp && v >= cost * rule.tp) return v;
+      if (rule.tp && v >= cost * rule.tp) return rule.fillAtTarget ? cost * rule.tp : v;   // a resting limit order fills at its price
       if (rule.sl && v <= cost * rule.sl) return v;
     }
     return path[path.length - 1][1];
@@ -4026,7 +4027,7 @@ iv is a percent number (14.2 means 14.2%). Include every contract row you can re
     const rows = EXIT_RULES.map((rl) => {
       const res = days.map((q) => { const v = exitValue(q, rl); return v == null ? null : (v - q.cost) / q.cost - tradeCost(q) / q.cost; }).filter((x) => x != null);
       const avg = res.reduce((a, b) => a + b, 0) / res.length;
-      return `<tr${rl.ref ? ' class="muted"' : ""}><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
+      return `<tr${rl.ref ? ' class="muted"' : rl.star ? ' style="font-weight:600"' : ""}><td>${esc(rl.name)}</td><td class="mono">${Math.round((res.filter((x) => x > 0).length / res.length) * 100)}%</td><td class="mono ${cls(avg)}">${pct(avg)}</td><td class="mono ${cls(Math.min(...res))}">${pct(Math.min(...res))}</td></tr>`;
     }).join("");
     return `<div class="small" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)"><b>Exit-rule scoreboard</b> <span class="pill">paper only</span><br>
       If you had bought the call + put at each morning check (${days.length} day${days.length > 1 ? "s" : ""}), how each exit rule would have done. The quick rules match how 0DTE is usually traded: in and out within minutes. Rules are fixed in advance, so no hindsight. Times are in 5-minute steps.
