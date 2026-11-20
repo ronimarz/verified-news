@@ -1136,13 +1136,28 @@ dialog::backdrop { background: rgba(10, 16, 24, .45); }
   }
   let pollT = null;
   function schedulePoll(ms) { clearTimeout(pollT); if (!LIVE.stopped && S.mcp) pollT = setTimeout(poll, ms); }
+  // Sound + banner when SPY makes a dramatic move while the app is open: each new 1% step from yesterday's close,
+  // or 0.5%+ inside 15 minutes. Each alert fires once per day.
+  const MOVE_HIST = [];
+  function bigMoveCheck(p) {
+    if (!marketOpen()) return;
+    const P = num(p.price), pc = num(p.pre_close), now = Date.now(), d = etParts().date; if (!(P > 0) || !(pc > 0)) return;
+    const day = P / pc - 1, step = Math.floor(Math.abs(day) * 100);
+    if (step >= 1) alertUser(`move-${d}-${day > 0 ? "up" : "dn"}-${step}`, "warn", `Big move: SPY is ${day > 0 ? "up" : "down"} ${pct(Math.abs(day), false)} today ($${P.toFixed(2)}). Options can reprice fast on days like this.`);
+    MOVE_HIST.push([now, P]); while (MOVE_HIST.length && now - MOVE_HIST[0][0] > 15 * 60000) MOVE_HIST.shift();
+    const lo = Math.min(...MOVE_HIST.map((x) => x[1])), hi = Math.max(...MOVE_HIST.map((x) => x[1]));
+    if (MOVE_HIST.length > 3 && (hi - lo) / P >= 0.005) {
+      const dir = P <= lo + (hi - lo) * 0.25 ? "dropped" : P >= hi - (hi - lo) * 0.25 ? "jumped" : "swung";
+      alertUser(`fast-${d}-${Math.floor(etParts().min / 15)}`, "warn", `Fast move: SPY ${dir} $${(hi - lo).toFixed(2)} in the last 15 minutes (now $${P.toFixed(2)}).`);
+    }
+  }
   async function poll() {
     if (document.hidden) return schedulePoll(15000);
     const sym = U();
     try {
       const r = await S.mcp.callTool("Webull", "get_stock_snapshot", { symbols: sym, category: "US_ETF", extend_hour_required: false, overnight_required: false }, { cache: false });
       const p = Array.isArray(r.payload) ? r.payload[0] : null;
-      if (p) { LIVE.snap = p; LIVE.status = "ok"; LIVE.at = Date.now(); }
+      if (p) { LIVE.snap = p; LIVE.status = "ok"; LIVE.at = Date.now(); bigMoveCheck(p); }
       if ((view === "live" || S.trades.some((t) => num(t.planStopLevel) != null && calc(t).open)) && (marketOpen() || !LIVE.bars.length)) {
         const b = await S.mcp.callTool("Webull", "get_stock_bars", { symbols: [sym], category: "US_ETF", timespan: "M1", count: 60, real_time_required: false }, { cache: false });
         const rows = b.payload?.result?.[0]?.result || [];
